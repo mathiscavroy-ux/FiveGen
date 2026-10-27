@@ -1,0 +1,49 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { validateProject, checkLua } from "../server/validator.js";
+
+const manifest = (extra = "") => ({
+  path: "fxmanifest.lua",
+  content: `fx_version 'cerulean'\ngame 'gta5'\nlua54 'yes'\n${extra}\n`,
+});
+
+test("valid resource passes", () => {
+  const r = validateProject([
+    manifest("shared_script 'config.lua'\nclient_scripts {\n  'client/*.lua'\n}\nserver_script 'server/main.lua'"),
+    { path: "config.lua", content: "Config = {}\n" },
+    { path: "client/main.lua", content: "TriggerServerEvent('demo:server:go')\n" },
+    { path: "server/main.lua", content: "RegisterNetEvent('demo:server:go', function() end)\n" },
+  ]);
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.equal(r.warnings.length, 0);
+});
+
+test("detects Lua syntax errors with line numbers", () => {
+  const p = checkLua("a.lua", "local x = 1\nif x then\n  print(x)\n");
+  assert.ok(p);
+  assert.equal(p.level, "error");
+});
+
+test("tolerates CfxLua extensions", () => {
+  assert.equal(checkLua("a.lua", "local x <const> = 1\nx += 2\nlocal h = `adder`\nlocal y = a?.b\n"), null);
+});
+
+test("flags missing manifest files and ox_lib include", () => {
+  const r = validateProject([
+    manifest("client_script 'client/missing.lua'"),
+    { path: "client/main.lua", content: "lib.notify({ title = 'x' })\n" },
+  ]);
+  const messages = r.errors.map((e) => e.message).join("\n");
+  assert.match(messages, /client\/missing\.lua/);
+  assert.match(messages, /@ox_lib\/init\.lua/);
+});
+
+test("warns about unregistered server events and broken NUI refs", () => {
+  const r = validateProject([
+    manifest("ui_page 'html/index.html'\nfiles { 'html/index.html' }\nclient_script 'c.lua'"),
+    { path: "c.lua", content: "TriggerServerEvent('demo:server:typo')\n" },
+    { path: "html/index.html", content: '<script src="script.js"></script>' },
+  ]);
+  assert.equal(r.ok, true);
+  assert.equal(r.warnings.length, 2);
+});

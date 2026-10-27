@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Administration — FiveGen</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23ff7a1a'/><path d='M18 46V18h28v7H26v6h16v7H26v8z' fill='%23111'/></svg>" />
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="wrap">
+      <a class="brand" href="/"><span class="logo">F</span>FiveGen <span class="muted" style="font-weight:500;font-size:14px">· administration</span></a>
+      <div class="nav-links"><a href="/app">Studio</a></div>
+    </div>
+  </nav>
+
+  <main class="wrap admin">
+    <h1>Tableau de bord</h1>
+    <div id="engine" class="status">Chargement…</div>
+    <div id="stats" class="stats"></div>
+
+    <h2>Générer des codes d'activation</h2>
+    <p class="muted">Crée des codes à vendre (Tebex, Stripe Payment Links, Discord…). Chaque code s'utilise une seule fois et ajoute ses crédits au compte du client.</p>
+    <form id="codeForm" class="row">
+      <label class="field"><span>Nombre de codes</span><input id="cCount" class="input" type="number" min="1" max="500" value="10" style="width:140px" /></label>
+      <label class="field"><span>Crédits par code</span><input id="cCredits" class="input" type="number" min="1" max="100000" value="10" style="width:140px" /></label>
+      <label class="field" style="flex:1;min-width:200px"><span>Note (pack, commande…)</span><input id="cNote" class="input" placeholder="Pack Starter" maxlength="120" /></label>
+      <button class="btn primary" type="submit">Générer</button>
+    </form>
+    <textarea id="codesOut" class="input codes-out hidden" readonly></textarea>
+    <button id="copyCodes" class="btn small hidden" style="margin-top:8px">Copier les codes</button>
+
+    <h2>Codes</h2>
+    <table class="data"><thead><tr><th>Code</th><th>Crédits</th><th>Note</th><th>Créé</th><th>Utilisé par</th><th></th></tr></thead><tbody id="codes"></tbody></table>
+
+    <h2>Clients</h2>
+    <table class="data"><thead><tr><th>E-mail</th><th>Crédits</th><th>Scripts</th><th>Inscrit</th><th>Ajuster</th></tr></thead><tbody id="users"></tbody></table>
+
+    <h2>Dernières erreurs</h2>
+    <table class="data"><thead><tr><th>Date</th><th>Client</th><th>Action</th><th>Détail</th></tr></thead><tbody id="errors"></tbody></table>
+  </main>
+  <div id="toasts" class="toasts"></div>
+
+  <script type="module">
+    const $ = (s) => document.querySelector(s);
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const date = (iso) => (iso ? new Date(iso).toLocaleString("fr-FR") : "—");
+
+    async function api(url, opts = {}) {
+      const res = await fetch(url, { ...opts, headers: { "Content-Type": "application/json", "X-FiveGen": "1" }, body: opts.body ? JSON.stringify(opts.body) : undefined });
+      if (res.status === 401) return (location.href = "/login");
+      if (res.status === 403) {
+        document.querySelector("main").innerHTML = "<h1>Accès refusé</h1><p class='muted'>Ce compte n'est pas administrateur.</p>";
+        throw new Error("forbidden");
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+      return data;
+    }
+
+    function toast(msg, kind = "") {
+      const el = Object.assign(document.createElement("div"), { className: `toast ${kind}`, textContent: msg });
+      $("#toasts").append(el);
+      setTimeout(() => el.remove(), 4000);
+    }
+
+    async function loadOverview() {
+      const { stats: s, engine, costs, freeCredits } = await api("/api/admin/overview");
+      $("#engine").className = `status ${engine.ok ? "ok" : "err"}`;
+      $("#engine").textContent = engine.ok ? `Moteur de génération : opérationnel (${engine.mode})` : `Moteur de génération : ${engine.error}`;
+      const cards = [
+        [s.users, "clients"],
+        [s.usersToday, "inscrits (24 h)"],
+        [s.generationsToday, "générations (24 h)"],
+        [s.generationsTotal, "générations au total"],
+        [s.failuresToday, "échecs (24 h)"],
+        [s.creditsSpent, "crédits consommés"],
+        [s.codesUnused, "codes disponibles"],
+        [s.codesRedeemed, "codes utilisés"],
+        [s.outputTokensToday.toLocaleString("fr-FR"), "volume généré (24 h, tokens)"],
+        [`${costs.generate} / ${costs.refine} / ${costs.fix}`, "coût génération / modif / correction"],
+        [freeCredits, "crédits offerts à l'inscription"],
+      ];
+      $("#stats").innerHTML = cards.map(([v, l]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
+      $("#errors").innerHTML = s.recentErrors.length
+        ? s.recentErrors.map((e) => `<tr><td>${date(e.created_at)}</td><td>${esc(e.email)}</td><td>${esc(e.kind)}</td><td class="mono">${esc(e.error)}</td></tr>`).join("")
+        : `<tr><td colspan="4" class="muted">Aucune erreur récente.</td></tr>`;
+    }
+
+    async function loadCodes() {
+      const codes = await api("/api/admin/codes");
+      $("#codes").innerHTML = codes.length
+        ? codes
+            .map(
+              (c) => `<tr><td class="mono">${esc(c.code)}</td><td>${c.credits}</td><td>${esc(c.note)}</td><td>${date(c.created_at)}</td>
+              <td>${c.redeemed_at ? `${esc(c.redeemed_by ?? "compte supprimé")}<br><span class="muted">${date(c.redeemed_at)}</span>` : '<span class="muted">libre</span>'}</td>
+              <td>${c.redeemed_at ? "" : `<button class="btn small" data-del="${esc(c.code)}">Supprimer</button>`}</td></tr>`,
+            )
+            .join("")
+        : `<tr><td colspan="6" class="muted">Aucun code.</td></tr>`;
+    }
+
+    async function loadUsers() {
+      const users = await api("/api/admin/users");
+      $("#users").innerHTML = users
+        .map(
+          (u) => `<tr><td>${esc(u.email)}${u.is_admin ? ' <span class="muted">(admin)</span>' : ""}</td><td><b id="cr${u.id}">${u.credits}</b></td><td>${u.generations}</td><td>${date(u.created_at)}</td>
+          <td><div class="row"><input class="input" type="number" value="10" style="width:90px" id="d${u.id}" /><button class="btn small" data-add="${u.id}">Appliquer</button></div></td></tr>`,
+        )
+        .join("");
+    }
+
+    $("#codeForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        const { codes } = await api("/api/admin/codes", { method: "POST", body: { count: Number($("#cCount").value), credits: Number($("#cCredits").value), note: $("#cNote").value } });
+        $("#codesOut").value = codes.join("\n");
+        $("#codesOut").classList.remove("hidden");
+        $("#copyCodes").classList.remove("hidden");
+        toast(`${codes.length} code(s) créé(s)`, "ok");
+        loadCodes();
+        loadOverview();
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    });
+
+    $("#copyCodes").onclick = async () => {
+      await navigator.clipboard.writeText($("#codesOut").value);
+      toast("Codes copiés", "ok");
+    };
+
+    document.addEventListener("click", async (e) => {
+      const del = e.target.closest("[data-del]");
+      const add = e.target.closest("[data-add]");
+      try {
+        if (del && confirm(`Supprimer le code ${del.dataset.del} ?`)) {
+          await api(`/api/admin/codes/${encodeURIComponent(del.dataset.del)}`, { method: "DELETE" });
+          loadCodes();
+          loadOverview();
+        }
+        if (add) {
+          const id = add.dataset.add;
+          const { credits } = await api(`/api/admin/users/${id}/credits`, { method: "POST", body: { delta: Number($(`#d${id}`).value) } });
+          $(`#cr${id}`).textContent = credits;
+          toast("Crédits mis à jour", "ok");
+        }
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    });
+
+    try {
+      await loadOverview();
+      await Promise.all([loadCodes(), loadUsers()]);
+    } catch (err) {
+      if (err.message !== "forbidden") toast(err.message, "err");
+    }
+  </script>
+</body>
+</html>

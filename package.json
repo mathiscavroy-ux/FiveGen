@@ -1,0 +1,22 @@
+{
+  "name": "fivegen",
+  "version": "1.0.0",
+  "description": "FiveGen - generateur de scripts FiveM",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "demo": "node server/demo.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^8.0.0",
+    "express": "^5.3.0",
+    "luaparse": "^0.3.1"
+  }
+}

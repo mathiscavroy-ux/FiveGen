@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FiveGen — Scripts FiveM QBCore, Qbox et ESX prêts en quelques minutes</title>
+  <meta name="description" content="Décris ton job, ton HUD ou ton menu : FiveGen écrit la ressource FiveM complète (fxmanifest, config, client, serveur, NUI, SQL), vérifiée et corrigée automatiquement." />
+  <meta name="theme-color" content="#07080b" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23ff9a4d'/><stop offset='1' stop-color='%23ff3d2e'/></linearGradient></defs><rect width='64' height='64' rx='16' fill='url(%23g)'/><path d='M20 46V18h26v7H28v6h15v7H28v8z' fill='%23180c04'/></svg>" />
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/></g></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></g></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></g></symbol>
+      <symbol id="i-layout" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></g></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></g></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></g></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></g></symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></g></symbol>
+    </defs>
+  </svg>
+
+  <nav class="nav">
+    <div class="wrap">
+      <a class="brand" href="/"><span class="logo">F</span>FiveGen</a>
+      <div class="nav-links">
+        <a href="#features">Fonctionnalités</a>
+        <a href="#how">Fonctionnement</a>
+        <a href="#pricing">Tarifs</a>
+        <a href="#faq">FAQ</a>
+        <a href="/login" id="navLogin">Connexion</a>
+        <a href="/login?register=1" class="btn primary small" id="navCta">Commencer</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="wrap">
+      <div class="hero-inner">
+        <span class="pill"><b>Nouveau</b> 18 modèles prêts : jobs, HUD, garages, braquages…</span>
+        <h1>Tes scripts FiveM,<br /><span class="grad-text">prêts à lancer</span> en quelques minutes.</h1>
+        <p class="lead">Décris ton job, ton HUD ou ton menu. FiveGen écrit la ressource complète — fxmanifest, config, client, serveur, interface NUI et SQL — puis la vérifie et la corrige avant de te la livrer.</p>
+        <div class="hero-cta">
+          <a href="/login?register=1" class="btn primary big">Créer mon premier script <svg><use href="#i-arrow" /></svg></a>
+          <a href="#how" class="btn big">Voir comment ça marche</a>
+        </div>
+        <div class="hero-note">
+          <span><svg><use href="#i-check" /></svg><span><span id="freeCredits">2</span> crédits offerts</span></span>
+          <span><svg><use href="#i-check" /></svg>Sans carte bancaire</span>
+          <span><svg><use href="#i-check" /></svg>Crédit rendu en cas d'échec</span>
+        </div>
+        <div class="stack"><span>QBCore</span><span>Qbox</span><span>ESX Legacy</span><span>ox_lib</span><span>ox_target</span><span>ox_inventory</span><span>oxmysql</span></div>
+      </div>
+
+      <div class="mock" aria-hidden="true">
+        <div class="mock-bar"><i></i><i></i><i></i><span class="url">fivegen.app/studio · pizza_delivery</span></div>
+        <div class="mock-body">
+          <div class="mock-tree">
+            <div class="on"><svg width="14" height="14"><use href="#i-file" /></svg>fxmanifest.lua</div>
+            <div><svg width="14" height="14"><use href="#i-file" /></svg>config.lua</div>
+            <div><svg width="14" height="14"><use href="#i-file" /></svg>README.md</div>
+            <div class="dir">client</div>
+            <div class="sub">main.lua</div>
+            <div class="sub">delivery.lua</div>
+            <div class="dir">server</div>
+            <div class="sub">main.lua</div>
+            <div class="dir">locales</div>
+            <div class="sub">fr.lua</div>
+          </div>
+<div class="mock-code"><span class="ln">1</span><span class="c">-- server/main.lua</span>
+<span class="ln">2</span><span class="k">local</span> QBCore = exports[<span class="s">'qb-core'</span>]:<span class="f">GetCoreObject</span>()
+<span class="ln">3</span>
+<span class="ln">4</span><span class="f">RegisterNetEvent</span>(<span class="s">'pizza:server:deliver'</span>, <span class="k">function</span>()
+<span class="ln">5</span>    <span class="k">local</span> src = source
+<span class="ln">6</span>    <span class="k">local</span> Player = QBCore.Functions.<span class="f">GetPlayer</span>(src)
+<span class="ln">7</span>    <span class="k">if not</span> Player <span class="k">then return end</span>
+<span class="ln">8</span>    <span class="k">if not</span> <span class="f">IsNearDrop</span>(src, <span class="n">5.0</span>) <span class="k">then return end</span>
+<span class="ln">9</span>    <span class="k">if</span> <span class="f">OnCooldown</span>(src) <span class="k">then return end</span>
+<span class="ln">10</span>    Player.Functions.<span class="f">AddMoney</span>(<span class="s">'cash'</span>, Config.Reward)
+<span class="ln">11</span><span class="k">end</span>)</div>
+          <div class="mock-side">
+            <h4>Progression</h4>
+            <div class="step"><span class="dot"><svg><use href="#i-check" /></svg></span>Génération des fichiers</div>
+            <div class="step"><span class="dot"><svg><use href="#i-check" /></svg></span>Vérification Lua</div>
+            <div class="step"><span class="dot"><svg><use href="#i-check" /></svg></span>Contrôle du manifest</div>
+            <div class="step live"><span class="dot"></span>Analyse des événements</div>
+            <div class="check-list">
+              <span>Syntaxe Lua <b>OK</b></span>
+              <span>Fichiers du manifest <b>7 / 7</b></span>
+              <span>Événements client ↔ serveur <b>OK</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="block" id="features">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Fonctionnalités</span>
+        <h2>Tout ce qu'un développeur FiveM expérimenté livrerait.</h2>
+        <p class="sub">FiveGen connaît les frameworks, les ressources populaires et les bonnes pratiques du RP. Chaque ressource sort complète, sécurisée et documentée.</p>
+      </div>
+      <div class="bento">
+        <div class="tile wide">
+          <div class="icon"><svg><use href="#i-layers" /></svg></div>
+          <h3>Tous les frameworks, toutes les librairies</h3>
+          <p>QBCore, Qbox, ESX Legacy, standalone, ou un bridge multi-framework détecté automatiquement au démarrage.</p>
+          <div class="tags"><span>qb-core</span><span>qbx_core</span><span>es_extended</span><span>ox_lib</span><span>ox_target</span><span>ox_inventory</span><span>oxmysql</span><span>pma-voice</span></div>
+        </div>
+        <div class="tile wide">
+          <div class="icon"><svg><use href="#i-shield" /></svg></div>
+          <h3>Sécurisé côté serveur, par défaut</h3>
+          <p>Argent, items et récompenses sont validés sur le serveur : distances, jobs, cooldowns, états de mission. Aucun événement exploitable par un tricheur.</p>
+        </div>
+        <div class="tile">
+          <div class="icon"><svg><use href="#i-list" /></svg></div>
+          <h3>Vérifié et corrigé</h3>
+          <p>Syntaxe Lua, manifest, références NUI et événements analysés. Les erreurs sont corrigées automatiquement, sans frais.</p>
+        </div>
+        <div class="tile">
+          <div class="icon"><svg><use href="#i-layout" /></svg></div>
+          <h3>Interfaces NUI modernes</h3>
+          <p>HUD, menus, boutiques, tablettes : HTML/CSS/JS propres et animés, du 1080p au 4K.</p>
+        </div>
+        <div class="tile">
+          <div class="icon"><svg><use href="#i-pencil" /></svg></div>
+          <h3>Modifie en une phrase</h3>
+          <p>« Ajoute un cooldown de 10 min », « passe sur ox_target » : seuls les fichiers concernés sont réécrits.</p>
+        </div>
+        <div class="tile wide">
+          <div class="icon"><svg><use href="#i-download" /></svg></div>
+          <h3>Prêt à <code>ensure</code></h3>
+          <p>ZIP téléchargeable avec README d'installation, SQL et déclarations d'items pour ton inventaire. Éditeur de code intégré pour les retouches.</p>
+        </div>
+        <div class="tile wide">
+          <div class="icon"><svg><use href="#i-gauge" /></svg></div>
+          <h3>Optimisé pour le resmon</h3>
+          <p>Boucles à sommeil dynamique, zones plutôt que calculs de distance permanents, StateBags pour la synchronisation, nettoyage complet à l'arrêt.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="how">
+    <div class="wrap">
+      <div class="head center">
+        <span class="eyebrow">Fonctionnement</span>
+        <h2>De l'idée au serveur en trois étapes.</h2>
+        <p class="sub">Aucune configuration, aucun outil à installer.</p>
+      </div>
+      <div class="steps">
+        <div class="tile"><h3>Décris ton script</h3><p>Choisis ton framework, le type de script et tes dépendances, ou pars d'un des 18 modèles prêts à l'emploi.</p></div>
+        <div class="tile"><h3>FiveGen l'écrit et le vérifie</h3><p>Les fichiers apparaissent en direct, puis passent la vérification automatique et la correction.</p></div>
+        <div class="tile"><h3>Télécharge et lance</h3><p>Dépose le dossier dans <code>resources</code>, ajoute <code>ensure</code> dans ton server.cfg : c'est en jeu.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Pourquoi FiveGen</span>
+        <h2>Un outil pensé uniquement pour FiveM.</h2>
+        <p class="sub">Un assistant généraliste te donne des morceaux de code à assembler. FiveGen te livre une ressource qui démarre.</p>
+      </div>
+      <div class="compare-wrap">
+        <table class="compare">
+          <thead><tr><th></th><th>FiveGen</th><th>Outil généraliste</th></tr></thead>
+          <tbody>
+            <tr><td>Ressource complète (manifest, config, client, serveur, NUI, SQL)</td><td><span class="yes"><svg><use href="#i-check" /></svg>Toujours</span></td><td><span class="no"><svg><use href="#i-x" /></svg>Morceaux à assembler</span></td></tr>
+            <tr><td>APIs QBCore, Qbox, ESX et ox_* à jour</td><td><span class="yes"><svg><use href="#i-check" /></svg>Intégrées</span></td><td><span class="no"><svg><use href="#i-x" /></svg>Souvent obsolètes</span></td></tr>
+            <tr><td>Vérification Lua, manifest et événements</td><td><span class="yes"><svg><use href="#i-check" /></svg>Automatique</span></td><td><span class="no"><svg><use href="#i-x" /></svg>À faire soi-même</span></td></tr>
+            <tr><td>Correction des erreurs détectées</td><td><span class="yes"><svg><use href="#i-check" /></svg>Incluse</span></td><td><span class="no"><svg><use href="#i-x" /></svg>Allers-retours manuels</span></td></tr>
+            <tr><td>Sécurité anti-exploit côté serveur</td><td><span class="yes"><svg><use href="#i-check" /></svg>Systématique</span></td><td><span class="no"><svg><use href="#i-x" /></svg>Rarement</span></td></tr>
+            <tr><td>Historique, éditeur et export ZIP</td><td><span class="yes"><svg><use href="#i-check" /></svg>Inclus</span></td><td><span class="no"><svg><use href="#i-x" /></svg>Copier-coller</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="pricing">
+    <div class="wrap">
+      <div class="head center">
+        <span class="eyebrow">Tarifs</span>
+        <h2>Payez seulement ce que vous générez.</h2>
+        <p class="sub">1 crédit = 1 script ou 1 modification. Corrections automatiques incluses, crédits sans expiration.</p>
+      </div>
+      <!-- Adapte les prix et quantités à tes packs (codes générés depuis /admin). -->
+      <div class="pricing">
+        <div class="price">
+          <h3>Starter</h3>
+          <div class="amount">4,99 €</div>
+          <div class="per">10 crédits · 0,50 € le script</div>
+          <ul>
+            <li><svg><use href="#i-check" /></svg>10 scripts ou modifications</li>
+            <li><svg><use href="#i-check" /></svg>Tous les frameworks</li>
+            <li><svg><use href="#i-check" /></svg>Export ZIP et éditeur</li>
+          </ul>
+          <a class="btn buy" href="/login?register=1">Choisir Starter</a>
+        </div>
+        <div class="price featured">
+          <span class="badge-top">Le plus choisi</span>
+          <h3>Pro</h3>
+          <div class="amount">12,99 €</div>
+          <div class="per">30 crédits · 0,43 € le script</div>
+          <ul>
+            <li><svg><use href="#i-check" /></svg>30 scripts ou modifications</li>
+            <li><svg><use href="#i-check" /></svg>Idéal pour monter un serveur</li>
+            <li><svg><use href="#i-check" /></svg>Support prioritaire</li>
+          </ul>
+          <a class="btn primary buy" href="/login?register=1">Choisir Pro</a>
+        </div>
+        <div class="price">
+          <h3>Studio</h3>
+          <div class="amount">34,99 €</div>
+          <div class="per">100 crédits · 0,35 € le script</div>
+          <ul>
+            <li><svg><use href="#i-check" /></svg>100 scripts ou modifications</li>
+            <li><svg><use href="#i-check" /></svg>Pour les développeurs et équipes</li>
+            <li><svg><use href="#i-check" /></svg>Support prioritaire</li>
+          </ul>
+          <a class="btn buy" href="/login?register=1">Choisir Studio</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="faq">
+    <div class="wrap">
+      <div class="head center">
+        <span class="eyebrow">FAQ</span>
+        <h2>Questions fréquentes</h2>
+      </div>
+      <div class="faq">
+        <details class="qa"><summary>Les scripts fonctionnent-ils directement sur mon serveur ?</summary><p>Oui : chaque ressource contient son fxmanifest, sa config et un README d'installation (dépendances, SQL, items). Elle est vérifiée automatiquement avant livraison. Comme pour tout script, teste-la sur ton serveur de développement avant la production.</p></details>
+        <details class="qa"><summary>Comment les scripts sont-ils produits ?</summary><p>Par le moteur de génération automatique de FiveGen, spécialisé FiveM, puis analysés et corrigés automatiquement (syntaxe Lua, manifest, événements, interface). Tu peux ensuite les modifier en une phrase ou directement dans l'éditeur.</p></details>
+        <details class="qa"><summary>Puis-je modifier ou redistribuer les scripts générés ?</summary><p>Oui, les ressources générées t'appartiennent : utilise-les, modifie-les et redistribue-les librement sur tes serveurs.</p></details>
+        <details class="qa"><summary>Que se passe-t-il si une génération échoue ?</summary><p>Si aucun fichier n'est produit, ton crédit est automatiquement rendu.</p></details>
+        <details class="qa"><summary>Comment recharger mes crédits ?</summary><p>Achète un pack : tu reçois un code d'activation à saisir dans le studio (menu « Utiliser un code »).</p></details>
+        <details class="qa"><summary>FiveGen crée-t-il des cheats ou des menus de triche ?</summary><p>Non. FiveGen produit uniquement des ressources légitimes pour serveurs FiveM.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="cta-band">
+        <h2>Ton prochain script est à une phrase.</h2>
+        <p>Crée ton compte et génère ta première ressource gratuitement.</p>
+        <a href="/login?register=1" class="btn primary big">Essayer FiveGen <svg><use href="#i-arrow" /></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="foot">
+        <div>
+          <a class="brand" href="/"><span class="logo">F</span>FiveGen</a>
+          <p>Le studio de scripts FiveM : jobs, HUD, menus, boutiques et plus, prêts à lancer.</p>
+        </div>
+        <div>
+          <h5>Produit</h5>
+          <a href="#features">Fonctionnalités</a>
+          <a href="#pricing">Tarifs</a>
+          <a href="/app">Studio</a>
+        </div>
+        <div>
+          <h5>Informations</h5>
+          <a href="/a-propos">À propos</a>
+          <a href="/cgv">Conditions générales</a>
+          <a id="supportLink" class="hidden" href="#" target="_blank" rel="noopener">Support</a>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <span>© <span id="year"></span> FiveGen. Tous droits réservés.</span>
+        <span>Non affilié à Rockstar Games, Take-Two Interactive ou Cfx.re.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    document.getElementById("year").textContent = new Date().getFullYear();
+    try {
+      const me = await fetch("/api/me");
+      if (me.ok) {
+        document.getElementById("navLogin").classList.add("hidden");
+        Object.assign(document.getElementById("navCta"), { textContent: "Ouvrir le studio", href: "/app" });
+      }
+      const info = await fetch("/api/public").then((r) => r.json());
+      document.getElementById("freeCredits").textContent = info.freeCredits;
+      if (info.shopUrl) document.querySelectorAll(".buy").forEach((a) => Object.assign(a, { href: info.shopUrl, target: "_blank", rel: "noopener" }));
+      if (info.supportUrl) Object.assign(document.getElementById("supportLink"), { href: info.supportUrl }).classList.remove("hidden");
+    } catch {
+      // static fallback values stay in place
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FiveGen Studio</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23ff7a1a'/><path d='M18 46V18h28v7H26v6h16v7H26v8z' fill='%23111'/></svg>" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="logo">F</span>
+      <div>
+        <strong>FiveGen</strong>
+        <small>Studio de scripts QBCore · Qbox · ESX</small>
+      </div>
+    </a>
+    <div class="topbar-actions">
+      <button id="btnCredits" class="pill credits" title="Recharger mes crédits"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20"/></svg> <span id="creditCount">…</span> crédits</button>
+      <button id="btnNew" class="btn ghost"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Nouveau script</button>
+      <div class="account">
+        <button id="btnAccount" class="btn ghost icon" title="Mon compte"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></button>
+        <div id="accountMenu" class="menu hidden">
+          <div id="accountEmail" class="menu-head"></div>
+          <button data-open-redeem>Utiliser un code</button>
+          <a id="shopLink" href="#" target="_blank" rel="noopener" class="hidden">Acheter des crédits</a>
+          <a id="adminLink" href="/admin" class="hidden">Administration</a>
+          <a href="/a-propos">À propos</a>
+          <a href="/cgv">Conditions générales</a>
+          <button id="btnLogout">Se déconnecter</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span>Mes scripts</span>
+        <span id="projectCount" class="muted"></span>
+      </div>
+      <input id="projectSearch" class="input small" placeholder="Rechercher…" />
+      <ul id="projectList" class="project-list"></ul>
+    </aside>
+
+    <main class="main">
+      <!-- New script -->
+      <section id="viewNew" class="view">
+        <div id="demoBanner" class="banner hidden">Mode démonstration : les ressources générées sont des exemples.</div>
+        <div id="creditBanner" class="banner warn hidden">
+          Tu n'as plus de crédits. <button class="link" data-open-redeem>Utiliser un code</button>
+          <a id="creditShopLink" class="link hidden" href="#" target="_blank" rel="noopener">ou en acheter</a>
+        </div>
+        <div class="new-grid">
+          <form id="genForm" class="card form">
+            <h2>Nouveau script</h2>
+            <div class="row">
+              <label class="field">
+                <span>Nom de la ressource</span>
+                <input id="fName" class="input" required placeholder="ex : pizza_delivery" pattern="[A-Za-z0-9_\-]+" />
+              </label>
+              <label class="field">
+                <span>Langue</span>
+                <select id="fLanguage" class="input"></select>
+              </label>
+            </div>
+            <div class="field">
+              <span>Framework</span>
+              <div id="fFramework" class="chips"></div>
+            </div>
+            <div class="field">
+              <span>Type de script</span>
+              <div id="fType" class="chips"></div>
+            </div>
+            <div class="row">
+              <label class="field">
+                <span>Interface</span>
+                <select id="fUi" class="input"></select>
+              </label>
+            </div>
+            <div class="field">
+              <span>Dépendances (optionnel)</span>
+              <div id="fDeps" class="checks"></div>
+            </div>
+            <label class="field">
+              <span>Décris ton script <em class="muted">— plus c'est précis, meilleur c'est</em></span>
+              <textarea id="fDescription" class="input" rows="8" required placeholder="ex : Job de livreur de pizza avec scooter de service, livraisons aléatoires, paiement par livraison, tenue de travail, vérifications anti-triche côté serveur…"></textarea>
+            </label>
+            <div class="form-actions">
+              <span id="costHint" class="muted cost-hint"></span>
+              <button type="submit" id="btnGenerate" class="btn primary big">Générer le script <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+            </div>
+          </form>
+
+          <div class="card presets">
+            <h2>Idées prêtes à l'emploi</h2>
+            <p class="muted">Clique pour pré-remplir le formulaire, puis ajuste la description.</p>
+            <div id="presetGrid" class="preset-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Project workspace -->
+      <section id="viewProject" class="view hidden">
+        <div class="toolbar">
+          <div class="toolbar-title">
+            <h2 id="pName"></h2>
+            <span id="pFramework" class="tag"></span>
+            <span id="pType" class="tag"></span>
+            <span id="pStatus" class="badge"></span>
+          </div>
+          <div class="toolbar-actions">
+            <button id="btnCancel" class="btn danger hidden"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Arrêter</button>
+            <button id="btnValidate" class="btn ghost" title="Relancer la validation"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Vérifier</button>
+            <button id="btnFix" class="btn ghost" title="Corriger automatiquement les problèmes détectés"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Corriger</button>
+            <a id="btnZip" class="btn primary" href="#" download><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>Télécharger le ZIP</a>
+            <button id="btnDelete" class="btn ghost icon" title="Supprimer ce projet"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
+          </div>
+        </div>
+
+        <div class="workspace">
+          <div class="files">
+            <div class="panel-head">Fichiers <span id="fileCount" class="muted"></span></div>
+            <ul id="fileTree" class="file-tree"></ul>
+          </div>
+          <div class="editor-wrap">
+            <div class="panel-head editor-head">
+              <span id="editorPath" class="mono">—</span>
+              <span class="editor-actions">
+                <span id="editorDirty" class="dirty hidden">● modifié</span>
+                <button id="btnCopy" class="btn tiny ghost">Copier</button>
+                <button id="btnSave" class="btn tiny" disabled>Enregistrer (Ctrl+S)</button>
+              </span>
+            </div>
+            <div id="editorHost" class="editor-host"></div>
+          </div>
+        </div>
+
+        <div class="bottom">
+          <div class="tabs">
+            <button class="tab active" data-tab="live">Live</button>
+            <button class="tab" data-tab="problems">Problèmes <span id="problemCount" class="count"></span></button>
+            <button class="tab" data-tab="notes">Installation</button>
+            <button class="tab" data-tab="history">Historique</button>
+          </div>
+          <div class="tab-panels">
+            <div class="tab-panel" data-panel="live">
+              <div id="phaseLine" class="phase muted">En attente.</div>
+              <pre id="liveText" class="live"></pre>
+            </div>
+            <div class="tab-panel hidden" data-panel="problems"><ul id="problemList" class="problems"></ul></div>
+            <div class="tab-panel hidden" data-panel="notes"><div id="notes" class="markdown"></div></div>
+            <div class="tab-panel hidden" data-panel="history"><ul id="historyList" class="history"></ul></div>
+          </div>
+        </div>
+
+        <form id="refineForm" class="refine">
+          <textarea id="refineInput" class="input" rows="2" placeholder="Demande une modification : « ajoute un menu ox_lib pour choisir le véhicule », « traduis en anglais », « ajoute un cooldown de 10 min »…"></textarea>
+          <button id="btnRefine" class="btn primary">Appliquer <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <!-- Redeem -->
+  <dialog id="redeemDialog" class="dialog small">
+    <form id="redeemForm" method="dialog">
+      <h2>Recharger mes crédits</h2>
+      <p class="muted">Saisis le code reçu après ton achat. Une génération ou une modification coûte <b id="costLine">1 crédit</b> ; les corrections automatiques sont incluses.</p>
+      <label class="field">
+        <span>Code d'activation</span>
+        <input id="redeemCode" class="input mono" placeholder="FG-XXXX-XXXX-XXXX" autocomplete="off" required />
+      </label>
+      <div class="dialog-actions">
+        <a id="redeemShop" class="btn ghost hidden" href="#" target="_blank" rel="noopener">Acheter des crédits ↗</a>
+        <span class="spacer"></span>
+        <button type="button" id="btnCloseRedeem" class="btn ghost">Fermer</button>
+        <button type="submit" class="btn primary">Valider le code</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/lua/lua.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

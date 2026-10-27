@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connexion — FiveGen</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23ff7a1a'/><path d='M18 46V18h28v7H26v6h16v7H26v8z' fill='%23111'/></svg>" />
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body>
+  <div class="auth-page">
+  <aside class="auth-aside">
+    <a class="brand" href="/"><span class="logo">F</span>FiveGen</a>
+    <div>
+      <h2>Le studio qui écrit tes scripts FiveM à ta place.</h2>
+      <ul>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Ressources complètes pour QBCore, Qbox et ESX</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Vérification et correction automatiques</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Sécurité côté serveur intégrée</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Export ZIP prêt à <code>ensure</code></li>
+      </ul>
+    </div>
+    <span class="muted" style="font-size:13px">© FiveGen · <a href="/cgv">Conditions générales</a></span>
+  </aside>
+
+  <main class="auth-main">
+    <div class="auth-card">
+      <h1 id="title">Bon retour</h1>
+      <p class="lead" id="subtitle">Connecte-toi pour retrouver tes scripts.</p>
+      <div class="tabs">
+        <button type="button" data-mode="login" class="active">Connexion</button>
+        <button type="button" data-mode="register">Créer un compte</button>
+      </div>
+      <form id="authForm" novalidate>
+        <label class="field">
+          <span>Adresse e-mail</span>
+          <input id="email" class="input" type="email" autocomplete="email" required />
+        </label>
+        <label class="field">
+          <span>Mot de passe</span>
+          <input id="password" class="input" type="password" autocomplete="current-password" minlength="8" required />
+        </label>
+        <label class="check hidden" id="termsRow">
+          <input id="terms" type="checkbox" />
+          <span>J'accepte les <a href="/cgv" target="_blank">conditions générales</a>, y compris l'utilisation d'un moteur de génération automatique pour produire les ressources.</span>
+        </label>
+        <div id="error" class="form-error"></div>
+        <button id="submit" class="btn primary" type="submit">Se connecter</button>
+        <p id="bonus" class="auth-foot hidden">Crédits offerts à l'inscription pour tester.</p>
+      </form>
+      <p class="auth-foot"><a href="/">← Retour au site</a></p>
+    </div>
+  </main>
+  </div>
+
+  <script type="module">
+    const $ = (s) => document.querySelector(s);
+    let mode = new URLSearchParams(location.search).has("register") ? "register" : "login";
+
+    function render() {
+      document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+      $("#termsRow").classList.toggle("hidden", mode !== "register");
+      $("#bonus").classList.toggle("hidden", mode !== "register");
+      $("#submit").textContent = mode === "register" ? "Créer mon compte" : "Se connecter";
+      $("#title").textContent = mode === "register" ? "Crée ton compte" : "Bon retour";
+      $("#subtitle").textContent = mode === "register" ? "Ta première ressource en quelques minutes." : "Connecte-toi pour retrouver tes scripts.";
+      $("#password").autocomplete = mode === "register" ? "new-password" : "current-password";
+      $("#error").textContent = "";
+    }
+
+    document.querySelectorAll("[data-mode]").forEach((b) => (b.onclick = () => ((mode = b.dataset.mode), render())));
+
+    $("#authForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = { email: $("#email").value.trim(), password: $("#password").value, acceptTerms: $("#terms").checked };
+      if (mode === "register" && !body.acceptTerms) return ($("#error").textContent = "Accepte les conditions générales pour continuer.");
+      $("#submit").disabled = true;
+      try {
+        const res = await fetch(`/api/auth/${mode}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-FiveGen": "1" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Erreur");
+        location.href = "/app";
+      } catch (err) {
+        $("#error").textContent = err.message;
+      } finally {
+        $("#submit").disabled = false;
+      }
+    });
+
+    fetch("/api/me").then((r) => r.ok && (location.href = "/app"));
+    fetch("/api/public").then((r) => r.json()).then((p) => ($("#bonus").textContent = `${p.freeCredits} crédits offerts à l'inscription pour tester.`)).catch(() => {});
+    render();
+  </script>
+</body>
+</html>
