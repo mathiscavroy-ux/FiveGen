@@ -185,6 +185,44 @@ async function streamCompletion(provider, body, onEvent, signal, onActivity) {
   };
 }
 
+// Short non-streamed exchange (questions step): returns the reply text.
+export async function completeOpenAICompat({ provider, system, user, maxTokens = 2000, timeoutMs = 45000, signal }) {
+  assertUsable(provider);
+  const body = {
+    model: provider.model,
+    max_tokens: maxTokens,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  };
+  if (provider.id === "gemini") body.reasoning_effort = "low";
+  const ctrl = new AbortController();
+  const forwardAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", forwardAbort, { once: true });
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await request(provider, `${provider.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: headersFor(provider),
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new ProviderError(httpMessage(provider, res.status, await res.text()), res.status);
+    const json = await res.json();
+    if (json.error) throw new ProviderError(`${provider.label} : ${extractError(JSON.stringify(json))}`, Number(json.error.code) || undefined);
+    const choice = json.choices?.[0];
+    if (choice?.finish_reason === "content_filter") throw new ProviderError(`${provider.label} a bloqué la réponse (filtre de contenu).`);
+    return String(choice?.message?.content ?? "");
+  } catch (err) {
+    if (err.name === "AbortError" && !signal?.aborted) throw new ProviderError(`${provider.label} ne répond plus depuis ${Math.round(timeoutMs / 1000)} s`, 504);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
 export async function testOpenAICompat(provider) {
   if (!provider.baseUrl) throw new ProviderError("URL de l'API manquante.");
   if (provider.needsKey && !provider.apiKey) throw new ProviderError(`Aucune clé API pour ${provider.label}.`, 401);

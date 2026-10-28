@@ -705,3 +705,42 @@ table.diff tr.gap td { color: var(--muted); background: var(--panel); text-align
   .vd-files { max-height: 160px; border-right: 0; border-bottom: 1px solid var(--border); }
   .pane-analysis { max-height: none; }
 }
+
+/* ---------- new script: idea, then questions ---------- */
+.brief-wrap { max-width: 780px; margin: 0 auto; width: 100%; }
+.idea h2 { font-size: 22px; margin-bottom: 4px; }
+.idea textarea { font-size: 15px; line-height: 1.55; min-height: 150px; resize: vertical; }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+.form.brief { display: grid; gap: 16px; }
+.brief-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.brief-step { font-size: 12px; }
+.understood { border: 1px solid rgba(255, 122, 26, .35); background: rgba(255, 122, 26, .07); border-radius: var(--radius); padding: 12px 14px; }
+.understood .u-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent-2); margin-bottom: 4px; font-weight: 700; }
+.understood p { margin: 0; color: var(--text); line-height: 1.5; }
+.brief-questions { display: grid; gap: 14px; }
+.bq { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px 14px; margin: 0; background: var(--panel); min-width: 0; }
+.bq legend { padding: 0 6px; margin-left: -6px; font-weight: 600; color: var(--text); }
+.bq-help { margin: 0 0 8px; font-size: 12.5px; }
+.bq-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.bq-opt { position: relative; cursor: pointer; }
+.bq-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.bq-opt span { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--panel-2); color: var(--text-2); font-size: 13px; transition: background .15s, border-color .15s, color .15s; }
+.bq-opt input[type="checkbox"] + span::before { content: ""; width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--muted); flex: none; }
+.bq-opt input[type="radio"] + span::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--muted); flex: none; }
+.bq-opt input:checked + span { background: rgba(255, 122, 26, .14); border-color: var(--accent); color: var(--accent-2); }
+.bq-opt input:checked + span::before { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 2px var(--panel-2); }
+.bq-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bq .input { width: 100%; }
+.brief-server { border: 1px solid var(--border); border-radius: var(--radius); padding: 0 14px; background: var(--panel); }
+.brief-server[open] { padding-bottom: 14px; }
+.brief-server summary { cursor: pointer; padding: 12px 0; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; list-style: none; font-weight: 600; }
+.brief-server summary::-webkit-details-marker { display: none; }
+.brief-server summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+.brief-server[open] summary::before { transform: rotate(90deg); }
+.brief-server summary .muted { font-weight: 400; font-size: 12.5px; }
+.brief-server .field { margin-top: 10px; }
+.small-note { font-size: 12px; margin: 10px 0 0; }
+@media (max-width: 560px) {
+  .brief-head { flex-wrap: wrap; }
+  .bq-opt span { font-size: 12.5px; }
+}

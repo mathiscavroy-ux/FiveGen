@@ -150,3 +150,52 @@ export async function runMock({ userContent, onEvent, signal }) {
     usage: { input_tokens: 0, output_tokens: 0 },
   };
 }
+
+// Demo questions step: a police request gets police questions, anything else a generic set.
+export function mockBrief(description) {
+  const police = /police|lspd|bcso|gendarm|flic/i.test(description);
+  if (police) {
+    return {
+      understood: "Un job police complet : prise de service, vestiaire, garage, armurerie et interactions avec les joueurs (menottes, fouille, amendes).",
+      name: "police_job",
+      type: "job",
+      framework: null,
+      ui: "ox_lib",
+      dependencies: ["ox_lib", "ox_target", "oxmysql"],
+      questions: [
+        { id: "features", label: "Quelles fonctionnalités veux-tu ?", kind: "multi", options: [
+          { value: "cuffs", label: "Menotter / escorter / mettre en véhicule" },
+          { value: "search", label: "Fouille" },
+          { value: "fines", label: "Amendes" },
+          { value: "armory", label: "Armurerie par grade" },
+          { value: "garage", label: "Garage de service" },
+          { value: "dispatch", label: "Appels /911 avec blip" },
+        ], default: ["cuffs", "search", "fines", "armory", "garage", "dispatch"] },
+        { id: "fines", label: "Comment payer les amendes ?", kind: "single", options: [
+          { value: "billing", label: "Facture esx_billing / société" },
+          { value: "direct", label: "Retrait direct du compte bancaire" },
+        ], default: "billing" },
+        { id: "grades", label: "Combien de grades ?", kind: "single", options: [
+          { value: "4", label: "4 (Cadet → Capitaine)" },
+          { value: "6", label: "6 (Cadet → Commandant)" },
+        ], default: "4" },
+        { id: "extra", label: "Un détail à ajouter ?", kind: "text", placeholder: "ex : poste de Sandy Shores en plus de Mission Row", default: "" },
+      ],
+    };
+  }
+  return {
+    understood: `Une ressource FiveM sur mesure : ${description.slice(0, 160)}`,
+    name: "mon_script",
+    type: "other",
+    framework: null,
+    ui: "auto",
+    dependencies: ["ox_lib"],
+    questions: [
+      { id: "access", label: "Qui peut utiliser ce script ?", kind: "single", options: [
+        { value: "all", label: "Tous les joueurs" },
+        { value: "job", label: "Un job précis" },
+      ], default: "all" },
+      { id: "extra", label: "Un détail à ajouter ?", kind: "text", placeholder: "ex : emplacements, prix…", default: "" },
+    ],
+  };
+}

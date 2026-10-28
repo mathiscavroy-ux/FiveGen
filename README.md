@@ -10,7 +10,7 @@ Le moteur de génération (Gemini Flash par défaut) tourne uniquement sur ton s
 |---|---|
 | `/` | Page de vente : fonctionnalités, comparatif, tarifs, FAQ |
 | `/login` | Connexion / création de compte (acceptation des CGV obligatoire) |
-| `/app` | Studio : formulaire, 18 modèles prêts, génération en direct, vérification et correction automatiques, éditeur, modifications en une phrase, ZIP |
+| `/app` | Studio : demande en texte libre, questions de cadrage (gratuites), génération en direct, vérification et correction automatiques, éditeur, modifications en une phrase, ZIP |
 | `/admin` | Ton tableau de bord : statistiques, état du moteur, création de codes, clients, ajustement de crédits, erreurs |
 | `/a-propos`, `/cgv` | Mentions légales et conditions générales (avec la mention « moteur de génération automatique ») |
 
@@ -111,7 +111,8 @@ server/
   auth.js         mots de passe (scrypt), sessions, CSRF, limites de débit
   engine.js       moteur de génération (fournisseur masqué, erreurs génériques)
   openai-compat.js  client streaming /chat/completions
-  prompts.js      catalogue (types, frameworks, 18 modèles) + construction des demandes
+  prompts.js      catalogue (types, frameworks) + construction des demandes
+  brief.js        étape de questions avant génération (gratuite)
   knowledge/      base de connaissances FiveM (privée)
   parser.js       lecture des fichiers produits
   validator.js    vérifications Lua / manifest / NUI / événements

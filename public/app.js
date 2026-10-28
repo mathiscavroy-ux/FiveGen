@@ -171,7 +171,8 @@ function renderAccount() {
     $(id).classList.toggle("hidden", !me.shopUrl);
     if (me.shopUrl) $(id).href = me.shopUrl;
   }
-  $("#costHint").textContent = `Coût : ${plural(me.costs.generate, "crédit")} (corrections automatiques incluses)`;
+  $("#costHint").textContent = "Analyse gratuite, aucun crédit débité à cette étape";
+  $("#genCostHint").textContent = `Coût : ${plural(me.costs.generate, "crédit")} (corrections automatiques incluses)`;
   $("#costLine").textContent = plural(me.costs.generate, "crédit");
   $("#freeRefinesLine").textContent = me.freeRefines;
   $("#demoBanner").classList.toggle("hidden", !state.options?.demo);
@@ -274,6 +275,7 @@ async function onRedeem(e) {
 // ---------- views ----------
 
 function showView(name) {
+  if (name === "new") showBriefStep("idea");
   $("#viewNew").classList.toggle("hidden", name !== "new");
   $("#viewProject").classList.toggle("hidden", name !== "project");
 }
@@ -293,29 +295,141 @@ function renderChips(container, items, key) {
   }
 }
 
+// The player's server setup (framework, installed resources, language) is asked once
+// and remembered for the next scripts.
+const SERVER_KEY = "fivegen.server";
+
+function loadServerProfile() {
+  try {
+    return JSON.parse(localStorage.getItem(SERVER_KEY)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function saveServerProfile(profile) {
+  try {
+    localStorage.setItem(SERVER_KEY, JSON.stringify(profile));
+  } catch {
+    // private browsing: the profile is simply asked again next time
+  }
+}
+
 function renderForm() {
   const o = state.options;
+  const profile = loadServerProfile();
+  if (profile?.framework) state.form.framework = profile.framework;
   renderChips($("#fFramework"), o.frameworks, "framework");
-  renderChips($("#fType"), o.types, "type");
   $("#fUi").innerHTML = o.ui.map((u) => `<option value="${u.id}">${escapeHtml(u.label)}</option>`).join("");
   $("#fLanguage").innerHTML = o.languages.map((l) => `<option value="${l.id}">${escapeHtml(l.label)}</option>`).join("");
+  if (profile?.language) $("#fLanguage").value = profile.language;
   $("#fDeps").innerHTML = o.dependencies
-    .map((d) => `<label><input type="checkbox" value="${d.id}" /> ${escapeHtml(d.label)}</label>`)
+    .map((d) => `<label><input type="checkbox" value="${d.id}" ${profile?.dependencies?.includes(d.id) ? "checked" : ""} /> ${escapeHtml(d.label)}</label>`)
     .join("");
-  $("#presetGrid").innerHTML = "";
-  for (const p of o.presets) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "preset";
-    b.innerHTML = `<b>${escapeHtml(p.title)}</b><span>${escapeHtml(label(o.types, p.type))}</span>`;
-    b.onclick = () => {
-      state.form.type = p.type;
-      renderChips($("#fType"), o.types, "type");
-      $("#fName").value = p.name;
-      $("#fDescription").value = p.description;
-      $("#fDescription").focus();
-    };
-    $("#presetGrid").append(b);
+}
+
+function showBriefStep(step) {
+  $("#ideaForm").classList.toggle("hidden", step !== "idea");
+  $("#genForm").classList.toggle("hidden", step !== "brief");
+}
+
+function serverSummary() {
+  const deps = $$("#fDeps input:checked").map((i) => label(state.options.dependencies, i.value));
+  return `${label(state.options.frameworks, state.form.framework)}${deps.length ? ` · ${deps.join(", ")}` : ""}`;
+}
+
+function renderQuestion(q) {
+  const box = document.createElement("fieldset");
+  box.className = "bq";
+  box.dataset.id = q.id;
+  box.dataset.kind = q.kind;
+  box.innerHTML = `<legend>${escapeHtml(q.label)}</legend>${q.help ? `<p class="muted bq-help">${escapeHtml(q.help)}</p>` : ""}`;
+  if (q.kind === "text") {
+    const input = document.createElement("input");
+    input.className = "input";
+    input.maxLength = 400;
+    input.placeholder = q.placeholder || "Facultatif";
+    input.value = q.default || "";
+    box.append(input);
+  } else {
+    const opts = document.createElement("div");
+    opts.className = "bq-options";
+    for (const o of q.options) {
+      const checked = q.kind === "multi" ? q.default.includes(o.value) : q.default === o.value;
+      const l = document.createElement("label");
+      l.className = "bq-opt";
+      l.innerHTML = `<input type="${q.kind === "multi" ? "checkbox" : "radio"}" name="bq_${escapeHtml(q.id)}" value="${escapeHtml(o.value)}" ${checked ? "checked" : ""} /><span>${escapeHtml(o.label)}</span>`;
+      opts.append(l);
+    }
+    box.append(opts);
+  }
+  return box;
+}
+
+function renderBrief(brief) {
+  state.brief = brief;
+  const profile = loadServerProfile();
+  $("#briefUnderstood").textContent = brief.understood || $("#fDescription").value.trim();
+  $("#fName").value = brief.name || "";
+  if (!profile?.framework && brief.framework) state.form.framework = brief.framework;
+  renderChips($("#fFramework"), state.options.frameworks, "framework");
+  if (!profile?.dependencies) {
+    for (const input of $$("#fDeps input")) input.checked = brief.dependencies.includes(input.value);
+  }
+  $("#fUi").value = brief.ui || "auto";
+  const list = $("#briefQuestions");
+  list.innerHTML = "";
+  for (const q of brief.questions) list.append(renderQuestion(q));
+  if (!brief.questions.length) list.innerHTML = '<p class="muted">Ta demande est claire : vérifie les réglages de ton serveur puis lance la génération.</p>';
+  // First script: the server block must be checked, afterwards it stays folded.
+  $("#briefServer").open = !profile;
+  $("#briefServerSummary").textContent = serverSummary();
+  showBriefStep("brief");
+  $("#genForm").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function collectAnswers() {
+  return $$("#briefQuestions .bq").map((box) => {
+    const q = state.brief.questions.find((x) => x.id === box.dataset.id);
+    let answer;
+    if (q.kind === "text") answer = box.querySelector("input").value.trim();
+    else {
+      const picked = [...box.querySelectorAll("input:checked")].map((i) => q.options.find((o) => o.value === i.value)?.label ?? i.value);
+      answer = q.kind === "multi" ? (picked.length ? picked.join(", ") : "aucune") : picked[0] ?? "";
+    }
+    return { question: q.label, answer };
+  });
+}
+
+async function onBrief(e) {
+  e.preventDefault();
+  if (state.busy) return;
+  const description = $("#fDescription").value.trim();
+  if (description.length < 8) return toast("Décris un peu plus le script que tu veux.", "err");
+  if (state.me.credits < state.me.costs.generate) {
+    toast("Crédits insuffisants.", "err");
+    return openRedeem();
+  }
+  const btn = $("#btnBrief");
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Analyse de ta demande…';
+  const profile = loadServerProfile();
+  try {
+    const brief = await api("/api/brief", { method: "POST", body: { description, server: profile ?? {} } });
+    if (brief.refused) {
+      toast(brief.understood || "Cette demande ne peut pas être générée.", "err");
+      return;
+    }
+    renderBrief(brief);
+  } catch (err) {
+    if (err.code === "NO_CREDITS") return openRedeem();
+    // The questions are a help, never a wall: fall back to the form alone.
+    toast(`${err.message} Tu peux quand même lancer la génération.`, "err");
+    renderBrief({ understood: "", name: "", type: "other", framework: null, ui: "auto", dependencies: [], questions: [] });
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
   }
 }
 
@@ -1188,11 +1302,14 @@ async function onGenerate(e) {
     name,
     description,
     framework: state.form.framework,
-    type: state.form.type,
+    type: state.brief?.type ?? "other",
     ui: $("#fUi").value,
     language: $("#fLanguage").value,
     dependencies: $$("#fDeps input:checked").map((i) => i.value),
+    understood: state.brief?.understood ?? "",
+    answers: state.brief ? collectAnswers() : [],
   };
+  saveServerProfile({ framework: spec.framework, dependencies: spec.dependencies, language: spec.language });
   state.pending.clear();
   setDirty(false);
   await runStream("/api/generate", spec, { fresh: true });
@@ -1460,6 +1577,12 @@ function bind() {
   bindInsights();
   bindDeploy();
   $("#genForm").addEventListener("submit", onGenerate);
+  $("#ideaForm").addEventListener("submit", onBrief);
+  $("#btnBriefBack").addEventListener("click", () => showBriefStep("idea"));
+  $("#briefServer").addEventListener("click", () => requestAnimationFrame(() => ($("#briefServerSummary").textContent = serverSummary())));
+  $("#fDescription").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("#ideaForm").requestSubmit();
+  });
   $("#refineForm").addEventListener("submit", onRefine);
   $("#refineInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {

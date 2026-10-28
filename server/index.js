@@ -3,7 +3,8 @@ import express from "express";
 import { ZipArchive } from "archiver";
 import { config, ROOT } from "./config.js";
 import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage } from "./prompts.js";
-import { runEngine, engineStatus, EngineError } from "./engine.js";
+import { runEngine, runBrief, engineStatus, EngineError } from "./engine.js";
+import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
 import { validateProject } from "./validator.js";
 import { mountDeploy } from "./deploy.js";
@@ -295,6 +296,32 @@ app.delete("/api/projects/:id", requireUser, (req, res) => {
   res.json({ ok: true });
 });
 
+// Free questions step; needs enough credits for the generation it prepares, so it
+// cannot be used as a free chat.
+const briefLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 20, key: (req) => `b${req.user?.id ?? req.ip}`, message: "Trop de demandes d'analyse. Réessaie dans quelques minutes." });
+
+app.post("/api/brief", requireUser, briefLimiter, async (req, res) => {
+  const description = String(req.body?.description ?? "").trim();
+  if (description.length < 8) return res.status(400).json({ error: "Décris un peu plus le script que tu veux." });
+  if (description.length > LIMITS.description) return res.status(400).json({ error: `Description trop longue (${LIMITS.description} caractères max).` });
+  if (req.user.credits < config.cost.generate) return res.status(402).json({ error: "Crédits insuffisants pour lancer une génération.", code: "NO_CREDITS" });
+  const server = req.body?.server ?? {};
+  try {
+    const brief = await runBrief({
+      description,
+      server: {
+        framework: CATALOG.frameworks.some((x) => x.id === server.framework) ? server.framework : null,
+        dependencies: (Array.isArray(server.dependencies) ? server.dependencies : []).filter((d) => CATALOG.dependencies.some((x) => x.id === d)),
+      },
+    });
+    res.json(brief);
+  } catch (err) {
+    console.error("[fivegen] questions impossibles :", err.detail ?? err);
+    const message = err instanceof EngineError ? err.message.replace(/,? ?tes crédits ont été rendus\.?/i, ".") : "Analyse impossible pour le moment.";
+    res.status(502).json({ error: message });
+  }
+});
+
 app.post("/api/generate", requireUser, async (req, res) => {
   const spec = req.body ?? {};
   const description = String(spec.description ?? "").trim();
@@ -312,6 +339,8 @@ app.post("/api/generate", requireUser, async (req, res) => {
     dependencies: (Array.isArray(spec.dependencies) ? spec.dependencies : []).filter((d) => CATALOG.dependencies.some((x) => x.id === d)),
     language: pick(CATALOG.languages, spec.language, "fr"),
     description,
+    understood: String(spec.understood ?? "").slice(0, 600),
+    answers: sanitizeAnswers(spec.answers),
   });
   await streamPipeline(res, {
     userId: req.user.id,

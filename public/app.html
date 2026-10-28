@@ -55,52 +55,60 @@
           Tu n'as plus de crédits. <button class="link" data-open-redeem>Utiliser un code</button>
           <a id="creditShopLink" class="link hidden" href="#" target="_blank" rel="noopener">ou en acheter</a>
         </div>
-        <div class="new-grid">
-          <form id="genForm" class="card form">
-            <h2>Nouveau script</h2>
-            <div class="row">
-              <label class="field">
-                <span>Nom de la ressource</span>
-                <input id="fName" class="input" required placeholder="ex : pizza_delivery" pattern="[A-Za-z0-9_\-]+" />
-              </label>
-              <label class="field">
-                <span>Langue</span>
-                <select id="fLanguage" class="input"></select>
-              </label>
+        <div class="brief-wrap">
+          <form id="ideaForm" class="card form idea">
+            <h2>Quel script veux-tu ?</h2>
+            <p class="muted">Décris ton idée avec tes mots, même en une phrase. FiveGen analyse ta demande et te pose quelques questions avant d&#39;écrire le code : rien n&#39;est débité à cette étape.</p>
+            <textarea id="fDescription" class="input" rows="6" required maxlength="6000" placeholder="ex : un job police pour mon serveur ESX avec menottes, fouille, amendes et armurerie par grade"></textarea>
+            <div class="form-actions">
+              <span id="costHint" class="muted cost-hint"></span>
+              <button type="submit" id="btnBrief" class="btn primary big">Continuer <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
             </div>
-            <div class="field">
-              <span>Framework</span>
-              <div id="fFramework" class="chips"></div>
+          </form>
+
+          <form id="genForm" class="card form brief hidden">
+            <div class="brief-head">
+              <button type="button" id="btnBriefBack" class="btn ghost small">← Modifier ma demande</button>
+              <span class="muted brief-step">Étape 2 / 2</span>
             </div>
-            <div class="field">
-              <span>Type de script</span>
-              <div id="fType" class="chips"></div>
+            <div class="understood">
+              <span class="u-label">Ce que j&#39;ai compris</span>
+              <p id="briefUnderstood"></p>
             </div>
-            <div class="row">
+            <div id="briefQuestions" class="brief-questions"></div>
+
+            <details id="briefServer" class="brief-server">
+              <summary><span>Ton serveur</span><span id="briefServerSummary" class="muted"></span></summary>
+              <div class="row">
+                <label class="field">
+                  <span>Nom de la ressource</span>
+                  <input id="fName" class="input" required placeholder="ex : police_job" pattern="[w-]+" />
+                </label>
+                <label class="field">
+                  <span>Langue</span>
+                  <select id="fLanguage" class="input"></select>
+                </label>
+              </div>
+              <div class="field">
+                <span>Framework</span>
+                <div id="fFramework" class="chips"></div>
+              </div>
+              <div class="field">
+                <span>Ressources installées sur ton serveur</span>
+                <div id="fDeps" class="checks"></div>
+              </div>
               <label class="field">
                 <span>Interface</span>
                 <select id="fUi" class="input"></select>
               </label>
-            </div>
-            <div class="field">
-              <span>Dépendances (optionnel)</span>
-              <div id="fDeps" class="checks"></div>
-            </div>
-            <label class="field">
-              <span>Décris ton script <em class="muted">— plus c'est précis, meilleur c'est</em></span>
-              <textarea id="fDescription" class="input" rows="8" required placeholder="ex : Job de livreur de pizza avec scooter de service, livraisons aléatoires, paiement par livraison, tenue de travail, vérifications anti-triche côté serveur…"></textarea>
-            </label>
+              <p class="muted small-note">Mémorisé pour tes prochains scripts.</p>
+            </details>
+
             <div class="form-actions">
-              <span id="costHint" class="muted cost-hint"></span>
+              <span id="genCostHint" class="muted cost-hint"></span>
               <button type="submit" id="btnGenerate" class="btn primary big">Générer le script <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
             </div>
           </form>
-
-          <div class="card presets">
-            <h2>Idées prêtes à l'emploi</h2>
-            <p class="muted">Clique pour pré-remplir le formulaire, puis ajuste la description.</p>
-            <div id="presetGrid" class="preset-grid"></div>
-          </div>
         </div>
       </section>
 

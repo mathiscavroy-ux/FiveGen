@@ -1,7 +1,8 @@
 // The generation engine as seen by the rest of the app. Vendor, model and raw upstream
 // errors stay in the server logs; clients only ever get FiveGen wording.
 import { config } from "./config.js";
-import { runOpenAICompat, testOpenAICompat, ProviderError } from "./openai-compat.js";
+import { runOpenAICompat, completeOpenAICompat, testOpenAICompat, ProviderError } from "./openai-compat.js";
+import { BRIEF_SYSTEM, buildBriefMessage, extractJson, sanitizeBrief } from "./brief.js";
 
 const upstream = {
   id: "engine",
@@ -17,7 +18,9 @@ const upstream = {
 // reasoning_effort is only understood by the default upstream.
 if (upstream.baseUrl.includes("generativelanguage.googleapis.com")) upstream.id = "gemini";
 
-const mockRun = config.mock ? (await import("./mock.js")).runMock : null;
+const mock = config.mock ? await import("./mock.js") : null;
+const mockRun = mock?.runMock ?? null;
+const mockBrief = mock?.mockBrief ?? null;
 
 export class EngineError extends Error {
   constructor(publicMessage, detail) {
@@ -90,6 +93,29 @@ export async function runEngine({ userContent, onEvent, signal }) {
     }
   }
   throw toPublic(lastError);
+}
+
+// Questions step. Cheap and short, so a broken reply is simply retried on the next model.
+export async function runBrief({ description, server, signal }) {
+  if (mockBrief) return sanitizeBrief(mockBrief(description));
+  const user = buildBriefMessage(description, server);
+  const models = [config.engine.model, ...config.engine.fallbackModels.filter((m) => m !== config.engine.model)];
+  let lastError;
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt) await wait(1200, signal);
+      try {
+        const text = await completeOpenAICompat({ provider: { ...upstream, model }, system: BRIEF_SYSTEM, user, signal });
+        return sanitizeBrief(extractJson(text));
+      } catch (err) {
+        lastError = err;
+        if (signal?.aborted || (err instanceof ProviderError && !isOverload(err))) throw toPublic(err);
+        console.warn(`[fivegen] questions : ${model} essai ${attempt + 1} raté (${err.message})`);
+      }
+    }
+  }
+  if (lastError instanceof ProviderError) throw toPublic(lastError);
+  throw new EngineError("Le moteur FiveGen n'a pas pu analyser ta demande. Réessaie ou passe directement à la génération.", String(lastError));
 }
 
 export async function engineStatus() {
