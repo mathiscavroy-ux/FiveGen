@@ -55,6 +55,8 @@ export const config = {
     secretKey: env.STRIPE_SECRET_KEY || "",
     webhookSecret: env.STRIPE_WEBHOOK_SECRET || "",
     currency: (env.STRIPE_CURRENCY || "eur").toLowerCase(),
+    // Required by Managed Payments; txcd_10000000 = electronically supplied services.
+    taxCode: env.STRIPE_TAX_CODE || "txcd_10000000",
   },
   packs: loadPacks(env.CREDIT_PACKS),
 };

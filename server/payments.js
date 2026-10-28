@@ -29,7 +29,7 @@ export async function createCheckout({ user, packId, baseUrl }) {
         price_data: {
           currency: config.stripe.currency,
           unit_amount: pack.price,
-          product_data: { name: `FiveGen — Pack ${pack.name} (${pack.credits} crédits)` },
+          product_data: { name: `FiveGen — Pack ${pack.name} (${pack.credits} crédits)`, tax_code: config.stripe.taxCode },
         },
       },
     ],
