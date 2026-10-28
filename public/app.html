@@ -64,14 +64,25 @@
           <a id="creditShopLink" class="link hidden" href="#" target="_blank" rel="noopener">ou en acheter</a>
         </div>
         <div class="brief-wrap">
-          <form id="ideaForm" class="card form idea">
-            <h2>Quel script veux-tu ?</h2>
-            <p class="muted">Décris ton idée avec tes mots, même en une phrase. FiveGen analyse ta demande et te pose quelques questions avant d&#39;écrire le code : rien n&#39;est débité à cette étape.</p>
-            <textarea id="fDescription" class="input" rows="6" required maxlength="6000" placeholder="ex : un job police pour mon serveur ESX avec menottes, fouille, amendes et armurerie par grade"></textarea>
-            <div class="form-actions">
-              <span id="costHint" class="muted cost-hint"></span>
-              <button type="submit" id="btnBrief" class="btn primary big">Continuer <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+          <form id="ideaForm" class="composer-wrap">
+            <div class="composer-head">
+              <span class="wz-kicker">Nouveau script</span>
+              <h1>Que veux-tu créer aujourd&#39;hui ?</h1>
+              <p class="muted">Décris ton idée avec tes mots, même en une phrase. FiveGen te pose ensuite quelques questions avant d&#39;écrire le code.</p>
             </div>
+            <div class="composer">
+              <textarea id="fDescription" rows="5" required maxlength="6000" placeholder="ex : un job police pour mon serveur ESX avec menottes, fouille, amendes et armurerie par grade"></textarea>
+              <div class="composer-bar">
+                <span id="costHint" class="cost-hint"></span>
+                <span class="composer-kbd"><kbd>Ctrl</kbd> + <kbd>Entrée</kbd></span>
+                <button type="submit" id="btnBrief" class="btn primary">Continuer <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+              </div>
+            </div>
+            <ol class="composer-steps">
+              <li><span>1</span><div><b>Décris</b><small>Ton idée en quelques mots</small></div></li>
+              <li><span>2</span><div><b>Réponds</b><small>3 à 6 questions à cocher</small></div></li>
+              <li><span>3</span><div><b>Récupère</b><small>ZIP ou déploiement en un clic</small></div></li>
+            </ol>
           </form>
 
           <form id="genForm" class="card form wizard hidden" novalidate>
