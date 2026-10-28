@@ -7,7 +7,8 @@ export const RECIPES = {
 - Sécurité : job + onduty vérifiés serveur, distance au point de mission (état stocké serveur par joueur), cooldown, véhicule de service requis à proximité si pertinent, paiement plafonné.
 - Patron (isboss / grade max) : menu de gestion simple (recruter/virer/promouvoir ou renvoi vers le boss menu du framework) et coffre de société si demandé.
 - Blips d'entreprise, PNJ d'accueil, cible ox_target/qb-target, nettoyage complet à l'arrêt.
-- README : bloc à ajouter dans jobs.lua (QBCore) ou INSERT jobs/job_grades (ESX), items éventuels.`,
+- ESX : fichier sql/install.sql OBLIGATOIRE avec INSERT IGNORE INTO jobs (name, label, whitelisted) et INSERT IGNORE INTO job_grades (job_name, grade, name, label, salary, skin_male, skin_female) pour chaque grade (skins '{}'), plus addon_account / addon_account_data (society_<job>) si factures ou compte de société, datastore et addon_inventory si coffre ; et les CREATE TABLE IF NOT EXISTS des tables propres au script (casier, saisies, amendes…). QBCore : bloc à ajouter dans qb-core/shared/jobs.lua dans le README.
+- README : étapes d'installation qui renvoient vers sql/install.sql, items à déclarer pour l'inventaire choisi.`,
   hud: `HUD :
 - NUI sans focus, positionnée selon la minimap (calcul de l'ancrage), masquée pendant IsPauseMenuActive() et quand IsRadarHidden ou un écran plein (cinématique, NUI ouverte).
 - Données : santé (GetEntityHealth - 100), armure, faim/soif/stress (metadata QBCore via OnPlayerLoaded + SetPlayerData, ESX status via esx_status:onTick, ou Bridge), oxygène sous l'eau, voix (NetworkIsPlayerTalking + LocalPlayer.state.proximity de pma-voice), argent optionnel.

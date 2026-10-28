@@ -221,7 +221,41 @@ function checkSides(files) {
   return problems;
 }
 
-export function validateProject(files) {
+// Tables created by the frameworks and their usual add-ons: never expected in the resource SQL.
+const KNOWN_TABLES = new Set([
+  "users", "owned_vehicles", "jobs", "job_grades", "items", "addon_account", "addon_account_data", "datastore", "datastore_data",
+  "addon_inventory", "addon_inventory_items", "billing", "licenses", "user_licenses", "players", "player_vehicles", "player_outfits",
+  "playerskins", "bans", "management_funds", "ox_inventory", "ox_doorlock", "phone_phones", "multicharacter_slots",
+]);
+
+// A job needs its rows in the database, and every custom table queried must be created somewhere.
+function checkSql(files, spec) {
+  const problems = [];
+  const sql = files.filter((f) => f.path.endsWith(".sql")).map((f) => f.content).join("\n");
+  const lua = files.filter((f) => f.path.endsWith(".lua"));
+  if (spec?.framework === "esx" && spec?.type === "job" && !/job_grades/i.test(sql)) {
+    problems.push({
+      file: "sql/install.sql",
+      message: "Job ESX sans SQL : fournir sql/install.sql avec INSERT IGNORE INTO jobs et job_grades (tous les grades), et addon_account / datastore / addon_inventory society_<job> si la ressource utilise un compte, des factures ou un coffre de société",
+      level: "error",
+    });
+  }
+  const created = new Set([...sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(\w+)`?/gi)].map((m) => m[1].toLowerCase()));
+  const reported = new Set();
+  for (const f of lua) {
+    for (const call of f.content.matchAll(/MySQL\.\w+(?:\.await)?\s*\(\s*(['"`])([\s\S]*?)\1/g)) {
+      for (const t of call[2].matchAll(/\b(?:FROM|INTO|UPDATE|JOIN)\s+`?(\w+)`?/gi)) {
+        const table = t[1].toLowerCase();
+        if (KNOWN_TABLES.has(table) || created.has(table) || reported.has(table)) continue;
+        reported.add(table);
+        problems.push({ file: "sql/install.sql", message: `La table "${t[1]}" est utilisée dans ${f.path} mais aucun fichier .sql ne la crée (CREATE TABLE IF NOT EXISTS)`, level: "error" });
+      }
+    }
+  }
+  return problems;
+}
+
+export function validateProject(files, spec = {}) {
   const problems = [];
   for (const f of files) {
     let p = null;
@@ -231,7 +265,7 @@ export function validateProject(files) {
     if (p) problems.push(p);
     if (f.truncated) problems.push({ file: f.path, message: "Fichier tronqué (la génération s'est arrêtée au milieu)", level: "error" });
   }
-  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files));
+  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec));
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };

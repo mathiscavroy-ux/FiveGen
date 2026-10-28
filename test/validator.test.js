@@ -49,6 +49,24 @@ test("flags APIs called from the wrong side, ignoring comments, strings and shar
   assert.deepEqual(sides.sort(), ["client/main.lua:3 ESX.GetPlayerFromId", "server/main.lua:3 PlayerPedId"]);
 });
 
+test("an ESX job without SQL, or a custom table never created, is an error", () => {
+  const files = [
+    manifest("server_script '@oxmysql/lib/MySQL.lua'\nserver_script 'server/main.lua'"),
+    { path: "server/main.lua", content: "MySQL.query.await('SELECT * FROM police_records WHERE id = ?', {1})\nMySQL.query.await('SELECT * FROM users')\n" },
+  ];
+  const messages = (r) => r.errors.map((e) => e.message).join("\n");
+  const esxJob = validateProject(files, { framework: "esx", type: "job" });
+  assert.match(messages(esxJob), /Job ESX sans SQL/);
+  assert.match(messages(esxJob), /police_records/);
+  assert.doesNotMatch(messages(esxJob), /"users"/);
+  const withSql = validateProject(
+    [...files, { path: "sql/install.sql", content: "INSERT IGNORE INTO job_grades VALUES (1);\nCREATE TABLE IF NOT EXISTS `police_records` (id INT);" }],
+    { framework: "esx", type: "job" },
+  );
+  assert.doesNotMatch(messages(withSql), /SQL|police_records/);
+  assert.doesNotMatch(messages(validateProject(files, { framework: "qbcore", type: "job" })), /Job ESX/);
+});
+
 test("warns about unregistered server events and broken NUI refs", () => {
   const r = validateProject([
     manifest("ui_page 'html/index.html'\nfiles { 'html/index.html' }\nclient_script 'c.lua'"),

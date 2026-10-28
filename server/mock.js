@@ -72,6 +72,13 @@ end)
 === FILE: server/main.lua ===
 ${server.replaceAll("demo_job", name)}=== END FILE ===
 
+=== FILE: sql/install.sql ===
+INSERT IGNORE INTO jobs (name, label, whitelisted) VALUES ('${name}', 'Livreur', 0);
+INSERT IGNORE INTO job_grades (job_name, grade, name, label, salary, skin_male, skin_female) VALUES
+  ('${name}', 0, 'recrue', 'Recrue', 50, '{}', '{}'),
+  ('${name}', 1, 'boss', 'Patron', 150, '{}', '{}');
+=== END FILE ===
+
 === FILE: README.md ===
 # ${name}
 

@@ -151,7 +151,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   addHistory(userId, projectId, { type: kind, instruction: instruction ?? null, files: touched, outputTokens: result.outputTokens });
   if (result.stopReason === "max_tokens") send("status", "Ressource très volumineuse : certains fichiers ont pu être coupés, la vérification va le signaler.");
 
-  let validation = validateProject(getFiles(userId, projectId));
+  let validation = validateProject(getFiles(userId, projectId), project.spec);
   updateMeta(userId, projectId, { validation });
   send("validation", validation);
 
@@ -177,7 +177,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     const current = getProject(userId, projectId);
     updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
     addHistory(userId, projectId, { type: "autofix", instruction: `${validation.errors.length} erreur(s)`, files: fixed, outputTokens: fix.outputTokens });
-    validation = validateProject(getFiles(userId, projectId));
+    validation = validateProject(getFiles(userId, projectId), project.spec);
     updateMeta(userId, projectId, { validation });
     send("validation", validation);
   }
@@ -502,7 +502,7 @@ app.post("/api/projects/:id/refine", requireUser, async (req, res) => {
 
 app.post("/api/projects/:id/fix", requireUser, async (req, res) => {
   const project = getProject(req.user.id, req.params.id);
-  const validation = validateProject(project.files);
+  const validation = validateProject(project.files, project.spec);
   const problems = [...validation.errors, ...(req.body?.includeWarnings ? validation.warnings : [])];
   // Errors printed by the resource in the FiveM server console (reported by the bridge).
   const runtime = req.body?.runtime ? listRuntimeErrors(req.user.id, project.id) : [];
@@ -530,7 +530,7 @@ app.put("/api/projects/:id/files", requireUser, (req, res) => {
   writeFiles(req.user.id, req.params.id, [{ path: filePath, content }]);
   snapshot(req.user.id, req.params.id, { type: "edit", label: filePath });
   addHistory(req.user.id, req.params.id, { type: "edit", instruction: filePath });
-  updateMeta(req.user.id, req.params.id, { validation: validateProject(getFiles(req.user.id, req.params.id)) });
+  updateMeta(req.user.id, req.params.id, { validation: validateProject(getFiles(req.user.id, req.params.id), getProject(req.user.id, req.params.id).spec) });
   res.json(getProject(req.user.id, req.params.id));
 });
 
@@ -548,12 +548,12 @@ app.post("/api/projects/:id/versions/:n/restore", requireUser, (req, res) => {
   getProject(req.user.id, req.params.id);
   restoreVersion(req.user.id, req.params.id, req.params.n);
   addHistory(req.user.id, req.params.id, { type: "restore", instruction: `version ${req.params.n}`, files: [] });
-  updateMeta(req.user.id, req.params.id, { validation: validateProject(getFiles(req.user.id, req.params.id)) });
+  updateMeta(req.user.id, req.params.id, { validation: validateProject(getFiles(req.user.id, req.params.id), getProject(req.user.id, req.params.id).spec) });
   res.json(getProject(req.user.id, req.params.id));
 });
 
 app.post("/api/projects/:id/validate", requireUser, (req, res) => {
-  const validation = validateProject(getFiles(req.user.id, req.params.id));
+  const validation = validateProject(getFiles(req.user.id, req.params.id), getProject(req.user.id, req.params.id).spec);
   updateMeta(req.user.id, req.params.id, { validation });
   res.json(validation);
 });

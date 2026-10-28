@@ -34,7 +34,7 @@ Notes d'installation en markdown (courtes)
 - locales/fr.lua (+ en.lua si demandé) : table Locales et fonction _L(clé, ...) avec string.format (ou lib.locale si ox_lib, fichiers locales/*.json).
 - client/main.lua, server/main.lua, shared/*.lua ; découpe en plusieurs fichiers (client/zones.lua, client/menu.lua, server/callbacks.lua…) dès que c'est plus clair.
 - html/index.html, html/style.css, html/script.js pour une NUI.
-- sql/install.sql si tables ou items en base (CREATE TABLE IF NOT EXISTS, INSERT IGNORE).
+- sql/install.sql dès que la ressource a besoin de quoi que ce soit en base : job et grades ESX, comptes de société, tables propres (CREATE TABLE IF NOT EXISTS), items ESX sans ox_inventory (INSERT IGNORE). Ne jamais écrire « à ajouter dans la base » dans le README sans fournir le SQL correspondant.
 - README.md : présentation, fonctionnalités, dépendances (avec liens GitHub officiels), installation pas à pas (dossier, ensure dans l'ordre après les dépendances, SQL, déclaration des items pour l'inventaire choisi, jobs à ajouter), configuration, commandes/touches, exports/événements publics, dernière ligne « Généré par FiveGen ».
 
 # Lua FiveM (CfxLua 5.4)
