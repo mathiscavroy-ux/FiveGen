@@ -166,6 +166,66 @@ export function addHistory(userId, id, entry) {
   return writeMeta(userId, meta);
 }
 
+// ---------- versions: a full copy of the files after every change ----------
+// Layout: <project>/versions/<n>/{meta.json, files/}. Small text resources, so plain copies are fine.
+const MAX_VERSIONS = 40;
+const versionsDir = (userId, id) => path.join(projectDir(userId, id), "versions");
+
+function versionNumbers(root) {
+  if (!fs.existsSync(root)) return [];
+  return fs
+    .readdirSync(root)
+    .filter((d) => /^\d+$/.test(d))
+    .map(Number)
+    .sort((a, b) => a - b);
+}
+
+export function snapshot(userId, id, { type, label = null }) {
+  const root = versionsDir(userId, id);
+  fs.mkdirSync(root, { recursive: true });
+  const existing = versionNumbers(root);
+  const n = (existing.at(-1) ?? 0) + 1;
+  const dir = path.join(root, String(n));
+  fs.cpSync(filesDir(userId, id), path.join(dir, "files"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "meta.json"), JSON.stringify({ n, at: new Date().toISOString(), type, label }));
+  for (const old of existing.slice(0, Math.max(0, existing.length + 1 - MAX_VERSIONS))) {
+    fs.rmSync(path.join(root, String(old)), { recursive: true, force: true });
+  }
+  return n;
+}
+
+export function listVersions(userId, id) {
+  const root = versionsDir(userId, id);
+  // Projects created before versioning get their current state as a starting point.
+  if (!versionNumbers(root).length && walk(filesDir(userId, id)).length) snapshot(userId, id, { type: "initial", label: "État de départ" });
+  return versionNumbers(root)
+    .map((n) => JSON.parse(fs.readFileSync(path.join(root, String(n), "meta.json"), "utf8")))
+    .reverse();
+}
+
+function versionFilesDir(userId, id, n) {
+  if (!/^\d+$/.test(String(n))) throw Object.assign(new Error("Version introuvable"), { code: "ENOENT" });
+  const dir = path.join(versionsDir(userId, id), String(n), "files");
+  if (!fs.existsSync(dir)) throw Object.assign(new Error("Version introuvable"), { code: "ENOENT" });
+  return dir;
+}
+
+export function getVersionFiles(userId, id, n) {
+  const dir = versionFilesDir(userId, id, n);
+  return walk(dir).map((p) => ({ path: p, content: fs.readFileSync(path.join(dir, ...p.split("/")), "utf8") }));
+}
+
+export function restoreVersion(userId, id, n) {
+  const src = versionFilesDir(userId, id, n);
+  const dest = filesDir(userId, id);
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.cpSync(src, dest, { recursive: true });
+  const meta = readMeta(userId, id);
+  meta.truncated = [];
+  writeMeta(userId, meta);
+  return snapshot(userId, id, { type: "restore", label: `Restauration de la version ${n}` });
+}
+
 export function deleteProject(userId, id) {
   fs.rmSync(projectDir(userId, id), { recursive: true, force: true });
 }

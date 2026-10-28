@@ -1,3 +1,6 @@
+import { analyzeResource, fileRoles, lastTouched, ROLE_LABELS } from "./analysis.js";
+import { diffLines, hunks, diffFiles } from "./diff.js";
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
@@ -13,6 +16,12 @@ const state = {
   abort: null,
   editor: null,
   form: { framework: "qbcore", type: "job" },
+  view: "code", // code | analysis | versions
+  run: null, // live pipeline of the current generation
+  versions: null,
+  versionCache: new Map(),
+  selectedVersion: null,
+  selectedDiffPath: null,
 };
 
 // ---------- helpers ----------
@@ -400,6 +409,7 @@ function openFile(path, line) {
   if (!file) return;
   state.activePath = path;
   $("#editorPath").textContent = path + (file.truncated ? "  (tronqué)" : "");
+  renderFileInfo(file);
   state.editor.setOption("mode", modeFor(path));
   state.editor.setValue(file.content);
   setDirty(false);
@@ -508,21 +518,6 @@ function renderStatus() {
   }
 }
 
-function renderHistory() {
-  const labels = { generate: "Génération", refine: "Modification", fix: "Correction", autofix: "Correction auto", edit: "Édition manuelle" };
-  const items = [...(state.current?.history ?? [])].reverse();
-  $("#historyList").innerHTML = items.length
-    ? items
-        .map(
-          (h) =>
-            `<li><time>${new Date(h.at).toLocaleString("fr-FR")}</time><b>${labels[h.type] ?? h.type}</b>${
-              h.instruction ? ` — ${escapeHtml(h.instruction)}` : ""
-            }${h.files?.length ? ` <span class="muted">(${h.files.length} fichier(s))</span>` : ""}</li>`,
-        )
-        .join("")
-    : '<li class="muted">Vide</li>';
-}
-
 function renderProject({ keepEditor = false } = {}) {
   const p = state.current;
   if (!p) return;
@@ -535,8 +530,9 @@ function renderProject({ keepEditor = false } = {}) {
   renderTree();
   renderProblems(p.validation);
   $("#notes").innerHTML = renderMarkdown(p.notes);
-  renderHistory();
   renderRefineCost();
+  state.versions = null;
+  refreshInsights();
   if (!keepEditor) {
     const keep = p.files.find((f) => f.path === state.activePath);
     const first = keep?.path ?? p.files.find((f) => f.path === "fxmanifest.lua")?.path ?? p.files[0]?.path;
@@ -579,6 +575,9 @@ function resetLive(text) {
   $("#phaseLine").textContent = text;
   $("#phaseLine").classList.remove("busy");
   $("#liveText").textContent = "";
+  clearInterval(pipeTimer);
+  state.run = null;
+  renderPipeline();
 }
 
 function setBusy(busy) {
@@ -587,6 +586,455 @@ function setBusy(busy) {
   for (const id of ["#btnGenerate", "#btnRefine", "#btnFix", "#btnValidate", "#btnDelete"]) $(id).disabled = busy;
   $("#phaseLine").classList.toggle("busy", busy);
   renderStatus();
+}
+
+// ---------- insights: file info, analysis, versions ----------
+
+const VERSION_LABELS = {
+  generate: "Génération", refine: "Modification", fix: "Correction", autofix: "Correction automatique",
+  edit: "Édition manuelle", restore: "Restauration", initial: "État de départ",
+};
+const fmtBytes = (n) => (n < 1024 ? `${n} o` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} Ko`);
+const fmtNum = (n) => Number(n).toLocaleString("fr-FR");
+
+function renderFileInfo(file) {
+  const role = fileRoles(state.current.files).get(file.path) ?? "other";
+  const lines = file.content ? file.content.split("\n").length : 0;
+  const touched = lastTouched(state.current.history).get(file.path);
+  const by = !touched ? "" : touched.type === "refine" ? `Modif n°${touched.refineIndex}` : VERSION_LABELS[touched.type] ?? touched.type;
+  $("#fileInfo").innerHTML = `<span class="role role-${role}">${ROLE_LABELS[role]}</span><span>${fmtNum(lines)} lignes</span><span>${fmtBytes(new TextEncoder().encode(file.content).length)}</span>${
+    by ? `<span title="${escapeHtml(new Date(touched.at).toLocaleString("fr-FR"))}">${escapeHtml(by)} · ${timeAgo(touched.at)}</span>` : ""
+  }`;
+}
+
+function setView(view) {
+  state.view = view;
+  $$(".vs").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  $("#paneCode").classList.toggle("hidden", view !== "code");
+  $("#paneAnalysis").classList.toggle("hidden", view !== "analysis");
+  $("#paneVersions").classList.toggle("hidden", view !== "versions");
+  $("#vsHint").textContent = {
+    code: "Tout ce que contient ta ressource, expliqué.",
+    analysis: "Ce que fait le code : événements, commandes, base de données, sécurité…",
+    versions: "Chaque génération, modification et correction est sauvegardée.",
+  }[view];
+  if (view === "code") setTimeout(() => state.editor.refresh(), 0);
+  refreshInsights();
+}
+
+function refreshInsights() {
+  if (!state.current) return;
+  const a = analyzeResource(state.current.files, { resourceName: state.current.name });
+  const issues = a.events.filter((e) => e.status === "noHandler").length + a.security.filter((s) => s.level === "watch").length
+    + a.nui.callbacks.filter((c) => c.status === "noHandler").length + a.callbacks.filter((c) => c.status === "noHandler").length;
+  $("#analysisBadge").textContent = issues || "";
+  if (state.view === "analysis") renderAnalysis(a);
+  if (state.view === "versions") loadVersions();
+}
+
+const loc = (r) => `<a class="loc-link" data-open="${escapeHtml(r.file)}" data-line="${r.line ?? ""}">${escapeHtml(r.file)}${r.line ? `<i>:${r.line}</i>` : ""}</a>`;
+const locs = (list, max = 3) => (list.length ? list.slice(0, max).map(loc).join("") + (list.length > max ? `<span class="muted">+${list.length - max}</span>` : "") : '<span class="muted">—</span>');
+const pill = (text, kind = "") => `<span class="st ${kind}">${escapeHtml(text)}</span>`;
+
+const EVENT_STATUS = {
+  ok: ["Relié", "ok"], noHandler: ["Aucun récepteur", "err"], listening: ["En écoute", "info"],
+  external: ["Ressource externe", "muted"], system: ["Événement système", "muted"],
+};
+const DIRECTIONS = {
+  toServer: "Client → Serveur", toClient: "Serveur → Client", both: "Bidirectionnel",
+  server: "Serveur", client: "Client", local: "Local",
+};
+
+function section(title, subtitle, body, { count, wide = false } = {}) {
+  return `<section class="an-card${wide ? " wide" : ""}"><header><h3>${title}${count !== undefined ? ` <span class="count-soft">${count}</span>` : ""}</h3>${subtitle ? `<p>${subtitle}</p>` : ""}</header>${body}</section>`;
+}
+
+const empty = (text) => `<p class="an-empty">${text}</p>`;
+
+function renderAnalysis(a) {
+  const s = a.summary;
+  const ROLE_ORDER = ["client", "server", "shared", "config", "nui", "sql", "locale", "manifest", "doc", "data", "other"];
+  const bar = ROLE_ORDER.filter((r) => s.byRole[r])
+    .map((r) => `<span class="seg role-${r}" style="flex:${s.byRole[r].lines}" title="${ROLE_LABELS[r]} · ${fmtNum(s.byRole[r].lines)} lignes"></span>`)
+    .join("");
+  const legend = ROLE_ORDER.filter((r) => s.byRole[r])
+    .map((r) => `<span><i class="dot role-${r}"></i>${ROLE_LABELS[r]} <b>${fmtNum(s.byRole[r].lines)}</b></span>`)
+    .join("");
+  const watch = a.security.filter((x) => x.level === "watch").length;
+  const broken = a.events.filter((e) => e.status === "noHandler").length;
+
+  const overview = `<section class="an-hero">
+    <div class="an-kpis">
+      <div><b>${s.files}</b><span>fichiers</span></div>
+      <div><b>${fmtNum(s.lines)}</b><span>lignes</span></div>
+      <div><b>${fmtBytes(s.bytes)}</b><span>taille</span></div>
+      <div><b>${a.events.length}</b><span>événements</span></div>
+      <div><b>${a.commands.length + a.keybinds.length}</b><span>commandes & touches</span></div>
+      <div><b>${a.database.queries}</b><span>requêtes SQL</span></div>
+    </div>
+    <div class="an-bar">${bar}</div>
+    <div class="an-legend">${legend}</div>
+    <div class="an-tags">${s.frameworks.map((f) => `<span class="tag">${escapeHtml(f)}</span>`).join("")}
+      ${broken ? pill(`${broken} événement(s) sans récepteur`, "err") : pill("Événements reliés", "ok")}
+      ${watch ? pill(`${watch} point(s) de sécurité à vérifier`, "warn") : a.security.length ? pill("Contrôles serveur présents", "ok") : ""}
+    </div>
+  </section>`;
+
+  const groups = [
+    ["client", "Client", "S'exécute chez chaque joueur : affichage, contrôles, zones."],
+    ["server", "Serveur", "Fait autorité : argent, items, base de données."],
+    ["shared", "Partagé & config", "Chargé des deux côtés."],
+    ["nui", "Interface NUI", "HTML, CSS et JavaScript affichés en jeu."],
+    ["data", "Données, SQL & docs", ""],
+  ];
+  const roles = fileRoles(state.current.files);
+  const groupOf = (r) => (["shared", "config", "locale", "manifest"].includes(r) ? "shared" : ["sql", "doc", "data", "other"].includes(r) ? "data" : r);
+  const archi = `<div class="archi">${groups
+    .map(([g, title, hint]) => {
+      const files = state.current.files.filter((f) => groupOf(roles.get(f.path)) === g);
+      if (!files.length) return "";
+      return `<div class="archi-col"><h4><i class="dot role-${g === "data" ? "sql" : g}"></i>${title}</h4>${hint ? `<p>${hint}</p>` : ""}<ul>${files
+        .map((f) => `<li data-open="${escapeHtml(f.path)}"><span>${escapeHtml(f.path)}</span><em>${fmtNum(f.content.split("\n").length)}</em></li>`)
+        .join("")}</ul></div>`;
+    })
+    .join("")}</div>`;
+
+  const eventsTable = a.events.length
+    ? `<table class="an-table"><thead><tr><th>Événement</th><th>Sens</th><th>Déclenché depuis</th><th>Reçu dans</th><th>État</th></tr></thead><tbody>${a.events
+        .map((e) => `<tr class="${e.status === "noHandler" ? "row-err" : ""}"><td class="mono">${escapeHtml(e.name)}</td><td>${DIRECTIONS[e.direction]}</td><td>${locs(e.triggers)}</td><td>${locs(e.handlers)}</td><td>${pill(...EVENT_STATUS[e.status])}</td></tr>`)
+        .join("")}</tbody></table>`
+    : empty("Aucun événement réseau.");
+
+  const callbacks = a.callbacks.length
+    ? `<table class="an-table"><thead><tr><th>Callback</th><th>Fournisseur</th><th>Appelé depuis</th><th>Enregistré dans</th><th>État</th></tr></thead><tbody>${a.callbacks
+        .map((c) => `<tr><td class="mono">${escapeHtml(c.name)}</td><td>${c.provider}</td><td>${locs(c.called)}</td><td>${locs(c.registered)}</td><td>${pill(...EVENT_STATUS[c.status])}</td></tr>`)
+        .join("")}</tbody></table>`
+    : empty("Aucun callback.");
+
+  const commands = a.commands.length || a.keybinds.length
+    ? `<ul class="an-list">${a.commands
+        .map((c) => `<li><code>/${escapeHtml(c.name)}</code>${c.help ? `<span>${escapeHtml(c.help)}</span>` : ""}${c.restricted ? pill(typeof c.restricted === "string" ? `Réservé : ${c.restricted}` : "Réservé (ACE)", "warn") : pill("Tous les joueurs", "muted")}${loc(c)}</li>`)
+        .join("")}${a.keybinds
+        .map((k) => `<li><kbd>${escapeHtml(k.key ?? "?")}</kbd><span>${escapeHtml(k.description ?? k.command ?? "")}</span>${pill("Touche modifiable (F2 › Paramètres › Raccourcis)", "muted")}${loc(k)}</li>`)
+        .join("")}</ul>`
+    : empty("Aucune commande ni touche.");
+
+  const nui = a.nui.callbacks.length || a.nui.messages.length
+    ? `<div class="an-split"><div><h4>Interface → Lua <span class="muted">(clics, formulaires)</span></h4><ul class="an-list">${a.nui.callbacks
+        .map((c) => `<li><code>${escapeHtml(c.name)}</code>${pill(...({ ok: ["Relié", "ok"], noHandler: ["Aucun RegisterNUICallback", "err"], listening: ["Jamais appelé par l'interface", "info"] })[c.status])}${locs([...c.js, ...c.lua], 2)}</li>`)
+        .join("") || "<li class='muted'>Aucun</li>"}</ul></div><div><h4>Lua → Interface <span class="muted">(SendNUIMessage)</span></h4><ul class="an-list">${a.nui.messages
+        .map((m) => `<li><code>${escapeHtml(m.action)}</code>${pill(m.status === "ok" ? "Géré par l'interface" : "Non géré côté JS", m.status === "ok" ? "ok" : "warn")}${locs([...m.lua, ...m.js], 2)}</li>`)
+        .join("") || "<li class='muted'>Aucun</li>"}</ul></div></div>`
+    : empty("Pas d'interface NUI.");
+
+  const db = a.database.tables.length || a.database.queries
+    ? `<ul class="an-list">${a.database.tables
+        .map((t) => `<li><code>${escapeHtml(t.name)}</code>${pill(...({ ok: ["Créée par la ressource", "ok"], framework: ["Table du framework", "muted"], missing: ["À créer (voir Installation)", "warn"] })[t.status])}${locs([...t.defined, ...t.used], 2)}</li>`)
+        .join("")}</ul><p class="an-foot">${a.database.queries} requête(s) oxmysql dans le code.</p>`
+    : empty("Aucune base de données utilisée.");
+
+  const OPS = { add: "donné", remove: "retiré", check: "vérifié", usable: "utilisable" };
+  const items = a.items.length
+    ? `<ul class="an-chips">${a.items.map((i) => `<li><code>${escapeHtml(i.name)}</code><span>${i.ops.map((o) => OPS[o]).join(" · ")}</span>${loc(i.uses[0])}</li>`).join("")}</ul><p class="an-foot">Ces items doivent exister dans ton inventaire (ox_inventory, qb-core/shared/items.lua…).</p>`
+    : empty("Aucun item manipulé.");
+
+  const config = a.config.length
+    ? `<table class="an-table compact"><tbody>${a.config.map((c) => `<tr data-open="${escapeHtml(c.file)}" data-line="${c.line}"><td class="mono">Config.${escapeHtml(c.key)}</td><td class="mono muted">${escapeHtml(c.value)}</td></tr>`).join("")}</tbody></table>`
+    : empty("Pas de fichier de configuration.");
+
+  const deps = a.dependencies.length
+    ? `<ul class="an-chips">${a.dependencies.map((d) => `<li><code>${escapeHtml(d.name)}</code><span>${d.declared && d.used ? "déclarée et utilisée" : d.declared ? "déclarée" : "utilisée, non déclarée dans le manifest"}</span></li>`).join("")}</ul>`
+    : empty("Aucune dépendance externe.");
+
+  const CHECKS = { player: "Joueur vérifié", distance: "Distance", cooldown: "Cooldown", permission: "Job / permission", input: "Valeurs contrôlées" };
+  const security = a.security.length
+    ? `<ul class="an-sec">${a.security
+        .map((x) => `<li class="${x.level}"><div><code>${escapeHtml(x.event)}</code>${loc(x)}</div><div class="checks">${Object.entries(CHECKS)
+          .map(([k, l]) => `<span class="${x.checks[k] ? "on" : ""}">${x.checks[k] ? "✓" : "·"} ${l}</span>`)
+          .join("")}</div>${x.level === "watch" ? '<p>Donne une récompense sans contrôle de distance, de cooldown ni de permission détecté : vérifie que c\'est voulu.</p>' : ""}</li>`)
+        .join("")}</ul>`
+    : empty("Aucun événement réseau côté serveur.");
+
+  const perf = `<ul class="an-list">
+    <li><b>${a.performance.threads}</b><span>thread(s) en boucle</span></li>
+    <li><b>${a.performance.everyFrame.length}</b><span>boucle(s) à chaque frame (Wait(0)) — normal pour dessiner un marker ou lire une touche</span>${locs(a.performance.everyFrame, 3)}</li>
+    <li>${a.performance.dynamicSleep ? pill("Sommeil dynamique détecté", "ok") : pill("Pas de sommeil dynamique", "muted")}<span>les boucles ralentissent quand le joueur est loin</span></li>
+  </ul>`;
+
+  $("#paneAnalysis").innerHTML = `${overview}<div class="an-grid">
+    ${section("Architecture", "Qui fait quoi, et où.", archi, { wide: true })}
+    ${section("Flux d'événements", "Chaque message échangé entre le client et le serveur.", eventsTable, { count: a.events.length, wide: true })}
+    ${a.callbacks.length ? section("Callbacks", "Questions client → serveur avec réponse.", callbacks, { count: a.callbacks.length, wide: true }) : ""}
+    ${section("Contrôles côté serveur", "Ce que le serveur vérifie avant d'agir (anti-triche).", security, { count: a.security.length, wide: true })}
+    ${section("Commandes & touches", "", commands, { count: a.commands.length + a.keybinds.length })}
+    ${section("Interface NUI", "", nui)}
+    ${section("Base de données", "", db, { count: a.database.tables.length })}
+    ${section("Items", "", items, { count: a.items.length })}
+    ${section("Configuration", "Réglages modifiables sans toucher au code.", config, { count: a.config.length })}
+    ${section("Dépendances", "", deps, { count: a.dependencies.length })}
+    ${section("Performance", "", perf)}
+  </div>`;
+}
+
+async function loadVersions() {
+  if (!state.current) return;
+  const id = state.current.id;
+  if (!state.versions) {
+    $("#versionList").innerHTML = '<li class="muted pad">Chargement…</li>';
+    try {
+      state.versions = await api(`/api/projects/${id}/versions`);
+    } catch (e) {
+      $("#versionList").innerHTML = `<li class="muted pad">${escapeHtml(e.message)}</li>`;
+      return;
+    }
+    if (state.current?.id !== id) return;
+    state.selectedVersion = state.versions[0]?.n ?? null;
+    state.selectedDiffPath = null;
+  }
+  renderVersionList();
+  renderVersionDetail();
+}
+
+async function versionFiles(n) {
+  const key = `${state.current.id}:${n}`;
+  if (!state.versionCache.has(key)) state.versionCache.set(key, await api(`/api/projects/${state.current.id}/versions/${n}`));
+  return state.versionCache.get(key);
+}
+
+function renderVersionList() {
+  const list = state.versions ?? [];
+  $("#versionCount").textContent = list.length || "";
+  $("#versionList").innerHTML = list
+    .map((v, i) => `<li class="${v.n === state.selectedVersion ? "active" : ""} v-${v.type}" data-version="${v.n}">
+      <span class="v-dot"></span>
+      <div><b>v${v.n} · ${VERSION_LABELS[v.type] ?? v.type}${i === 0 ? ' <em class="now">actuelle</em>' : ""}</b>
+      ${v.label ? `<span class="v-label">${escapeHtml(v.label)}</span>` : ""}
+      <time>${timeAgo(v.at)}</time></div></li>`)
+    .join("") || '<li class="muted pad">Aucune version.</li>';
+}
+
+async function renderVersionDetail() {
+  const host = $("#versionDetail");
+  const list = state.versions ?? [];
+  const idx = list.findIndex((v) => v.n === state.selectedVersion);
+  if (idx < 0) {
+    host.innerHTML = '<div class="an-empty pad">Sélectionne une version.</div>';
+    return;
+  }
+  const v = list[idx];
+  const prev = list[idx + 1];
+  host.innerHTML = '<div class="an-empty pad">Calcul des différences…</div>';
+  const [now, before] = await Promise.all([versionFiles(v.n), prev ? versionFiles(prev.n) : Promise.resolve([])]);
+  if (state.selectedVersion !== v.n) return;
+  const changes = diffFiles(before, now);
+  const added = changes.reduce((s, c) => s + c.added, 0);
+  const removed = changes.reduce((s, c) => s + c.removed, 0);
+  if (!changes.some((c) => c.path === state.selectedDiffPath)) state.selectedDiffPath = changes[0]?.path ?? null;
+
+  const STATUS = { added: ["Nouveau", "ok"], removed: ["Supprimé", "err"], modified: ["Modifié", "info"] };
+  host.innerHTML = `<header class="vd-head">
+      <div><h3>v${v.n} · ${VERSION_LABELS[v.type] ?? v.type}</h3>
+      <p>${v.label ? `${escapeHtml(v.label)} · ` : ""}${new Date(v.at).toLocaleString("fr-FR")}${prev ? ` · comparée à v${prev.n}` : " · première version"}</p></div>
+      <div class="vd-stats"><span class="plus">+${fmtNum(added)}</span><span class="minus">−${fmtNum(removed)}</span><span>${changes.length} fichier(s)</span>
+      ${idx > 0 ? `<button class="btn small" data-restore="${v.n}">Restaurer cette version</button>` : ""}</div>
+    </header>
+    <div class="vd-body">
+      <ul class="vd-files">${changes
+        .map((c) => `<li class="${c.path === state.selectedDiffPath ? "active" : ""}" data-diff="${escapeHtml(c.path)}"><span class="mono">${escapeHtml(c.path)}</span>${pill(...STATUS[c.status])}<span class="plus">+${c.added}</span><span class="minus">−${c.removed}</span></li>`)
+        .join("") || '<li class="muted pad">Aucun changement de fichier.</li>'}</ul>
+      <div class="vd-diff" id="diffHost"></div>
+    </div>`;
+  renderDiff(before, now);
+}
+
+function renderDiff(before, now) {
+  const path = state.selectedDiffPath;
+  const host = $("#diffHost");
+  if (!path) {
+    host.innerHTML = "";
+    return;
+  }
+  const a = before.find((f) => f.path === path)?.content ?? "";
+  const b = now.find((f) => f.path === path)?.content ?? "";
+  const rows = hunks(diffLines(a, b), 3)
+    .map((op) =>
+      op.type === "gap"
+        ? `<tr class="gap"><td colspan="3">··· ${op.count} ligne(s) inchangée(s)</td></tr>`
+        : `<tr class="${op.type}"><td class="n">${op.a ?? ""}</td><td class="n">${op.b ?? ""}</td><td class="code"><span class="sign">${op.type === "add" ? "+" : op.type === "del" ? "−" : " "}</span>${escapeHtml(op.text) || " "}</td></tr>`,
+    )
+    .join("");
+  host.innerHTML = `<div class="diff-head mono">${escapeHtml(path)}</div><table class="diff">${rows}</table>`;
+}
+
+// ---------- live pipeline ----------
+
+const CHECK_GROUPS = [
+  ["lua", "Syntaxe Lua", (p) => /syntaxe Lua/i.test(p.message)],
+  ["js", "JavaScript & JSON", (p) => /JSON invalide|syntaxe JS/i.test(p.message)],
+  ["truncated", "Fichiers complets", (p) => /tronqué/i.test(p.message)],
+  ["nui", "Références de l'interface", (p) => /Référence vers/.test(p.message)],
+  ["events", "Événements client ↔ serveur", (p) => /TriggerServerEvent/.test(p.message)],
+  ["manifest", "Manifest & dépendances", () => true],
+];
+
+function pipeStart(kind, detail) {
+  state.run = {
+    kind,
+    startedAt: Date.now(),
+    chars: 0,
+    round: 0,
+    steps: [{ id: "prepare", label: kind === "generate" ? "Analyse de la demande" : kind === "refine" ? "Lecture de la demande de modification" : "Préparation de la correction", detail, status: "active", startedAt: Date.now(), children: [] }],
+  };
+  clearInterval(pipeTimer);
+  pipeTimer = setInterval(renderPipelineClock, 500);
+  renderPipeline();
+}
+let pipeTimer = null;
+
+const activeStep = () => state.run?.steps.findLast((s) => s.status === "active");
+
+function finishStep(step, status = "done") {
+  if (!step || step.status !== "active") return;
+  step.status = status;
+  step.endedAt = Date.now();
+  for (const c of step.children) if (c.status === "active") c.status = status === "done" ? "done" : status;
+}
+
+function openStep(id, label, detail = "") {
+  finishStep(activeStep());
+  const step = { id, label, detail, status: "active", startedAt: Date.now(), children: [] };
+  state.run.steps.push(step);
+  return step;
+}
+
+function writingStep() {
+  const cur = activeStep();
+  if (cur && (cur.id === "write" || cur.id === "fix")) return cur;
+  return openStep("write", "Écriture des fichiers");
+}
+
+function pipeDelta(text) {
+  if (!state.run) return;
+  state.run.chars += text.length;
+  if (activeStep()?.id === "prepare") {
+    writingStep();
+    renderPipeline();
+  }
+}
+
+function pipeFileStart(path) {
+  if (!state.run) return;
+  const step = writingStep();
+  step.children.push({ label: path, status: "active", startedAt: Date.now(), meta: "" });
+  renderPipeline();
+}
+
+function pipeFile(f) {
+  if (!state.run) return;
+  const step = writingStep();
+  const child = step.children.findLast((c) => c.label === f.path) ?? step.children[step.children.push({ label: f.path, startedAt: Date.now() }) - 1];
+  child.status = f.truncated ? "error" : "done";
+  child.meta = `${fmtNum(f.content.split("\n").length)} lignes · ${((Date.now() - child.startedAt) / 1000).toFixed(1)} s${f.truncated ? " · tronqué" : ""}`;
+  renderPipeline();
+}
+
+function pipeValidation(v) {
+  if (!state.run) return;
+  const step = openStep("check", state.run.round ? `Vérification après correction ${state.run.round}` : "Vérification automatique");
+  const all = [...v.errors, ...v.warnings];
+  const luaFiles = state.current.files.filter((f) => f.path.endsWith(".lua")).length;
+  const placed = new Set();
+  for (const [id, label, match] of CHECK_GROUPS) {
+    const mine = all.filter((p) => !placed.has(p) && match(p));
+    mine.forEach((p) => placed.add(p));
+    const errors = mine.filter((p) => p.level === "error").length;
+    const warnings = mine.length - errors;
+    if (id === "js" && !mine.length && !state.current.files.some((f) => /\.(js|json)$/.test(f.path))) continue;
+    if (id === "truncated" && !mine.length) continue;
+    step.children.push({
+      label: id === "lua" ? `${label} · ${luaFiles} fichier(s)` : label,
+      status: errors ? "error" : warnings ? "warn" : "done",
+      meta: errors ? `${errors} erreur(s)` : warnings ? `${warnings} avertissement(s)` : "OK",
+      problems: mine.slice(0, 4),
+    });
+  }
+  finishStep(step, v.ok ? "done" : "error");
+  renderPipeline();
+}
+
+function pipePhase(phase, label) {
+  if (!state.run || phase !== "fix") return;
+  state.run.round++;
+  openStep("fix", label, "Les erreurs détectées sont renvoyées au moteur avec le code concerné.");
+  renderPipeline();
+}
+
+function pipeNote(msg) {
+  const step = activeStep() ?? state.run?.steps.at(-1);
+  if (!step) return;
+  step.children.push({ label: msg, status: "note" });
+  renderPipeline();
+}
+
+function pipeEnd(ok, message) {
+  if (!state.run || state.run.endedAt) return;
+  finishStep(activeStep(), ok ? "done" : "error");
+  const files = state.current?.files ?? [];
+  const lines = files.reduce((s, f) => s + f.content.split("\n").length, 0);
+  state.run.steps.push({
+    id: "end",
+    label: ok ? "Ressource livrée" : "Interrompu",
+    detail: ok ? `${files.length} fichiers · ${fmtNum(lines)} lignes · ${fmtDuration(Date.now() - state.run.startedAt)}` : message,
+    status: ok ? "done" : "error",
+    children: [],
+  });
+  state.run.endedAt = Date.now();
+  clearInterval(pipeTimer);
+  renderPipeline();
+  renderPipelineClock();
+}
+
+const fmtDuration = (ms) => {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")}`;
+};
+
+function renderPipelineClock() {
+  const run = state.run;
+  const files = state.current?.files ?? [];
+  $("#mTime").textContent = run ? fmtDuration((run.endedAt ?? Date.now()) - run.startedAt) : "—";
+  $("#mFiles").textContent = files.length ? fmtNum(files.length) : "—";
+  $("#mLines").textContent = files.length ? fmtNum(files.reduce((s, f) => s + f.content.split("\n").length, 0)) : "—";
+  $("#mChars").textContent = run ? fmtNum(run.chars) : "—";
+  for (const el of $$("#pipeSteps [data-started]")) el.textContent = fmtDuration(Date.now() - Number(el.dataset.started));
+}
+
+let pipeFrame = 0;
+function renderPipeline() {
+  if (pipeFrame) return;
+  pipeFrame = requestAnimationFrame(() => {
+    pipeFrame = 0;
+    const run = state.run;
+    if (!run) {
+      $("#pipeSteps").innerHTML = `<li class="step idle"><span class="node"></span><div><b>Aucune génération en cours</b><p>Lance une génération, une modification ou une correction : chaque étape s'affiche ici en direct, fichier par fichier.</p></div></li>`;
+      renderPipelineClock();
+      return;
+    }
+    $("#pipeSteps").innerHTML = run.steps
+      .map((s) => {
+        const time = s.status === "active" ? `<time data-started="${s.startedAt}">${fmtDuration(Date.now() - s.startedAt)}</time>` : s.endedAt ? `<time>${fmtDuration(s.endedAt - s.startedAt)}</time>` : "";
+        const children = s.children
+          .map((c) => `<li class="sub ${c.status}"><span class="sub-node"></span><span class="sub-label ${c.status === "note" ? "" : "mono"}" ${c.status !== "note" && s.id !== "check" ? `data-open="${escapeHtml(c.label)}"` : ""}>${escapeHtml(c.label)}</span>${c.meta ? `<em>${escapeHtml(c.meta)}</em>` : ""}${
+            c.problems?.length ? `<ul class="sub-problems">${c.problems.map((p) => `<li data-open="${escapeHtml(p.file)}" data-line="${p.line ?? ""}">${escapeHtml(p.file)}${p.line ? `:${p.line}` : ""} — ${escapeHtml(p.message)}</li>`).join("")}</ul>` : ""
+          }</li>`)
+          .join("");
+        return `<li class="step ${s.status}"><span class="node"></span><div><div class="step-head"><b>${escapeHtml(s.label)}</b>${time}</div>${s.detail ? `<p>${escapeHtml(s.detail)}</p>` : ""}${children ? `<ul class="subs">${children}</ul>` : ""}</div></li>`;
+      })
+      .join("");
+    renderPipelineClock();
+    const col = $("#pipeSteps").parentElement;
+    if (state.busy) col.scrollTop = col.scrollHeight;
+  });
 }
 
 // ---------- generation flows ----------
@@ -602,7 +1050,7 @@ function createLiveWriter(el, { keep = 30000, interval = 100 } = {}) {
   const paint = () => {
     timer = null;
     if (!pending) return;
-    const panel = el.closest(".tab-panels");
+    const panel = el;
     const atBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40;
     node.appendData(pending);
     pending = "";
@@ -628,6 +1076,15 @@ async function runStream(url, body, { fresh = false } = {}) {
 
   const live = createLiveWriter($("#liveText"));
   const appendLive = (t) => live.write(t);
+  const kind = url.endsWith("/refine") ? "refine" : url.endsWith("/fix") ? "fix" : "generate";
+  pipeStart(
+    kind,
+    kind === "generate"
+      ? `${label(state.options.frameworks, body.framework)} · ${label(state.options.types, body.type)} · ${body.description.length} caractères de description`
+      : kind === "refine"
+        ? `« ${body.instruction} »`
+        : `${state.current?.validation?.errors?.length || state.current?.validation?.warnings?.length || 0} problème(s) envoyés au moteur avec le code concerné`,
+  );
 
   try {
     await streamPost(
@@ -642,14 +1099,20 @@ async function runStream(url, body, { fresh = false } = {}) {
           renderProject();
         },
         credits: ({ credits }) => setCredits(credits),
-        phase: ({ label: l }) => {
+        phase: ({ phase, label: l }) => {
           $("#phaseLine").textContent = `${l}…`;
           appendLive(`\n──── ${l} ────\n`);
+          pipePhase(phase, l);
         },
-        delta: (t) => appendLive(t),
+        delta: (t) => {
+          appendLive(t);
+          pipeDelta(t);
+        },
         fileStart: (p) => {
-          state.pending.add(p.trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, ""));
+          const path = p.trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
+          state.pending.add(path);
           renderTree();
+          pipeFileStart(path);
         },
         file: (f) => {
           state.pending.delete(f.path);
@@ -660,28 +1123,32 @@ async function runStream(url, body, { fresh = false } = {}) {
           if (!state.activePath || (state.activePath === f.path && !state.dirty)) openFile(f.path);
           else renderTree();
           [...$("#fileTree").children].find((li) => li.title === f.path)?.classList.add("fresh");
+          pipeFile(f);
         },
         status: (msg) => {
           toast(msg);
           appendLive(`\n[${msg}]\n`);
+          pipeNote(msg);
         },
         validation: (v) => {
           state.current.validation = v;
           renderProblems(v);
           renderTree();
           renderStatus();
+          pipeValidation(v);
         },
         done: (project) => {
           state.current = project;
           const v = project.validation;
           $("#phaseLine").textContent = v?.ok ? "Terminé ✓ script valide." : `Terminé avec ${v?.errors.length ?? "?"} erreur(s) restante(s).`;
           toast(v?.ok ? "Script prêt !" : "Script généré, mais des erreurs restent (onglet Problèmes).", v?.ok ? "ok" : "err");
-          if (!v?.ok) selectTab("problems");
+          pipeEnd(true);
         },
         failure: ({ message, project }) => {
           if (project) state.current = project;
           $("#phaseLine").textContent = `Échec : ${message}`;
           toast(message, "err");
+          pipeEnd(false, message);
         },
       },
       state.abort.signal,
@@ -689,6 +1156,7 @@ async function runStream(url, body, { fresh = false } = {}) {
   } catch (e) {
     const msg = e.name === "AbortError" ? "Génération arrêtée." : e.message;
     $("#phaseLine").textContent = msg;
+    pipeEnd(false, msg);
     toast(msg, e.name === "AbortError" ? "" : "err");
     if (e.code === "NO_CREDITS") openRedeem();
     if (fresh && !state.current?.id) showView("new");
@@ -804,7 +1272,47 @@ async function onDelete() {
 
 // ---------- boot ----------
 
+async function restore(n) {
+  if (!confirm(`Restaurer la version ${n} ? L'état actuel reste disponible dans les versions.`)) return;
+  try {
+    state.current = await api(`/api/projects/${state.current.id}/versions/${n}/restore`, { method: "POST" });
+    state.versionCache.clear();
+    renderProject();
+    toast(`Version ${n} restaurée`, "ok");
+  } catch (e) {
+    toast(e.message, "err");
+  }
+}
+
+function bindInsights() {
+  $$(".vs").forEach((b) => (b.onclick = () => setView(b.dataset.view)));
+  // Any file:line reference in the analysis, pipeline or problems opens it in the editor.
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest("[data-open]");
+    if (!link || !state.current?.files.some((f) => f.path === link.dataset.open)) return;
+    setView("code");
+    openFile(link.dataset.open, Number(link.dataset.line) || undefined);
+  });
+  $("#versionList").addEventListener("click", (e) => {
+    const li = e.target.closest("[data-version]");
+    if (!li) return;
+    state.selectedVersion = Number(li.dataset.version);
+    state.selectedDiffPath = null;
+    renderVersionList();
+    renderVersionDetail();
+  });
+  $("#versionDetail").addEventListener("click", (e) => {
+    const file = e.target.closest("[data-diff]");
+    const btn = e.target.closest("[data-restore]");
+    if (btn) return restore(Number(btn.dataset.restore));
+    if (!file) return;
+    state.selectedDiffPath = file.dataset.diff;
+    renderVersionDetail();
+  });
+}
+
 function bind() {
+  bindInsights();
   $("#genForm").addEventListener("submit", onGenerate);
   $("#refineForm").addEventListener("submit", onRefine);
   $("#refineInput").addEventListener("keydown", (e) => {

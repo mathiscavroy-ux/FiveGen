@@ -30,6 +30,10 @@ import {
   addHistory,
   deleteProject,
   filesRoot,
+  snapshot,
+  listVersions,
+  getVersionFiles,
+  restoreVersion,
 } from "./projects.js";
 
 const LIMITS = { description: 4000, instruction: 2000, fileBytes: 512 * 1024 };
@@ -106,6 +110,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }
   writeFiles(userId, projectId, result.files, result.deletes);
+  snapshot(userId, projectId, { type: kind, label: instruction ?? null });
   state.produced = true;
   state.outputTokens += result.outputTokens ?? 0;
   updateMeta(userId, projectId, {
@@ -135,6 +140,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       break;
     }
     writeFiles(userId, projectId, fix.files, fix.deletes);
+    snapshot(userId, projectId, { type: "autofix", label: `Correction automatique ${round} · ${validation.errors.length} erreur(s)` });
     state.outputTokens += fix.outputTokens ?? 0;
     const current = getProject(userId, projectId);
     updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
@@ -356,7 +362,26 @@ app.put("/api/projects/:id/files", requireUser, (req, res) => {
   if (typeof filePath !== "string" || typeof content !== "string") return res.status(400).json({ error: "path et content requis" });
   if (Buffer.byteLength(content) > LIMITS.fileBytes) return res.status(400).json({ error: "Fichier trop volumineux." });
   writeFiles(req.user.id, req.params.id, [{ path: filePath, content }]);
+  snapshot(req.user.id, req.params.id, { type: "edit", label: filePath });
   addHistory(req.user.id, req.params.id, { type: "edit", instruction: filePath });
+  updateMeta(req.user.id, req.params.id, { validation: validateProject(getFiles(req.user.id, req.params.id)) });
+  res.json(getProject(req.user.id, req.params.id));
+});
+
+app.get("/api/projects/:id/versions", requireUser, (req, res) => {
+  getProject(req.user.id, req.params.id); // 404 for someone else's project
+  res.json(listVersions(req.user.id, req.params.id));
+});
+
+app.get("/api/projects/:id/versions/:n", requireUser, (req, res) => {
+  res.json(getVersionFiles(req.user.id, req.params.id, req.params.n));
+});
+
+app.post("/api/projects/:id/versions/:n/restore", requireUser, (req, res) => {
+  if (running.has(req.user.id)) return res.status(409).json({ error: "Une génération est en cours sur ton compte." });
+  getProject(req.user.id, req.params.id);
+  restoreVersion(req.user.id, req.params.id, req.params.n);
+  addHistory(req.user.id, req.params.id, { type: "restore", instruction: `version ${req.params.n}`, files: [] });
   updateMeta(req.user.id, req.params.id, { validation: validateProject(getFiles(req.user.id, req.params.id)) });
   res.json(getProject(req.user.id, req.params.id));
 });
