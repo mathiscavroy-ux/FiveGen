@@ -70,4 +70,15 @@ ox_lib :
 oxmysql :
 - MySQL.single.await renvoie nil si aucune ligne ; MySQL.query.await renvoie une table vide. Colonnes JSON à décoder avec json.decode.
 - Toujours des paramètres ? ; jamais de concaténation de valeurs dans la requête.
-- Ne jamais appeler MySQL au chargement du fichier sans MySQL.ready ou un thread.`;
+- Ne jamais appeler MySQL au chargement du fichier sans MySQL.ready ou un thread.
+
+Erreurs relevées dans des ressources générées (à ne plus reproduire) :
+- ESX n'a PAS de job.isboss (c'est QBCore). Patron ESX = xPlayer.job.grade_name == 'boss' (esx_society : Config.BossGrades[grade_name]). Pour promouvoir : grade cible strictement inférieur au grade de celui qui promeut, et ESX.DoesJobExist(job, grade) avant xPlayer.setJob ; jamais de grade maximum codé en dur.
+- Une table d'état qui contient des tables (activePlayers[src] = {missions = 0}) ne vaut jamais true : tester activePlayers[src] ~= nil, y compris dans les exports (return activePlayers[tonumber(src)] ~= nil).
+- Cible réseau : vérifier qu'elle existe avant toute distance (GetPlayerPed(target) ~= 0 et ESX.GetPlayerFromId(target)), sinon GetEntityCoords(0) vaut vector3(0, 0, 0) et la vérification peut passer.
+- Sanctions et états qui doivent survivre à une déconnexion (prison, menottes, service, amendes impayées) : les stocker (xPlayer.setMeta('jail', finTimestamp) ou table SQL) et les réappliquer dans esx:playerLoaded. Les effacer sur playerDropped permet de s'évader en se reconnectant.
+- Événements publics déclenchables par tout joueur (/911, alertes, demandes) : cooldown serveur par joueur et longueur de message bornée, sinon spam.
+- Menottes : côté client SetEnableHandcuffs(ped, true), animation 'mp_arresting' 'idle' en boucle (flag 49), DisablePlayerFiring et contrôles bloqués, et Player(src).state:set('isCuffed', true, true) côté serveur. ox_inventory et les autres scripts reconnaissent alors l'état (fouille, braquage).
+- Fouille avec ox_inventory : exports.ox_inventory:openInventory('player', serverId) côté client ; autorisé pour les jobs du convar inventory:police (setr inventory:police ["police"]), sinon seulement si la cible est menottée, morte ou mains levées.
+- Amendes ESX : préférer côté serveur exports.esx_billing:BillPlayer(targetId, xPlayer.identifier, 'society_police', motif, montant) plutôt qu'un aller-retour client → serveur.
+- En cas de refus, notifier la vraie raison (distance, grade, modèle non autorisé, cooldown) et pas un message générique.`;

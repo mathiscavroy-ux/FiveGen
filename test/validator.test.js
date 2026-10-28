@@ -67,6 +67,16 @@ test("an ESX job without SQL, or a custom table never created, is an error", () 
   assert.doesNotMatch(messages(validateProject(files, { framework: "qbcore", type: "job" })), /Job ESX/);
 });
 
+test("QBCore-only fields on ESX objects are errors", () => {
+  const files = [
+    manifest("dependency 'es_extended'\nserver_script 'server/main.lua'"),
+    { path: "server/main.lua", content: "-- xPlayer.job.isboss in a comment is fine\nlocal xPlayer = {}\nif xPlayer.job.isboss then end\n" },
+  ];
+  const errors = validateProject(files).errors.filter((e) => /isboss/.test(e.message));
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].line, 3);
+});
+
 test("warns about unregistered server events and broken NUI refs", () => {
   const r = validateProject([
     manifest("ui_page 'html/index.html'\nfiles { 'html/index.html' }\nclient_script 'c.lua'"),

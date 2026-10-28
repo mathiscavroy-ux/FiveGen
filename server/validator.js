@@ -255,6 +255,26 @@ function checkSql(files, spec) {
   return problems;
 }
 
+// QBCore field names used on ESX objects: valid Lua, silently always nil at runtime.
+function checkEsxApi(files, spec) {
+  const manifest = files.find((f) => f.path === "fxmanifest.lua")?.content ?? "";
+  if (spec?.framework !== "esx" && !/es_extended/.test(manifest)) return [];
+  const problems = [];
+  for (const f of files.filter((x) => x.path.endsWith(".lua"))) {
+    const code = codeOnly(f.content);
+    const m = /\.job\.isboss\b/.exec(code);
+    if (m) {
+      problems.push({
+        file: f.path,
+        line: code.slice(0, m.index).split("\n").length,
+        message: "ESX n'a pas de job.isboss (champ QBCore, toujours nil) : utiliser job.grade_name == 'boss'",
+        level: "error",
+      });
+    }
+  }
+  return problems;
+}
+
 export function validateProject(files, spec = {}) {
   const problems = [];
   for (const f of files) {
@@ -265,7 +285,7 @@ export function validateProject(files, spec = {}) {
     if (p) problems.push(p);
     if (f.truncated) problems.push({ file: f.path, message: "Fichier tronqué (la génération s'est arrêtée au milieu)", level: "error" });
   }
-  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec));
+  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec));
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };
