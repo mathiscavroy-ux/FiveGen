@@ -103,10 +103,31 @@ async function streamPost(url, body, handlers, signal) {
     throw Object.assign(new Error(data.error || `Erreur ${res.status}`), { code: data.code });
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  // The server pings every 15 s: a minute of silence means the connection is dead.
+  let lost = false;
+  let watchdog;
+  const arm = () => {
+    clearTimeout(watchdog);
+    watchdog = setTimeout(() => {
+      lost = true;
+      reader.cancel().catch(() => {});
+    }, 60000);
+  };
+  arm();
+  try {
+    await readEvents(reader, handlers, arm, () => lost);
+  } finally {
+    clearTimeout(watchdog);
+  }
+}
+
+async function readEvents(reader, handlers, onActivity, isLost) {
   let buf = "";
   for (;;) {
     const { value, done } = await reader.read();
+    if (isLost()) throw new Error("Connexion au serveur perdue. Recharge la page : si rien n'a été produit, tes crédits ont été rendus.");
     if (done) break;
+    onActivity();
     buf += value;
     let i;
     while ((i = buf.indexOf("\n\n")) >= 0) {

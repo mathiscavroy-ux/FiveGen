@@ -12,6 +12,7 @@ const upstream = {
   maxTokens: config.engine.maxTokens,
   needsKey: true,
   effort: config.engine.effort,
+  stallMs: config.engine.stallSeconds * 1000,
 };
 // reasoning_effort is only understood by the default upstream.
 if (upstream.baseUrl.includes("generativelanguage.googleapis.com")) upstream.id = "gemini";

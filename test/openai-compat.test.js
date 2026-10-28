@@ -24,6 +24,11 @@ before(async () => {
         res.writeHead(200, { "Content-Type": "text/event-stream" });
         return res.end(`data: ${JSON.stringify({ error: { message: "The upstream service for this model is temporarily unavailable. Please retry in a few seconds." } })}\n\n`);
       }
+      if (lastBody.model === "stuck") {
+        // Starts streaming, then goes silent without closing the connection.
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        return res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: "=== FILE: a.lua ===\n" } }] })}\n\n`);
+      }
       if (lastBody.model === "limited") {
         res.writeHead(429, { "Content-Type": "application/json" });
         return res.end(JSON.stringify([{ error: { message: "quota exceeded" } }]));
@@ -42,7 +47,10 @@ before(async () => {
   baseUrl = `http://127.0.0.1:${server.address().port}/v1`;
 });
 
-after(() => server.close());
+after(() => {
+  server.closeAllConnections();
+  server.close();
+});
 
 const provider = (over = {}) => ({
   id: "gemini",
@@ -81,6 +89,24 @@ test("treats an outage reported inside a 200 stream as a retryable 503", async (
   await assert.rejects(
     runOpenAICompat({ provider: provider({ model: "upstream-down" }), userContent: "x", onEvent: () => {} }),
     (e) => e instanceof ProviderError && e.status === 503 && /temporarily unavailable/.test(e.message),
+  );
+});
+
+test("abandons a stream that goes silent with a retryable 504", async () => {
+  const started = Date.now();
+  await assert.rejects(
+    runOpenAICompat({ provider: provider({ model: "stuck", stallMs: 300 }), userContent: "x", onEvent: () => {} }),
+    (e) => e instanceof ProviderError && e.status === 504 && /ne répond plus/.test(e.message),
+  );
+  assert.ok(Date.now() - started < 3000);
+});
+
+test("a user abort stays an abort, not a stall", async () => {
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), 100);
+  await assert.rejects(
+    runOpenAICompat({ provider: provider({ model: "stuck", stallMs: 5000 }), userContent: "x", onEvent: () => {}, signal: ctrl.signal }),
+    (e) => e.name === "AbortError",
   );
 });
 

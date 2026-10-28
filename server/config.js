@@ -35,6 +35,8 @@ export const config = {
       .filter(Boolean),
     maxTokens: int(env.ENGINE_MAX_TOKENS, 65536),
     effort: env.ENGINE_EFFORT || "high",
+    // A generation silent for this long is abandoned (then retried or refunded).
+    stallSeconds: int(env.ENGINE_STALL_SECONDS, 90),
   },
 
   // Business rules

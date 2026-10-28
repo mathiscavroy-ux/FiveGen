@@ -76,6 +76,34 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal }
     body.reasoning_effort = provider.effort === "low" ? "low" : provider.effort === "medium" ? "medium" : "high";
   }
 
+  // A stream that stays silent too long is abandoned (504, retryable), otherwise
+  // a stuck upstream keeps the client spinning forever.
+  const stallMs = provider.stallMs ?? 90000;
+  const ctrl = new AbortController();
+  const forwardAbort = () => ctrl.abort();
+  signal?.addEventListener("abort", forwardAbort, { once: true });
+  let stalled = false;
+  let timer;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      stalled = true;
+      ctrl.abort();
+    }, stallMs);
+  };
+  arm();
+  try {
+    return await streamCompletion(provider, body, onEvent, ctrl.signal, arm);
+  } catch (err) {
+    if (stalled && !signal?.aborted) throw new ProviderError(`${provider.label} ne répond plus depuis ${Math.round(stallMs / 1000)} s`, 504);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
+async function streamCompletion(provider, body, onEvent, signal, onActivity) {
   const res = await request(provider, `${provider.baseUrl}/chat/completions`, {
     method: "POST",
     headers: headersFor(provider),
@@ -83,6 +111,7 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal }
     signal,
   });
   if (!res.ok) throw new ProviderError(httpMessage(provider, res.status, await res.text()), res.status);
+  onActivity();
 
   const parser = new StreamParser({
     onFileStart: (p) => onEvent("fileStart", p),
@@ -122,6 +151,7 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal }
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
+    onActivity();
     buf += value;
     let i;
     while ((i = buf.indexOf("\n")) >= 0) {

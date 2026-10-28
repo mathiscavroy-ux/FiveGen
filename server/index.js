@@ -120,11 +120,20 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
 
   for (let round = 1; round <= config.autoFixRounds && !validation.ok; round++) {
     send("phase", { phase: "fix", label: `Correction automatique ${round}/${config.autoFixRounds}` });
-    const fix = await runEngine({
-      userContent: buildFixMessage(project.spec, getFiles(userId, projectId), validation.errors),
-      onEvent: send,
-      signal,
-    });
+    let fix;
+    try {
+      fix = await runEngine({
+        userContent: buildFixMessage(project.spec, getFiles(userId, projectId), validation.errors),
+        onEvent: send,
+        signal,
+      });
+    } catch (err) {
+      // The script is already saved: an engine hiccup here must not turn it into a failure.
+      if (signal.aborted) throw err;
+      console.error(`[fivegen] correction automatique ${round} interrompue :`, err.detail ?? err);
+      send("status", `Correction automatique interrompue : le script est livré tel quel. Clique sur « Corriger » pour relancer${config.cost.fix === 0 ? " (gratuit)" : ""}.`);
+      break;
+    }
     writeFiles(userId, projectId, fix.files, fix.deletes);
     state.outputTokens += fix.outputTokens ?? 0;
     const current = getProject(userId, projectId);
