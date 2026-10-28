@@ -48,6 +48,21 @@ npm start
 6. Inscris-toi sur le site avec l'adresse `ADMIN_EMAIL` : tu as accès à `/admin`.
 7. Sauvegarde régulièrement le dossier `data/` (base `fivegen.db` + projets des clients).
 
+## Paiement par carte (Stripe)
+
+Les clients achètent un pack de crédits sur le site (fenêtre « Recharger mes crédits » ou boutons Tarifs de l'accueil), paient sur la page sécurisée de Stripe, et les crédits arrivent automatiquement. Les codes d'activation restent utilisables en parallèle.
+
+1. Crée un compte sur https://dashboard.stripe.com (mode **Test** pour commencer).
+2. **Développeurs → Clés API** : copie la clé secrète (`sk_test_...`) dans `STRIPE_SECRET_KEY`.
+3. **Développeurs → Webhooks → Ajouter un endpoint** : URL `https://ton-site/api/stripe/webhook`, événements `checkout.session.completed` et `checkout.session.async_payment_succeeded`. Copie le **secret de signature** (`whsec_...`) dans `STRIPE_WEBHOOK_SECRET`.
+4. Redémarre le site. `/admin` doit afficher « Paiement par carte actif (Stripe) ».
+5. Teste un achat avec la carte de test Stripe `4242 4242 4242 4242` (date future, n'importe quel code). Les crédits arrivent en quelques secondes et le paiement apparaît dans `/admin`.
+6. Pour encaisser pour de vrai : active ton compte Stripe (identité, IBAN), puis remplace les deux valeurs par celles du mode **Live** (`sk_live_...` et le secret d'un webhook créé en mode Live).
+
+Packs et prix : variable `CREDIT_PACKS` (voir `.env.example`), sinon Starter 10 crédits / 4,99 €, Pro 30 / 12,99 €, Studio 100 / 34,99 €. Les prix de l'accueil se mettent à jour automatiquement.
+
+Sécurité : les crédits ne sont ajoutés que par le webhook signé par Stripe (jamais depuis le navigateur), une seule fois par paiement, et le nombre de crédits vient toujours de la configuration du serveur. Le client coche une case de renonciation au délai de rétractation avant de payer (contenu numérique utilisé immédiatement).
+
 ## Moteur de génération et coûts
 
 - Par défaut : Gemini Flash via son point d'accès compatible OpenAI. **Active la facturation** sur le projet Google lié à la clé : l'offre gratuite est réservée aux tests, ne peut pas servir des utilisateurs dans l'UE, et Google peut y réutiliser les données.
