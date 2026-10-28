@@ -613,11 +613,6 @@ function setView(view) {
   $("#paneCode").classList.toggle("hidden", view !== "code");
   $("#paneAnalysis").classList.toggle("hidden", view !== "analysis");
   $("#paneVersions").classList.toggle("hidden", view !== "versions");
-  $("#vsHint").textContent = {
-    code: "Tout ce que contient ta ressource, expliqué.",
-    analysis: "Ce que fait le code : événements, commandes, base de données, sécurité…",
-    versions: "Chaque génération, modification et correction est sauvegardée.",
-  }[view];
   if (view === "code") setTimeout(() => state.editor.refresh(), 0);
   refreshInsights();
 }
@@ -1032,8 +1027,8 @@ function renderPipeline() {
       })
       .join("");
     renderPipelineClock();
-    const col = $("#pipeSteps").parentElement;
-    if (state.busy) col.scrollTop = col.scrollHeight;
+    const col = $("#pipeSteps").closest(".tab-panels");
+    if (state.busy && !$("#rawBox").open) col.scrollTop = col.scrollHeight;
   });
 }
 
@@ -1073,6 +1068,7 @@ async function runStream(url, body, { fresh = false } = {}) {
   state.abort = new AbortController();
   setBusy(true);
   selectTab("live");
+  if ($("#viewProject").classList.contains("no-inspector")) setInspector(true);
 
   const live = createLiveWriter($("#liveText"));
   const appendLive = (t) => live.write(t);
@@ -1284,8 +1280,27 @@ async function restore(n) {
   }
 }
 
+function setInspector(open) {
+  $("#viewProject").classList.toggle("no-inspector", !open);
+  $("#btnInspector").classList.toggle("active", open);
+  try {
+    localStorage.setItem("fivegen.inspector", open ? "1" : "0");
+  } catch {
+    // storage unavailable: the choice just isn't remembered
+  }
+  setTimeout(() => state.editor?.refresh(), 0);
+}
+
 function bindInsights() {
   $$(".vs").forEach((b) => (b.onclick = () => setView(b.dataset.view)));
+  let saved = null;
+  try {
+    saved = localStorage.getItem("fivegen.inspector");
+  } catch {
+    // ignore
+  }
+  setInspector(saved !== "0");
+  $("#btnInspector").onclick = () => setInspector($("#viewProject").classList.contains("no-inspector"));
   // Any file:line reference in the analysis, pipeline or problems opens it in the editor.
   document.addEventListener("click", (e) => {
     const link = e.target.closest("[data-open]");
