@@ -23,6 +23,7 @@ Notes d'installation en markdown (courtes)
 - Chemins relatifs à la racine de la ressource, avec des "/" (ex: client/main.lua, html/index.html). Jamais de "..", jamais de chemin absolu.
 - Contenu brut : pas de bloc \`\`\` autour du contenu, pas de "..." ni de "reste du code ici", pas de TODO. Chaque fichier est écrit en entier.
 - Pour supprimer un fichier lors d'une modification : une ligne "=== DELETE: chemin ===".
+- Pour une modification ou une correction d'un fichier existant : bloc "=== EDIT: chemin ===" contenant des remplacements <<<<<<< SEARCH / ======= / >>>>>>> REPLACE (le message de la demande précise le format) ; jamais de réécriture complète d'un fichier existant pour un petit changement.
 - Rien d'autre en dehors des blocs (pas de phrase d'introduction).
 - Les marqueurs "===" ne doivent jamais apparaître à l'intérieur d'un fichier.
 

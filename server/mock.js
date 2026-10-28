@@ -28,11 +28,6 @@ RegisterNetEvent('demo_job:server:deliver', function()
 end)
 `;
 
-const SERVER_FIXED = SERVER_BROKEN.replace(
-  "        return\n    -- 'end' manquant volontairement (démo de correction automatique)\n",
-  "        return\n    end\n",
-);
-
 function resource(name, server) {
   return `=== FILE: fxmanifest.lua ===
 fx_version 'cerulean'
@@ -98,8 +93,15 @@ Généré par FiveGen
 function pickResponse(userContent) {
   const name = userContent.match(/Nom de la ressource : (\S+)/)?.[1] ?? "demo_job";
   if (userContent.includes("<erreurs_detectees>")) {
-    return `=== FILE: server/main.lua ===
-${SERVER_FIXED.replaceAll("demo_job", name)}=== END FILE ===
+    return `=== EDIT: server/main.lua ===
+<<<<<<< SEARCH
+        return
+    -- 'end' manquant volontairement (démo de correction automatique)
+=======
+        return
+    end
+>>>>>>> REPLACE
+=== END EDIT ===
 
 === NOTES ===
 - Ajout du \`end\` manquant dans server/main.lua.
@@ -107,15 +109,16 @@ ${SERVER_FIXED.replaceAll("demo_job", name)}=== END FILE ===
 `;
   }
   if (userContent.includes("<modification_demandee>")) {
-    return `=== FILE: config.lua ===
-Config = {}
+    return `=== EDIT: config.lua ===
+<<<<<<< SEARCH
+Config.Reward = 250
+=======
 Config.Reward = 500
-Config.Cooldown = 20
-Config.Point = vector3(-1037.5, -2737.6, 20.17)
-=== END FILE ===
+>>>>>>> REPLACE
+=== END EDIT ===
 
 === NOTES ===
-- Récompense passée à 500 et cooldown à 20 s (réponse de démo).
+- Récompense passée à 500 (réponse de démo, remplacement ciblé).
 === END NOTES ===
 `;
   }
@@ -143,6 +146,7 @@ export async function runMock({ userContent, onEvent, signal }) {
   return {
     files: parser.files,
     deletes: parser.deletes,
+    edits: parser.edits,
     notes: parser.notes,
     rawText: parser.fullText,
     stopReason: "end_turn",

@@ -4,6 +4,13 @@
 //   ...content...
 //   === END FILE ===
 //   === DELETE: old/file.lua ===
+//   === EDIT: client/main.lua ===
+//   <<<<<<< SEARCH
+//   exact existing lines
+//   =======
+//   replacement lines
+//   >>>>>>> REPLACE
+//   === END EDIT ===
 //   === NOTES ===
 //   ...markdown...
 //   === END NOTES ===
@@ -16,6 +23,27 @@ const FILE_END = /^===\s*END FILE\s*===$/;
 const DELETE = /^===\s*DELETE:\s*(.+?)\s*===$/;
 const NOTES_START = /^===\s*NOTES\s*===$/;
 const NOTES_END = /^===\s*END NOTES\s*===$/;
+const EDIT_START = /^===\s*EDIT:\s*(.+?)\s*===$/;
+const EDIT_END = /^===\s*END EDIT\s*===$/;
+const HUNK_SEARCH = /^<{5,}\s*SEARCH\s*$/;
+const HUNK_SPLIT = /^={5,}\s*$/;
+const HUNK_REPLACE = /^>{5,}\s*REPLACE\s*$/;
+
+// SEARCH/REPLACE hunks of one EDIT block. An unterminated last hunk is dropped.
+export function parseHunks(lines) {
+  const hunks = [];
+  let cur = null;
+  for (const line of lines) {
+    const t = line.trim();
+    if (HUNK_SEARCH.test(t)) cur = { search: [], replace: [], side: "search" };
+    else if (cur && cur.side === "search" && HUNK_SPLIT.test(t)) cur.side = "replace";
+    else if (cur && cur.side === "replace" && HUNK_REPLACE.test(t)) {
+      hunks.push({ search: cur.search.join("\n"), replace: cur.replace.join("\n") });
+      cur = null;
+    } else if (cur) cur[cur.side].push(line);
+  }
+  return hunks;
+}
 
 export function sanitizePath(p) {
   if (typeof p !== "string") return null;
@@ -49,6 +77,7 @@ export class StreamParser {
     this.current = null;
     this.files = [];
     this.deletes = [];
+    this.edits = [];
     this.notes = "";
   }
 
@@ -68,7 +97,7 @@ export class StreamParser {
       this.#line(this.buf.replace(/\r$/, ""));
       this.buf = "";
     }
-    if (this.current) this.#closeFile(true);
+    if (this.current) this.mode === "edit" ? this.#closeEdit(true) : this.#closeFile(true);
     this.notes = this.notes.trim();
     return this;
   }
@@ -80,6 +109,11 @@ export class StreamParser {
       this.current.lines.push(line);
       return;
     }
+    if (this.mode === "edit") {
+      if (EDIT_END.test(t)) return this.#closeEdit(false);
+      this.current.lines.push(line);
+      return;
+    }
     if (this.mode === "notes") {
       if (NOTES_END.test(t)) this.mode = null;
       else this.notes += line + "\n";
@@ -88,6 +122,10 @@ export class StreamParser {
     let m;
     if ((m = t.match(FILE_START))) {
       this.mode = "file";
+      this.current = { path: m[1], lines: [] };
+      this.onFileStart?.(m[1]);
+    } else if ((m = t.match(EDIT_START))) {
+      this.mode = "edit";
       this.current = { path: m[1], lines: [] };
       this.onFileStart?.(m[1]);
     } else if ((m = t.match(DELETE))) {
@@ -112,6 +150,21 @@ export class StreamParser {
     else this.files.push(file);
     this.onFile?.(file);
   }
+
+  #closeEdit(truncated) {
+    closeEditInto(this, truncated);
+  }
+}
+
+// Hunks are applied later, against the files stored on the server.
+function closeEditInto(parser, truncated) {
+  const { path: rawPath, lines } = parser.current;
+  parser.current = null;
+  parser.mode = null;
+  const p = sanitizePath(rawPath);
+  if (!p) return;
+  const hunks = parseHunks(lines);
+  if (hunks.length) parser.edits.push({ path: p, hunks, truncated });
 }
 
 export function parseAll(text) {

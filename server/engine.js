@@ -81,6 +81,7 @@ export async function runEngine({ userContent, onEvent, signal }) {
       return {
         files: r.files,
         deletes: r.deletes,
+        edits: r.edits ?? [],
         notes: r.notes,
         stopReason: r.stopReason,
         outputTokens: r.usage?.completion_tokens ?? r.usage?.output_tokens ?? null,

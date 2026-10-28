@@ -2,7 +2,8 @@ import path from "node:path";
 import express from "express";
 import { ZipArchive } from "archiver";
 import { config, ROOT } from "./config.js";
-import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage } from "./prompts.js";
+import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage } from "./prompts.js";
+import { applyEdits } from "./patch.js";
 import { runEngine, runBrief, engineStatus, EngineError } from "./engine.js";
 import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
@@ -103,22 +104,47 @@ function mergeNotes(previous, notes, title) {
 
 const LABELS = { generate: "Génération", refine: "Modification", fix: "Correction" };
 
+// Whole files and SEARCH/REPLACE edits from one engine run. Edits whose SEARCH text
+// is not found are redone once as whole files, so a stale anchor never loses a change.
+async function saveResult({ userId, projectId, result, spec, send, signal, state }) {
+  writeFiles(userId, projectId, result.files, result.deletes);
+  const { files: patched, failures } = applyEdits(getFiles(userId, projectId), result.edits ?? []);
+  if (patched.length) writeFiles(userId, projectId, patched, []);
+  for (const f of patched) send("file", f);
+  const touched = [...result.files, ...patched].map((f) => f.path);
+  if (failures.length) {
+    const paths = [...new Set(failures.map((f) => f.path))];
+    send("status", `${failures.length} remplacement(s) sans emplacement trouvé : réécriture de ${paths.join(", ")}.`);
+    try {
+      const redo = await runEngine({ userContent: buildRewriteMessage(spec, getFiles(userId, projectId), failures), onEvent: send, signal });
+      writeFiles(userId, projectId, redo.files, []);
+      state.outputTokens += redo.outputTokens ?? 0;
+      touched.push(...redo.files.map((f) => f.path));
+    } catch (err) {
+      if (signal.aborted) throw err;
+      console.error("[fivegen] réécriture après remplacements ratés :", err.detail ?? err);
+      send("status", "Une partie de la modification n'a pas pu être appliquée : relance-la si besoin.");
+    }
+  }
+  return [...new Set(touched)];
+}
+
 // Generation → save → check → automatic fix rounds (free) while errors remain.
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
   send("phase", { phase: kind, label: LABELS[kind] });
   const result = await runEngine({ userContent, onEvent: send, signal });
-  if (!result.files.length && !result.deletes.length) {
+  if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }
-  writeFiles(userId, projectId, result.files, result.deletes);
-  snapshot(userId, projectId, { type: kind, label: instruction ?? null });
-  state.produced = true;
   state.outputTokens += result.outputTokens ?? 0;
+  state.produced = true;
+  const touched = await saveResult({ userId, projectId, result, spec: project.spec, send, signal, state });
+  snapshot(userId, projectId, { type: kind, label: instruction ?? null });
   updateMeta(userId, projectId, {
     notes: kind === "generate" ? result.notes : mergeNotes(project.notes, result.notes, `${LABELS[kind]} : ${instruction ?? ""}`),
   });
-  addHistory(userId, projectId, { type: kind, instruction: instruction ?? null, files: result.files.map((f) => f.path), outputTokens: result.outputTokens });
+  addHistory(userId, projectId, { type: kind, instruction: instruction ?? null, files: touched, outputTokens: result.outputTokens });
   if (result.stopReason === "max_tokens") send("status", "Ressource très volumineuse : certains fichiers ont pu être coupés, la vérification va le signaler.");
 
   let validation = validateProject(getFiles(userId, projectId));
@@ -141,12 +167,12 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       send("status", `Correction automatique interrompue : le script est livré tel quel. Clique sur « Corriger » pour relancer${config.cost.fix === 0 ? " (gratuit)" : ""}.`);
       break;
     }
-    writeFiles(userId, projectId, fix.files, fix.deletes);
-    snapshot(userId, projectId, { type: "autofix", label: `Correction automatique ${round} · ${validation.errors.length} erreur(s)` });
     state.outputTokens += fix.outputTokens ?? 0;
+    const fixed = await saveResult({ userId, projectId, result: fix, spec: project.spec, send, signal, state });
+    snapshot(userId, projectId, { type: "autofix", label: `Correction automatique ${round} · ${validation.errors.length} erreur(s)` });
     const current = getProject(userId, projectId);
     updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
-    addHistory(userId, projectId, { type: "autofix", instruction: `${validation.errors.length} erreur(s)`, files: fix.files.map((f) => f.path), outputTokens: fix.outputTokens });
+    addHistory(userId, projectId, { type: "autofix", instruction: `${validation.errors.length} erreur(s)`, files: fixed, outputTokens: fix.outputTokens });
     validation = validateProject(getFiles(userId, projectId));
     updateMeta(userId, projectId, { validation });
     send("validation", validation);

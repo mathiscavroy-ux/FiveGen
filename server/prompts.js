@@ -114,6 +114,24 @@ function filesBlock(files) {
     .join("\n\n");
 }
 
+// Changes come back as SEARCH/REPLACE edits: a one-line fix should cost a few lines
+// of output, not every file again.
+const EDIT_RULES = `Format de réponse pour cette modification (obligatoire) :
+- Pour changer un fichier EXISTANT, n'écris pas le fichier entier : utilise un bloc EDIT avec un ou plusieurs remplacements.
+=== EDIT: chemin/du/fichier.lua ===
+<<<<<<< SEARCH
+lignes actuelles copiées à l'identique (3 à 10 lignes, assez pour être uniques dans le fichier)
+=======
+nouvelles lignes qui les remplacent
+>>>>>>> REPLACE
+=== END EDIT ===
+- SEARCH reprend exactement le texte actuel (mêmes espaces, même indentation) ; un SEARCH vide ajoute le texte à la fin du fichier.
+- Un bloc EDIT par fichier, autant de SEARCH/REPLACE que nécessaire, dans l'ordre du fichier, sans chevauchement.
+- Un fichier NOUVEAU s'écrit avec un bloc FILE complet ; un fichier existant ne se réécrit en entier (FILE) que s'il change à plus de la moitié.
+- "=== DELETE: chemin ===" pour supprimer un fichier.
+- Ne touche à rien d'autre que ce qui est nécessaire ; ne renvoie pas les fichiers inchangés.
+- Termine par un bloc NOTES court qui résume les changements.`;
+
 export function buildRefineMessage(spec, files, instruction) {
   return `Voici une ressource FiveM existante.
 
@@ -129,13 +147,28 @@ ${filesBlock(files)}
 ${instruction}
 </modification_demandee>
 
-Applique la modification. Renvoie UNIQUEMENT les fichiers créés ou modifiés, chacun en entier (jamais d'extrait partiel), et "=== DELETE: chemin ===" pour les fichiers à supprimer. Mets à jour fxmanifest.lua et README.md si nécessaire. Termine par un bloc NOTES qui résume les changements.`;
+Applique la modification demandée, et seulement elle. Mets à jour fxmanifest.lua et README.md si nécessaire.
+
+${EDIT_RULES}`;
+}
+
+// Big resources: only the files the errors point at (plus manifest and config) are
+// sent in full, the rest by name, to keep each fix round small.
+const FULL_CONTEXT_CHARS = 40000;
+
+function fixContext(files, problems) {
+  const total = files.reduce((n, f) => n + f.content.length, 0);
+  if (total <= FULL_CONTEXT_CHARS) return { shown: files, others: [] };
+  const wanted = new Set(["fxmanifest.lua", "config.lua", "shared/config.lua", ...problems.map((p) => p.file)]);
+  return { shown: files.filter((f) => wanted.has(f.path)), others: files.filter((f) => !wanted.has(f.path)).map((f) => f.path) };
 }
 
 export function buildFixMessage(spec, files, problems) {
   const list = problems
     .map((p) => `- ${p.file}${p.line ? `:${p.line}` : ""} — ${p.message}`)
     .join("\n");
+  const { shown, others } = fixContext(files, problems);
+  const othersBlock = others.length ? `\n<autres_fichiers_existants>\n${others.join("\n")}\n</autres_fichiers_existants>\n` : "";
   return `La ressource FiveM ci-dessous ne passe pas la vérification automatique.
 
 <specification>
@@ -143,12 +176,36 @@ ${describeSpec(spec)}
 </specification>
 
 <fichiers_actuels>
-${filesBlock(files)}
+${filesBlock(shown)}
 </fichiers_actuels>
-
+${othersBlock}
 <erreurs_detectees>
 ${list}
 </erreurs_detectees>
 
-Corrige toutes ces erreurs sans changer le comportement voulu. Renvoie UNIQUEMENT les fichiers corrigés ou ajoutés, chacun en entier. Termine par un bloc NOTES listant les corrections.`;
+Corrige toutes ces erreurs sans changer le comportement voulu.
+
+${EDIT_RULES}`;
+}
+
+// Fallback when some SEARCH text could not be located: the affected files come back whole.
+export function buildRewriteMessage(spec, files, failures) {
+  const paths = [...new Set(failures.map((f) => f.path))];
+  const wanted = files.filter((f) => paths.includes(f.path));
+  const hunks = failures.map((f) => `--- ${f.path} (${f.reason})\n${f.search}`).join("\n\n");
+  return `Certains remplacements n'ont pas pu être appliqués car le texte SEARCH ne correspond pas au fichier actuel.
+
+<specification>
+${describeSpec(spec)}
+</specification>
+
+<fichiers_concernes>
+${filesBlock(wanted)}
+</fichiers_concernes>
+
+<remplacements_non_appliques>
+${hunks}
+</remplacements_non_appliques>
+
+Réécris chacun de ces fichiers EN ENTIER (blocs FILE complets) en y intégrant le changement prévu. Ne renvoie aucun autre fichier. Termine par un bloc NOTES court.`;
 }

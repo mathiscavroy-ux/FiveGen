@@ -177,6 +177,7 @@ async function streamCompletion(provider, body, onEvent, signal, onActivity) {
   return {
     files: parser.files,
     deletes: parser.deletes,
+    edits: parser.edits,
     notes: parser.notes,
     rawText: parser.fullText,
     stopReason: finish === "length" ? "max_tokens" : "end_turn",
