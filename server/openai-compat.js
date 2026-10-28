@@ -93,7 +93,16 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal }
   let usage = null;
 
   const handle = (payload) => {
-    if (payload.error) throw new ProviderError(`${provider.label} : ${extractError(JSON.stringify(payload))}`);
+    if (payload.error) {
+      // Gateways report upstream outages inside a 200 stream: recover an HTTP-like
+      // status so the engine can retry or switch model instead of failing outright.
+      const message = extractError(JSON.stringify(payload));
+      const declared = Number(payload.error.status ?? payload.error.code);
+      const status = Number.isInteger(declared) && declared >= 400
+        ? declared
+        : /unavailable|overload|capacity|retry|rate.?limit|timeout/i.test(message) ? 503 : undefined;
+      throw new ProviderError(`${provider.label} : ${message}`, status);
+    }
     if (payload.model) model = payload.model;
     if (payload.usage) usage = payload.usage;
     const choice = payload.choices?.[0];

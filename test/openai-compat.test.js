@@ -20,6 +20,10 @@ before(async () => {
         return res.end(JSON.stringify({ data: [{ id: "good-model" }] }));
       }
       lastBody = JSON.parse(raw);
+      if (lastBody.model === "upstream-down") {
+        res.writeHead(200, { "Content-Type": "text/event-stream" });
+        return res.end(`data: ${JSON.stringify({ error: { message: "The upstream service for this model is temporarily unavailable. Please retry in a few seconds." } })}\n\n`);
+      }
       if (lastBody.model === "limited") {
         res.writeHead(429, { "Content-Type": "application/json" });
         return res.end(JSON.stringify([{ error: { message: "quota exceeded" } }]));
@@ -70,6 +74,13 @@ test("maps 429 to a readable quota message", async () => {
   await assert.rejects(
     runOpenAICompat({ provider: provider({ model: "limited" }), userContent: "x", onEvent: () => {} }),
     (e) => e instanceof ProviderError && /Quota gratuit atteint/.test(e.message) && /quota exceeded/.test(e.message),
+  );
+});
+
+test("treats an outage reported inside a 200 stream as a retryable 503", async () => {
+  await assert.rejects(
+    runOpenAICompat({ provider: provider({ model: "upstream-down" }), userContent: "x", onEvent: () => {} }),
+    (e) => e instanceof ProviderError && e.status === 503 && /temporarily unavailable/.test(e.message),
   );
 });
 
