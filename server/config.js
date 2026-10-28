@@ -43,8 +43,10 @@ export const config = {
   cost: {
     generate: int(env.COST_GENERATE, 1),
     refine: int(env.COST_REFINE, 1),
-    fix: int(env.COST_FIX, 1),
+    fix: int(env.COST_FIX, 0),
   },
+  // Modifications included with each script before COST_REFINE applies.
+  freeRefines: int(env.FREE_REFINES, 3),
   autoFixRounds: int(env.AUTO_FIX_ROUNDS, 2),
   shopUrl: env.SHOP_URL || "",
   supportUrl: env.SUPPORT_URL || "",

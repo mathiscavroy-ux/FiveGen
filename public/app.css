@@ -355,6 +355,9 @@ textarea.input { height: auto; padding: 10px 12px; line-height: 1.55; }
 .refine { padding: 12px 16px; background: var(--panel); gap: 12px; }
 .refine textarea { min-height: 44px; }
 .refine .btn { height: 44px; }
+.refine-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.refine-cost { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.refine-cost.free { color: var(--ok); }
 
 .menu { background: var(--panel-2); border-color: var(--border-strong); border-radius: 12px; padding: 6px; box-shadow: 0 20px 50px -12px rgba(0,0,0,.7); }
 .menu a, .menu button { border-radius: 8px; display: flex; align-items: center; gap: 10px; }

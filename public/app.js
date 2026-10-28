@@ -142,7 +142,8 @@ function renderAccount() {
     if (me.shopUrl) $(id).href = me.shopUrl;
   }
   $("#costHint").textContent = `Coût : ${plural(me.costs.generate, "crédit")} (corrections automatiques incluses)`;
-  $("#costLine").textContent = plural(me.costs.refine, "crédit");
+  $("#costLine").textContent = plural(me.costs.generate, "crédit");
+  $("#freeRefinesLine").textContent = me.freeRefines;
   $("#demoBanner").classList.toggle("hidden", !state.options?.demo);
 }
 
@@ -514,6 +515,7 @@ function renderProject({ keepEditor = false } = {}) {
   renderProblems(p.validation);
   $("#notes").innerHTML = renderMarkdown(p.notes);
   renderHistory();
+  renderRefineCost();
   if (!keepEditor) {
     const keep = p.files.find((f) => f.path === state.activePath);
     const first = keep?.path ?? p.files.find((f) => f.path === "fxmanifest.lua")?.path ?? p.files[0]?.path;
@@ -711,12 +713,26 @@ async function onGenerate(e) {
   await runStream("/api/generate", spec, { fresh: true });
 }
 
+// Each script includes a few free modifications, then COST_REFINE applies.
+function refineCost() {
+  const left = state.me.freeRefines - (state.current?.refinesUsed ?? 0);
+  return { left: Math.max(0, left), cost: left > 0 ? 0 : state.me.costs.refine };
+}
+
+function renderRefineCost() {
+  const { left, cost } = refineCost();
+  $("#refineCost").textContent = cost === 0
+    ? `Modification offerte · ${left}/${state.me.freeRefines} restante${left > 1 ? "s" : ""}`
+    : `${plural(cost, "crédit")} par modification`;
+  $("#refineCost").classList.toggle("free", cost === 0);
+}
+
 async function onRefine(e) {
   e.preventDefault();
   if (state.busy || !state.current) return;
   const instruction = $("#refineInput").value.trim();
   if (!instruction) return toast("Décris la modification à apporter.", "err");
-  if (state.me.credits < state.me.costs.refine) {
+  if (state.me.credits < refineCost().cost) {
     toast("Crédits insuffisants.", "err");
     return openRedeem();
   }
@@ -731,7 +747,7 @@ async function onFix() {
   const v = state.current.validation;
   const includeWarnings = !v?.errors?.length && v?.warnings?.length > 0;
   if (!v?.errors?.length && !includeWarnings) return toast("Aucun problème à corriger. Lance d'abord une vérification.");
-  if (!confirm(`La correction coûte ${plural(state.me.costs.fix, "crédit")}. Continuer ?`)) return;
+  if (state.me.costs.fix > 0 && !confirm(`La correction coûte ${plural(state.me.costs.fix, "crédit")}. Continuer ?`)) return;
   await runStream(`/api/projects/${state.current.id}/fix`, { includeWarnings });
 }
 

@@ -101,6 +101,7 @@ export function publicUser(user) {
     credits: user.credits,
     isAdmin: Boolean(user.is_admin),
     costs: config.cost,
+    freeRefines: config.freeRefines,
     shopUrl: config.shopUrl,
     supportUrl: config.supportUrl,
   };

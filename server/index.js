@@ -248,7 +248,7 @@ app.post("/api/redeem", requireUser, redeemLimiter, (req, res) => {
 app.get("/api/options", (_req, res) => res.json({ ...CATALOG, demo: config.mock }));
 
 app.get("/api/public", (_req, res) =>
-  res.json({ freeCredits: config.freeCredits, costs: config.cost, shopUrl: config.shopUrl, supportUrl: config.supportUrl }),
+  res.json({ freeCredits: config.freeCredits, costs: config.cost, freeRefines: config.freeRefines, shopUrl: config.shopUrl, supportUrl: config.supportUrl }),
 );
 
 app.get("/api/packs", (_req, res) => res.json(publicPacks()));
@@ -312,7 +312,8 @@ app.post("/api/projects/:id/refine", requireUser, async (req, res) => {
   if (!instruction) return res.status(400).json({ error: "Décris la modification." });
   if (instruction.length > LIMITS.instruction) return res.status(400).json({ error: `Demande trop longue (${LIMITS.instruction} caractères max).` });
   const project = getProject(req.user.id, req.params.id);
-  const cost = config.cost.refine;
+  // The first FREE_REFINES modifications of each script are included.
+  const cost = project.refinesUsed < config.freeRefines ? 0 : config.cost.refine;
   if (!charge(req, res, cost)) return;
   await streamPipeline(res, {
     userId: req.user.id,

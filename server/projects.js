@@ -123,6 +123,7 @@ export function getProject(userId, id) {
     updatedAt: meta.updatedAt,
     notes: meta.notes,
     validation: meta.validation,
+    refinesUsed: meta.history.filter((h) => h.type === "refine").length,
     history: meta.history.map(({ at, type, instruction, files }) => ({ at, type, instruction, files })),
     files: getFiles(userId, id),
   };

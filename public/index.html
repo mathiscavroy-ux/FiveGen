@@ -192,7 +192,7 @@
       <div class="head center">
         <span class="eyebrow">Tarifs</span>
         <h2>Payez seulement ce que vous générez.</h2>
-        <p class="sub">1 crédit = 1 script ou 1 modification. Corrections automatiques incluses, crédits sans expiration.</p>
+        <p class="sub">1 crédit = 1 script, avec <span class="free-refines">3</span> modifications offertes sur chaque script. Corrections gratuites, crédits sans expiration.</p>
       </div>
       <!-- Adapte les prix et quantités à tes packs (codes générés depuis /admin). -->
       <div class="pricing">
@@ -201,7 +201,8 @@
           <div class="amount">4,99 €</div>
           <div class="per">10 crédits · 0,50 € le script</div>
           <ul>
-            <li><svg><use href="#i-check" /></svg>10 scripts ou modifications</li>
+            <li class="pack-scripts"><svg><use href="#i-check" /></svg>10 scripts</li>
+            <li><svg><use href="#i-check" /></svg><span class="free-refines">3</span> modifications offertes par script</li>
             <li><svg><use href="#i-check" /></svg>Tous les frameworks</li>
             <li><svg><use href="#i-check" /></svg>Export ZIP et éditeur</li>
           </ul>
@@ -213,7 +214,8 @@
           <div class="amount">12,99 €</div>
           <div class="per">30 crédits · 0,43 € le script</div>
           <ul>
-            <li><svg><use href="#i-check" /></svg>30 scripts ou modifications</li>
+            <li class="pack-scripts"><svg><use href="#i-check" /></svg>30 scripts</li>
+            <li><svg><use href="#i-check" /></svg><span class="free-refines">3</span> modifications offertes par script</li>
             <li><svg><use href="#i-check" /></svg>Idéal pour monter un serveur</li>
             <li><svg><use href="#i-check" /></svg>Support prioritaire</li>
           </ul>
@@ -224,7 +226,8 @@
           <div class="amount">34,99 €</div>
           <div class="per">100 crédits · 0,35 € le script</div>
           <ul>
-            <li><svg><use href="#i-check" /></svg>100 scripts ou modifications</li>
+            <li class="pack-scripts"><svg><use href="#i-check" /></svg>100 scripts</li>
+            <li><svg><use href="#i-check" /></svg><span class="free-refines">3</span> modifications offertes par script</li>
             <li><svg><use href="#i-check" /></svg>Pour les développeurs et équipes</li>
             <li><svg><use href="#i-check" /></svg>Support prioritaire</li>
           </ul>
@@ -244,8 +247,9 @@
         <details class="qa"><summary>Les scripts fonctionnent-ils directement sur mon serveur ?</summary><p>Oui : chaque ressource contient son fxmanifest, sa config et un README d'installation (dépendances, SQL, items). Elle est vérifiée automatiquement avant livraison. Comme pour tout script, teste-la sur ton serveur de développement avant la production.</p></details>
         <details class="qa"><summary>Comment les scripts sont-ils produits ?</summary><p>Par le moteur de génération automatique de FiveGen, spécialisé FiveM, puis analysés et corrigés automatiquement (syntaxe Lua, manifest, événements, interface). Tu peux ensuite les modifier en une phrase ou directement dans l'éditeur.</p></details>
         <details class="qa"><summary>Puis-je modifier ou redistribuer les scripts générés ?</summary><p>Oui, les ressources générées t'appartiennent : utilise-les, modifie-les et redistribue-les librement sur tes serveurs.</p></details>
+        <details class="qa"><summary>Les modifications sont-elles payantes ?</summary><p>Chaque script inclut <span class="free-refines">3</span> modifications offertes (« ajoute un cooldown », « passe sur ox_target »…). Les suivantes coûtent 1 crédit. Les corrections d'erreurs sont toujours gratuites.</p></details>
         <details class="qa"><summary>Que se passe-t-il si une génération échoue ?</summary><p>Si aucun fichier n'est produit, ton crédit est automatiquement rendu.</p></details>
-        <details class="qa"><summary>Comment recharger mes crédits ?</summary><p>Achète un pack : tu reçois un code d'activation à saisir dans le studio (menu « Utiliser un code »).</p></details>
+        <details class="qa"><summary>Comment recharger mes crédits ?</summary><p>Dans le studio, ouvre « Recharger mes crédits » et paie ton pack par carte : les crédits arrivent en quelques secondes. Tu peux aussi saisir un code d'activation.</p></details>
         <details class="qa"><summary>FiveGen crée-t-il des cheats ou des menus de triche ?</summary><p>Non. FiveGen produit uniquement des ressources légitimes pour serveurs FiveM.</p></details>
       </div>
     </div>
@@ -298,6 +302,7 @@
       }
       const info = await fetch("/api/public").then((r) => r.json());
       document.getElementById("freeCredits").textContent = info.freeCredits;
+      document.querySelectorAll(".free-refines").forEach((el) => (el.textContent = info.freeRefines));
       const shop = await fetch("/api/packs").then((r) => r.json()).catch(() => null);
       const cards = [...document.querySelectorAll(".price")];
       if (shop?.enabled && shop.packs.length === cards.length) {
@@ -308,6 +313,7 @@
           card.querySelector("h3").textContent = p.name;
           card.querySelector(".amount").textContent = fmt(p.price);
           card.querySelector(".per").textContent = `${p.credits} crédits · ${fmt(Math.round(p.price / p.credits))} le script`;
+          card.querySelector(".pack-scripts").lastChild.textContent = `${p.credits} scripts`;
           const btn = card.querySelector(".buy");
           btn.href = `/app?buy=${encodeURIComponent(p.id)}`;
           btn.textContent = `Choisir ${p.name}`;
