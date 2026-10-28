@@ -15,7 +15,8 @@ const int = (v, d) => (Number.isFinite(Number(v)) && v !== "" && v != null ? Mat
 
 export const config = {
   port: int(env.PORT, 3210),
-  host: env.HOST || "127.0.0.1",
+  // alwaysdata provides IP/PORT; other hosts usually take HOST.
+  host: env.HOST || env.IP || "127.0.0.1",
   publicUrl: (env.PUBLIC_URL || "").replace(/\/+$/, ""),
   production: env.NODE_ENV === "production",
   trustProxy: env.TRUST_PROXY === "1",
