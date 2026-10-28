@@ -493,19 +493,43 @@ function setBusy(busy) {
 
 // ---------- generation flows ----------
 
+// Streamed output arrives in thousands of tiny chunks: buffer them, paint at most
+// ~10 times per second and keep only the tail, so the page never has to re-layout
+// an ever-growing block of text.
+function createLiveWriter(el, { keep = 30000, interval = 100 } = {}) {
+  const node = document.createTextNode("");
+  el.replaceChildren(node);
+  let pending = "";
+  let timer = null;
+  const paint = () => {
+    timer = null;
+    if (!pending) return;
+    const panel = el.closest(".tab-panels");
+    const atBottom = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 40;
+    node.appendData(pending);
+    pending = "";
+    if (node.length > keep * 1.5) node.deleteData(0, node.length - keep);
+    if (atBottom) panel.scrollTop = panel.scrollHeight;
+  };
+  return {
+    write(text) {
+      pending += text;
+      if (!timer) timer = setTimeout(paint, interval);
+    },
+    flush() {
+      clearTimeout(timer);
+      paint();
+    },
+  };
+}
+
 async function runStream(url, body, { fresh = false } = {}) {
   state.abort = new AbortController();
   setBusy(true);
   selectTab("live");
-  $("#liveText").textContent = "";
 
-  const live = $("#liveText");
-  const appendLive = (t) => {
-    live.textContent += t;
-    if (live.textContent.length > 300000) live.textContent = live.textContent.slice(-200000);
-    const panel = live.closest(".tab-panels");
-    panel.scrollTop = panel.scrollHeight;
-  };
+  const live = createLiveWriter($("#liveText"));
+  const appendLive = (t) => live.write(t);
 
   try {
     await streamPost(
@@ -578,6 +602,7 @@ async function runStream(url, body, { fresh = false } = {}) {
       }
     }
   } finally {
+    live.flush();
     state.pending.clear();
     state.abort = null;
     setBusy(false);
