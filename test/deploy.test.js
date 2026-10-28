@@ -55,6 +55,16 @@ function startBridge(token, resourcesDir, { foreign = {} } = {}) {
       const [verb, name] = cmd.split(" ");
       if (verb === "ensure" || verb === "restart") started.add(name);
     },
+    StartResource: (name) => {
+      commands.push(`StartResource ${name}`);
+      started.add(name);
+      return true;
+    },
+    StopResource: (name) => {
+      commands.push(`StopResource ${name}`);
+      started.delete(name);
+      return true;
+    },
   };
   const sandbox = {
     ...natives,
@@ -109,7 +119,7 @@ test("the bridge downloads, writes under [fivegen], starts the resource and repo
   const done = await waitFor(finished(queued.id));
   assert.equal(done.status, "started", done.message);
   assert.equal(fs.readFileSync(path.join(resources, "[fivegen]", "tow_job", "server", "main.lua"), "utf8"), "print('ok')\n");
-  assert.deepEqual(commands, ["refresh", "ensure tow_job"]);
+  assert.deepEqual(commands, ["refresh", "StartResource tow_job"]);
   // staged copy inside the bridge folder is cleaned up
   assert.equal(fs.existsSync(path.join(resources, "[tools]", "fivegen_bridge", ".staging", "tow_job")), false);
   assert.ok(deploy.listServers(userId).find((x) => x.id === s.id).online);

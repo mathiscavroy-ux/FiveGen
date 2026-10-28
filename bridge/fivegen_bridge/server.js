@@ -23,7 +23,7 @@ const http = require("http");
 const https = require("https");
 const { execFile } = require("child_process");
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 const TOKEN = GetConvar("fivegen_token", "");
 const BASE = GetConvar("fivegen_url", "https://flazehdr.alwaysdata.net").replace(/\/+$/, "");
 const FOLDER = GetConvar("fivegen_folder", "[fivegen]");
@@ -151,7 +151,14 @@ async function startResource(resource) {
   const wasStarted = GetResourceState(resource) === "started";
   ExecuteCommand("refresh");
   await sleep(500);
-  ExecuteCommand(`${wasStarted ? "restart" : "ensure"} ${resource}`);
+  // The StopResource/StartResource natives need no ACE, unlike ensure/restart which
+  // call the start and stop commands internally.
+  if (typeof StartResource === "function") {
+    if (wasStarted) StopResource(resource);
+    StartResource(resource);
+  } else {
+    ExecuteCommand(`${wasStarted ? "restart" : "ensure"} ${resource}`);
+  }
   for (let i = 0; i < 10; i++) {
     await sleep(500);
     if (GetResourceState(resource) === "started") return wasStarted ? "redémarrée" : "démarrée";
