@@ -1,8 +1,8 @@
 export const LIBS = `# ox_lib
 
 - fxmanifest : shared_script '@ox_lib/init.lua' (en premier), lua54 'yes', dependency 'ox_lib'. Modules chargés à la demande via lib.
-- Notifications : lib.notify({id=?, title='Titre', description='Texte', type='success'|'error'|'inform'|'warning', duration=5000, position='top-right'}) ; serveur : TriggerClientEvent('ox_lib:notify', src, {...}).
-- Progression : lib.progressBar({duration=5000, label='...', useWhileDead=false, canCancel=true, disable={move=true, car=true, combat=true, mouse=false}, anim={dict='...', clip='...', flag=49} | {scenario='WORLD_HUMAN_HAMMERING'}, prop={model=joaat('prop'), pos=vec3(), rot=vec3(), bone=57005}}) → true si terminé ; lib.progressCircle({...position='bottom'}) ; lib.progressActive() ; lib.cancelProgress().
+- Notifications : lib.notify({id=?, title='Titre', description='Texte', type='success'|'error'|'inform'|'warning', duration=5000, position='top-right'}) ; serveur : lib.notify(src, {...}) ou TriggerClientEvent('ox_lib:notify', src, {...}).
+- Progression : lib.progressBar({duration=5000, label='...', useWhileDead=false, allowRagdoll=false, allowCuffed=false, allowFalling=false, allowSwimming=false, canCancel=true, disable={move=true, sprint=true, car=true, combat=true, mouse=false}, anim={dict='...', clip='...', flag=49} | {scenario='WORLD_HUMAN_HAMMERING'}, prop={model=joaat('prop'), pos=vec3(), rot=vec3(), bone=57005}}) → true si terminé ; lib.progressCircle({...position='bottom'}) ; lib.progressActive() ; lib.cancelProgress().
 - Menus contextuels : lib.registerContext({id='id', title='Titre', menu='parent_id', canClose=true, onExit=fn, options={{title='Option', description='...', icon='car', iconColor='#ff7a1a', arrow=true, disabled=false, progress=50, colorScheme='blue', metadata={{label='Prix', value='$100'}}, image='https://...', onSelect=function(args) end, args={...}, event='res:client:x', serverEvent='res:server:x', menu='sous_id'}}}) puis lib.showContext('id') ; lib.hideContext().
 - Menu liste (clavier) : lib.registerMenu({id, title, position='top-right', options={{label, description, icon, values={'a','b'}, defaultIndex=1, checked=false, close=true, args={}}}, onSideScroll=fn, onCheck=fn}, function(selected, scrollIndex, args) end) ; lib.showMenu('id').
 - Saisie : local input = lib.inputDialog('Titre', {{type='input', label='Nom', required=true, min=3, max=20}, {type='number', label='Montant', min=1, max=1000, default=1}, {type='select', label='Choix', options={{value='a', label='A'}}}, {type='checkbox', label='...'}, {type='slider', min=0, max=100}, {type='color'}, {type='date'}, {type='textarea'}}) → nil si annulé, sinon input[1], input[2]…
@@ -17,6 +17,10 @@ export const LIBS = `# ox_lib
 - Raycast : lib.raycast.cam(flags, ignore, distance) → hit, entity, coords, normal, material.
 - Cache : cache.ped, cache.vehicle (false si à pied), cache.seat, cache.coords, cache.playerId, cache.serverId, cache.weapon ; lib.onCache('vehicle', function(value) end).
 - Divers : lib.getClosestPlayer(coords, maxDist, includeSelf), lib.getClosestVehicle(coords, maxDist, includePlayerVehicle), lib.getNearbyPlayers / Vehicles / Peds / Objects(coords, maxDist), lib.getVehicleProperties(veh) / lib.setVehicleProperties(veh, props), lib.waitFor(fn, errMsg, timeout), lib.print.info/warn/error, lib.locale() + locale('clé', ...) (locales/fr.json, setr ox:locale fr), lib.versionCheck('owner/repo'), lib.cron.new('*/5 * * * *', fn) (serveur), lib.timer, lib.array, lib.class.
+- Commandes (serveur) : lib.addCommand('nom' ou {'nom', 'alias'}, {help='Aide', params={{name='target', type='playerId', help='ID joueur'}, {name='count', type='number', optional=true}, {name='raison', type='longString'}}, restricted='group.admin'}, function(source, args, raw) end) ; types 'number' | 'playerId' | 'string' | 'longString' (longString uniquement en dernier) ; restricted ajoute l'ACE automatiquement (false = tout le monde).
+- Animation : lib.playAnim(ped, dict, clip, 8.0, -8.0, -1, flag) charge le dictionnaire, joue et le libère.
+- Événement multi-cibles (serveur) : lib.triggerClientEvent(nom, {src1, src2} | -1, ...).
+- Marqueur : local m = lib.marker.new({type=1, coords=vec3(), width=1.0, height=0.5, color={r=255, g=122, b=26, a=180}}) puis m:draw() dans le nearby d'un point.
 - Radial : lib.addRadialItem({id='x', icon='car', label='Véhicule', onSelect=fn}) / lib.registerRadial({id, items}) / lib.removeRadialItem(id).
 
 # ox_target
@@ -25,6 +29,8 @@ export const LIBS = `# ox_lib
 - addSphereZone({coords, radius, options}) ; addPolyZone({points, thickness, options}).
 - addModel(models, options) / removeModel(models, names) ; addLocalEntity(entity, options) / removeLocalEntity ; addEntity(netId, options) ; addGlobalPed / addGlobalVehicle / addGlobalPlayer / addGlobalObject(options) ; removeGlobalVehicle(names) ; disableTargeting(bool).
 - Options véhicule : bones={'door_dside_f', 'boot'} ; offset ; data.entity dans onSelect.
+- onSelect(data) reçoit {entity, coords, distance, zone, name} ; addGlobalOption(options) pour tout le monde ; removeEntity(netIds, names) ; zoneExists(id) ; getTargetOptions(entity, type, model) ; isActive().
+- Zones : garder l'id renvoyé par addBoxZone/addSphereZone et appeler removeZone(id) dans onResourceStop ; les noms d'options (name) servent à removeModel / removeGlobalVehicle et doivent être préfixés par la ressource.
 
 # ox_inventory
 
@@ -34,7 +40,10 @@ export const LIBS = `# ox_lib
 - Client : exports.ox_inventory:Search('count', item) ; GetItemCount(item) ; openInventory(type, data) ; closeInventory() ; displayMetadata({clé='Label'}) ; useItem(data, cb) dans un export client d'item.
 - Items (ox_inventory/data/items.lua) : ['nom'] = {label='Label', weight=200, stack=true, close=true, description='...', consume=1, client={status={hunger=200000}, anim={dict, clip}, prop={model, pos, rot}, usetime=2500, export='res.useNom'}, server={export='res.useNom'}} ; images dans ox_inventory/web/images/nom.png.
 - Usage serveur : exports('useNom', function(event, item, inventory, slot, data) if event == 'usingItem' then ... return true/false end end).
-- Hooks : exports.ox_inventory:registerHook('swapItems', function(payload) return true end, {itemFilter={nom=true}}) ; hooks 'buyItem', 'craftItem', 'createItem'.
+- Hooks : exports.ox_inventory:registerHook('swapItems', function(payload) return true end, {itemFilter={nom=true}}) → id ; hooks disponibles 'swapItems', 'buyItem', 'craftItem', 'createItem', 'openInventory', 'openShop', 'usingItem' ; removeHooks(id) dans onResourceStop.
+- Autres exports serveur (2.4x) : GetItemSlots, GetSlotWithItem / GetSlotsWithItem / GetSlotIdWithItem, GetEmptySlot, CanCarryAmount(inv, item), SetItem(inv, item, count), SwapSlots, GetInventory(inv), GetInventoryItems(inv), CreateTemporaryStash({label, slots, maxWeight, items}), ConfiscateInventory / ReturnInventory(src), CustomDrop(prefix, items, coords), forceOpenInventory(src, type, data), Items(nom) (définition d'un item, nil s'il n'existe pas : vérifier au démarrage que les items de la ressource sont déclarés et afficher un avertissement clair sinon).
+- Autres exports client : GetPlayerItems(), GetPlayerWeight(), GetPlayerMaxWeight(), Progress / ProgressActive / CancelProgress, notify, displayMetadata, suppressItemNotifications.
+- inv vaut l'id serveur du joueur (src) pour son inventaire, ou l'id d'un stash. AddItem renvoie false + raison ('invalid_item', 'inventory_full'…) : toujours tester et prévenir le joueur.
 
 # oxmysql
 

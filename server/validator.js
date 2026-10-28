@@ -158,6 +158,69 @@ function checkEvents(files) {
   return problems;
 }
 
+// APIs that only exist on one side: calling them from the other side is nil at
+// runtime ("attempt to call a nil value") and kills the handler.
+const CLIENT_ONLY = [
+  "PlayerPedId", "PlayerId", "GetActivePlayers", "SetNuiFocus", "SendNUIMessage", "RegisterNUICallback",
+  "DrawMarker", "AddBlipForCoord", "AddBlipForEntity", "IsControlJustPressed", "IsControlJustReleased",
+  "RegisterKeyMapping", "TriggerServerEvent", "ESX.ShowNotification", "ESX.ShowHelpNotification", "ESX.Game.",
+  "ESX.Progressbar", "ESX.OpenContext", "lib.progressBar", "lib.progressCircle", "lib.showContext",
+  "lib.registerContext", "lib.inputDialog", "lib.skillCheck", "lib.showTextUI",
+];
+const SERVER_ONLY = [
+  "TriggerClientEvent", "MySQL.", "ESX.GetPlayerFromId", "ESX.GetExtendedPlayers", "ESX.RegisterServerCallback",
+  "ESX.RegisterUsableItem", "ESX.RegisterCommand", "DropPlayer", "GetPlayerIdentifierByType", "SetPlayerRoutingBucket",
+  "CreateVehicleServerSetter", "lib.addCommand", "exports.ox_inventory:AddItem", "exports.ox_inventory:RemoveItem",
+  "exports.ox_inventory:RegisterStash", "exports.ox_inventory:RegisterShop",
+];
+
+// Blanks comments and string contents (keeping newlines) so names inside them never match.
+function codeOnly(src) {
+  return src
+    .replace(/--\[(=*)\[[\s\S]*?\]\1\]/g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/--[^\n]*/g, (m) => " ".repeat(m.length))
+    .replace(/(['"])(?:\\.|(?!\1)[^\\\n])*\1/g, (m) => m[0] + " ".repeat(m.length - 2) + m[0]);
+}
+
+function fileSides(manifest, paths) {
+  const sides = new Map();
+  for (const { directive, value } of manifestEntries(manifest)) {
+    const side = directive.startsWith("client") ? "client" : directive.startsWith("server") ? "server" : directive.startsWith("shared") ? "shared" : null;
+    if (!side || value.startsWith("@")) continue;
+    const clean = value.replace(/^\.\//, "");
+    const matched = /[*?]/.test(clean) ? paths.filter((p) => globToRegex(clean).test(p)) : paths.filter((p) => p === clean);
+    for (const p of matched) {
+      const prev = sides.get(p);
+      sides.set(p, prev && prev !== side ? "shared" : side);
+    }
+  }
+  return sides;
+}
+
+function checkSides(files) {
+  const manifest = files.find((f) => f.path === "fxmanifest.lua")?.content;
+  if (!manifest) return [];
+  const sides = fileSides(manifest, files.map((f) => f.path));
+  const problems = [];
+  for (const f of files.filter((x) => x.path.endsWith(".lua"))) {
+    const side = sides.get(f.path);
+    if (side !== "client" && side !== "server") continue;
+    const code = codeOnly(f.content);
+    for (const name of side === "server" ? CLIENT_ONLY : SERVER_ONLY) {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const m = new RegExp(`(?<![\\w.:])${escaped}${/[.:]$/.test(name) ? "" : "\\s*\\("}`).exec(code);
+      if (!m) continue;
+      problems.push({
+        file: f.path,
+        line: code.slice(0, m.index).split("\n").length,
+        message: `${name.replace(/[.:]$/, "")} n'existe que côté ${side === "server" ? "client" : "serveur"}, or ce fichier est chargé côté ${side === "server" ? "serveur" : "client"} : déplacer l'appel ou passer par un événement`,
+        level: "error",
+      });
+    }
+  }
+  return problems;
+}
+
 export function validateProject(files) {
   const problems = [];
   for (const f of files) {
@@ -168,7 +231,7 @@ export function validateProject(files) {
     if (p) problems.push(p);
     if (f.truncated) problems.push({ file: f.path, message: "Fichier tronqué (la génération s'est arrêtée au milieu)", level: "error" });
   }
-  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files));
+  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files));
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };

@@ -38,6 +38,17 @@ test("flags missing manifest files and ox_lib include", () => {
   assert.match(messages, /@ox_lib\/init\.lua/);
 });
 
+test("flags APIs called from the wrong side, ignoring comments, strings and shared files", () => {
+  const r = validateProject([
+    manifest("shared_script 'shared/utils.lua'\nclient_script 'client/main.lua'\nserver_script 'server/main.lua'"),
+    { path: "shared/utils.lua", content: "function Ped() return PlayerPedId() end\n" },
+    { path: "client/main.lua", content: "-- TriggerClientEvent(\nlocal s = 'MySQL.query'\nlocal xPlayer = ESX.GetPlayerFromId(1)\n" },
+    { path: "server/main.lua", content: "local src = 1\nlib.notify(src, {})\nlocal ped = PlayerPedId()\n" },
+  ]);
+  const sides = r.errors.filter((e) => e.file !== "fxmanifest.lua").map((e) => `${e.file}:${e.line} ${e.message.split(" ")[0]}`);
+  assert.deepEqual(sides.sort(), ["client/main.lua:3 ESX.GetPlayerFromId", "server/main.lua:3 PlayerPedId"]);
+});
+
 test("warns about unregistered server events and broken NUI refs", () => {
   const r = validateProject([
     manifest("ui_page 'html/index.html'\nfiles { 'html/index.html' }\nclient_script 'c.lua'"),
