@@ -4,6 +4,7 @@ import { CORE } from "./knowledge/core.js";
 import { FRAMEWORKS } from "./knowledge/frameworks.js";
 import { LIBS } from "./knowledge/libs.js";
 import { RECIPES } from "./knowledge/recipes.js";
+import { PITFALLS } from "./knowledge/pitfalls.js";
 
 export const CATALOG = {
   frameworks: [
@@ -76,7 +77,7 @@ export const CATALOG = {
 };
 
 // Byte-identical across requests so the upstream cache can reuse it.
-export const SYSTEM_PROMPT = [CORE, FRAMEWORKS, LIBS].join("\n\n");
+export const SYSTEM_PROMPT = [CORE, FRAMEWORKS, LIBS, PITFALLS].join("\n\n");
 
 const label = (list, id) => list.find((x) => x.id === id)?.label ?? id;
 

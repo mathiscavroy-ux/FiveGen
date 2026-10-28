@@ -1,0 +1,73 @@
+// Runtime errors seen most often in generated FiveM resources, with the fix to apply.
+// Lives in the cached system prompt, like the rest of the knowledge base.
+export const PITFALLS = `# Erreurs FiveM fréquentes (à ne jamais produire)
+
+Chaque ligne : symptôme dans la console F8 / serveur, puis la règle qui l'évite.
+
+Lua 5.4 (CfxLua) :
+- Erreur de syntaxe : pas de !=, &&, ||, !, +=, ++, ?:, continue, ni de chaîne entre backticks. Utiliser ~=, and, or, not, x = x + 1, (cond and a or b) seulement si a n'est jamais false/nil.
+- « continue » n'existe pas : inverser la condition (if ok then ... end) ou goto continue avec ::continue:: juste avant le end de la boucle, sans déclarer de local entre le goto et l'étiquette (sinon « jumps into the scope of local »).
+- « attempt to call a nil value (global 'maFonction') » : une fonction locale doit être définie AVANT son premier appel dans le fichier ; sinon la déclarer en tête (local maFonction) puis l'affecter (maFonction = function() ... end).
+- « attempt to index a nil value » : toujours tester ce qui peut être nil (xPlayer, PlayerData.job, résultat SQL, item d'inventaire, entité supprimée) et sortir tôt (if not xPlayer then return end).
+- « attempt to concatenate a nil value » : tostring(x) ou (x or '') avant .. ; jamais + pour concaténer.
+- « attempt to compare number with nil » / « string with number » : convertir les arguments réseau et les retours JSON avec tonumber() et vérifier le résultat.
+- « bad argument #2 to 'format' (number has no integer representation) » : %d exige un entier. Utiliser math.floor(x) ou %s, et %.2f pour un prix.
+- #tableau ne compte que la partie séquentielle 1..n : pour une table à clés (dictionnaire) compter avec pairs. ipairs s'arrête au premier nil ; pairs pour les dictionnaires, ordre non garanti.
+- Les tableaux commencent à 1. table.remove dans une boucle ipairs saute des éléments : parcourir à l'envers (for i = #t, 1, -1).
+- 7 / 2 = 3.5 (division flottante) ; 7 // 2 = 3. math.random(1, n) avec des entiers ; math.randomseed est inutile.
+- Variables globales accidentelles : toujours local ; ne jamais réutiliser un nom de globale FiveM (source, Config d'une autre ressource, ESX) pour autre chose.
+- json.decode d'une chaîne vide ou nil plante : tester la chaîne. json.encode d'une table {[1]=..., [3]=...} donne un objet aux clés en chaîne : les clés numériques reviennent en chaîne après décodage.
+- vector3/vector4 sont des types natifs : distance = #(a - b) ; composantes v.x v.y v.z v.w ; convertir en table {x=v.x, y=v.y, z=v.z} avant json.encode ou stockage SQL, et reconstruire avec vector3(t.x, t.y, t.z).
+
+Threads, attentes et source :
+- « attempt to yield across a C-call boundary » ou blocage : Wait / Citizen.Await / lib.callback.await / ESX.AwaitServerCallback uniquement dans CreateThread, un handler d'événement, une commande ou une callback, jamais dans le corps principal du fichier au chargement ni dans un comparateur de table.sort.
+- Boucle infinie sans Wait = serveur ou client figé. Toute boucle while true contient un Wait sur chaque chemin.
+- La globale source change après un Wait : première ligne de chaque handler serveur local src = source, puis n'utiliser que src.
+- IsControlJustPressed dans une boucle qui dort 500 ms rate la touche : Wait(0) seulement quand le joueur est à portée, sinon dormir. Préférer RegisterKeyMapping ou ox_target.
+
+Client / serveur :
+- « attempt to call a nil value (global 'PlayerPedId') » côté serveur, ou « GetPlayers » côté client : chaque native n'existe que d'un côté. Serveur : GetPlayerPed(src), GetEntityCoords(GetPlayerPed(src)), GetPlayers() (renvoie des chaînes : tonumber). Client : PlayerPedId(), PlayerId(), GetActivePlayers(), GetPlayerServerId(PlayerId()).
+- Jamais côté serveur : SetNuiFocus, SendNUIMessage, RegisterNUICallback, DrawMarker, DrawText, AddBlipForCoord, IsControlJustPressed, RegisterKeyMapping, TriggerServerEvent, ESX.ShowNotification, ESX.Game.*, lib.progressBar, lib.showContext, lib.inputDialog.
+- Jamais côté client : TriggerClientEvent, MySQL.*, ESX.GetPlayerFromId, ESX.RegisterServerCallback, ESX.RegisterUsableItem, ESX.RegisterCommand, exports.ox_inventory:AddItem/RemoveItem, DropPlayer, GetPlayerIdentifierByType, SetPlayerRoutingBucket.
+- Événement réseau non reçu : un événement déclenché depuis l'autre côté doit être déclaré avec RegisterNetEvent (AddEventHandler seul ne reçoit pas le réseau). Même nom exact des deux côtés.
+- TriggerClientEvent(nom, cible, ...) : cible = id serveur (nombre) ou -1 pour tous, jamais nil. Ne pas envoyer de grosses tables en boucle.
+- « No such export X in resource Y » : la ressource Y n'est pas démarrée ou démarre après. La mettre dans dependencies du fxmanifest et dans l'ordre des ensure du README ; tester GetResourceState('Y') == 'started' pour une intégration optionnelle. Syntaxe : exports['nom-ressource']:Fonction(...) ou exports.nom_ressource:Fonction(...), avec deux-points.
+
+fxmanifest et chargement :
+- lua54 'yes' obligatoire avec ox_lib ; '@ox_lib/init.lua' en PREMIER dans shared_scripts, une seule fois.
+- '@es_extended/imports.lua' dans shared_scripts (fournit ESX des deux côtés) ; '@oxmysql/lib/MySQL.lua' dans server_scripts uniquement.
+- config.lua et locales en shared_scripts AVANT les fichiers qui les utilisent (sinon Config est nil).
+- ui_page 'html/index.html' et tous les fichiers NUI listés dans files {} ; chemins identiques à la casse près (Linux est sensible à la casse).
+- dependencies { 'es_extended', 'ox_lib', ... } avec les noms exacts des ressources.
+- Une ressource ne doit pas s'appeler comme une ressource existante (esx_*, ox_*, qb-*).
+
+Entités et streaming :
+- CreatePed / CreateVehicle / CreateObject échouent silencieusement si le modèle n'est pas chargé : RequestModel + attente avec délai max (ou lib.requestModel), puis SetModelAsNoLongerNeeded.
+- TaskPlayAnim sans RequestAnimDict ne fait rien : charger le dictionnaire (lib.requestAnimDict) puis RemoveAnimDict.
+- Les entités créées doivent être supprimées dans onResourceStop (sinon PNJ et véhicules fantômes après restart).
+- PNJ posé dans le sol ou en l'air : z - 1.0 pour CreatePed avec des coordonnées de joueur ; PlaceObjectOnGroundProperly pour un objet.
+- Entité d'un autre joueur : NetworkGetNetworkIdFromEntity côté client puis NetworkGetEntityFromNetworkId côté serveur ; vérifier DoesEntityExist.
+
+NUI :
+- Interface bloquée à l'écran (souris coincée) : toujours SetNuiFocus(false, false) à la fermeture, sur Échap et dans onResourceStop.
+- RegisterNUICallback doit appeler cb(...) exactement une fois, sinon le fetch JS reste en attente.
+- fetch vers https://<nom de la ressource>/<callback> avec GetParentResourceName(), méthode POST, corps JSON.
+
+ESX (ESX Legacy récent) :
+- ESX nil : utiliser '@es_extended/imports.lua' ou exports['es_extended']:getSharedObject(), jamais TriggerEvent('esx:getSharedObject').
+- xPlayer nil tant que le personnage n'est pas choisi : tester avant usage.
+- xPlayer.hasItem renvoie une table, pas un booléen : comparer getInventoryItem(nom).count.
+- ESX.OpenContext appelle onSelect(menu, element) ; ESX.Progressbar n'est pas bloquant (code de fin dans onFinish).
+- Stocker xPlayer.identifier (inclut le préfixe charN: du multipersonnage), pas la license.
+- Avec ox_inventory : items dans ox_inventory/data/items.lua, argent liquide = item 'money'.
+
+ox_lib :
+- lib.callback.await(nom, false, ...) côté client (le 2e argument est le délai, false = aucun) ; côté serveur lib.callback.await(nom, src, ...).
+- lib.progressBar renvoie true si terminé, false si annulé : ne donner la récompense (côté serveur) que si true.
+- lib.inputDialog renvoie nil si annulé : tester avant d'indexer.
+- lib.registerContext puis lib.showContext(id) ; les ids de menu sont uniques par ressource (préfixer par le nom de la ressource).
+
+oxmysql :
+- MySQL.single.await renvoie nil si aucune ligne ; MySQL.query.await renvoie une table vide. Colonnes JSON à décoder avec json.decode.
+- Toujours des paramètres ? ; jamais de concaténation de valeurs dans la requête.
+- Ne jamais appeler MySQL au chargement du fichier sans MySQL.ready ou un thread.`;
