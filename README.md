@@ -80,12 +80,37 @@ Le client installe une fois la ressource `fivegen_bridge` (dossier `bridge/`, t�
   add_ace resource.fivegen_bridge command.restart allow
   ensure fivegen_bridge
   ```
+- **Erreurs en jeu** : le bridge (1.3+) repère les lignes `SCRIPT ERROR` que les ressources de `[fivegen]` écrivent dans la console du serveur et les envoie au studio. Elles s'affichent dans l'onglet Problèmes du projet avec un bouton « Corriger ces erreurs », qui part de la vraie erreur (fichier et ligne). Les erreurs côté joueur (console F8) ne sont pas remontées.
+
+## E-mails : mot de passe oublié et confirmation d'adresse
+
+1. Sur alwaysdata : **Emails → Adresses**, crée une adresse (ex. `noreply@ton-domaine.fr`) avec un mot de passe.
+2. Ajoute dans les variables du site : `SMTP_HOST=smtp-<ton-compte>.alwaysdata.net`, `SMTP_PORT=587`, `SMTP_USER` et `MAIL_FROM` (l'adresse), `SMTP_PASS` (son mot de passe). Redémarre.
+3. Dès que `SMTP_HOST` est rempli, les nouveaux comptes doivent confirmer leur adresse pour recevoir les crédits offerts (`FREE_CREDITS`), limités à `FREE_CREDITS_PER_IP` comptes par adresse IP sur 30 jours. Les adresses jetables (yopmail, mailinator…) sont refusées. Les comptes existants sont considérés comme confirmés.
+4. Sans SMTP, tout reste utilisable : les liens sont écrits dans les logs et les crédits offerts sont donnés à l'inscription. `SMTP_HOST=log` active la confirmation en écrivant les e-mails dans les logs, pour tester.
+
+Les clients gèrent leur compte dans le studio (menu compte → **Mon compte**) : adresse, mot de passe, achats, consommation de crédits et suppression du compte (RGPD). Dans `/admin`, le bouton **Détail** d'un client montre ses scripts, générations et achats, et permet de suspendre ou supprimer le compte.
+
+## Sauvegardes
+
+`npm run backup` crée `backups/fivegen-AAAAMMJJ-HHMM.zip` (copie cohérente de la base + tous les projets) et garde les 14 dernières (`BACKUP_KEEP`, dossier `BACKUP_DIR`).
+
+Sur alwaysdata : **Avancé → Tâches planifiées → Ajouter**, type « Commande », valeur `cd ~/FiveGen && node scripts/backup.js`, fréquence tous les jours à 4 h. Télécharge de temps en temps une archive sur ton PC (par SFTP) : une sauvegarde sur le même serveur ne protège pas d'une perte du compte.
+
+Restaurer : arrête le site, remplace `data/fivegen.db` et `data/users/` par le contenu de l'archive, redémarre.
 
 ## Moteur de génération et coûts
 
 - Par défaut : Gemini Flash via son point d'accès compatible OpenAI. **Active la facturation** sur le projet Google lié à la clé : l'offre gratuite est réservée aux tests, ne peut pas servir des utilisateurs dans l'UE, et Google peut y réutiliser les données.
 - Coût indicatif : environ 1 à 3 centimes par génération complète (corrections comprises). Avec un pack à 0,40 €/crédit, la marge est très large. Surveille le volume dans `/admin` (tokens générés sur 24 h).
 - Pour changer de moteur sans toucher au code : `ENGINE_BASE_URL`, `ENGINE_API_KEY` et `ENGINE_MODEL` acceptent n'importe quel service compatible OpenAI (Mistral, OpenRouter, Groq…).
+- **Moteur de secours** : `FALLBACK_BASE_URL`, `FALLBACK_API_KEY`, `FALLBACK_MODEL` désignent un deuxième fournisseur. Il prend le relais quand le principal est saturé après ses essais, ou refuse la requête (clé invalide, facturation coupée). `/admin` indique si le secours est configuré et s'il est en service.
+
+## Référencement
+
+- `/scripts` et une page par famille de script (`/scripts/job-police-esx-qbcore`, `/scripts/hud-fivem`…), rendues côté serveur avec titre, description, balises de partage et données structurées. Le bouton « Générer ce script » ouvre le studio avec l'idée pré-remplie.
+- `/sitemap.xml` et `/robots.txt` sont générés automatiquement (avec `PUBLIC_URL`). Déclare le sitemap dans Google Search Console une fois le domaine en place.
+- Pages à ajouter ou modifier : `server/seo.js` (`SEO_PAGES`).
 
 ## Ce qui protège ton business
 

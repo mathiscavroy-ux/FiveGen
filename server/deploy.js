@@ -34,6 +34,18 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_deployments_server ON deployments(server_id, status);
+  CREATE TABLE IF NOT EXISTS runtime_errors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    message TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    last_at TEXT NOT NULL,
+    UNIQUE (server_id, project_id, message)
+  );
+  CREATE INDEX IF NOT EXISTS idx_runtime_errors_project ON runtime_errors(user_id, project_id);
 `);
 
 const now = () => new Date().toISOString();
@@ -124,6 +136,55 @@ export function reportForServer(server, id, status, message) {
   return r.changes === 1;
 }
 
+// ---- errors printed by deployed resources in the FiveM server console ----
+
+const MAX_ERRORS_PER_PROJECT = 30;
+
+// Lines come from the bridge; only resources this server received from FiveGen count.
+export function recordRuntimeErrors(server, resource, lines) {
+  const d = db
+    .prepare("SELECT user_id, project_id FROM deployments WHERE server_id = ? AND resource = ? AND status = 'started' ORDER BY id DESC LIMIT 1")
+    .get(server.id, String(resource));
+  if (!d) return 0;
+  const upsert = db.prepare(
+    `INSERT INTO runtime_errors (server_id, user_id, project_id, resource, message, last_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (server_id, project_id, message) DO UPDATE SET count = count + 1, last_at = excluded.last_at`,
+  );
+  let n = 0;
+  for (const raw of (Array.isArray(lines) ? lines : []).slice(0, 20)) {
+    // strip terminal colours and FiveM ^1-style colour codes
+    const message = String(raw).replace(/\x1b\[[0-9;]*m/g, "").replace(/\^\d/g, "").trim().slice(0, 1000);
+    if (!message) continue;
+    upsert.run(server.id, d.user_id, d.project_id, String(resource), message, now());
+    n++;
+  }
+  // keep only the most recent ones
+  db.prepare(
+    `DELETE FROM runtime_errors WHERE user_id = ? AND project_id = ? AND id NOT IN
+       (SELECT id FROM runtime_errors WHERE user_id = ? AND project_id = ? ORDER BY last_at DESC LIMIT ?)`,
+  ).run(d.user_id, d.project_id, d.user_id, d.project_id, MAX_ERRORS_PER_PROJECT);
+  return n;
+}
+
+export function listRuntimeErrors(userId, projectId) {
+  return db
+    .prepare(
+      `SELECT e.id, e.message, e.count, e.last_at AS lastAt, s.name AS server FROM runtime_errors e JOIN servers s ON s.id = e.server_id
+       WHERE e.user_id = ? AND e.project_id = ? ORDER BY e.last_at DESC`,
+    )
+    .all(userId, projectId);
+}
+
+export const clearRuntimeErrors = (userId, projectId) => db.prepare("DELETE FROM runtime_errors WHERE user_id = ? AND project_id = ?").run(userId, projectId);
+
+// "@tow_job/server/main.lua:42: attempt to…" → { file: "server/main.lua", line: 42 }
+export function locateRuntimeError(message, resource) {
+  const at = `@${resource}/`;
+  const k = String(message).indexOf(at);
+  const m = k >= 0 ? String(message).slice(k + at.length).match(/^([^:\s)]+):(\d+)/) : null;
+  return m ? { file: m[1], line: Number(m[2]) } : { file: "fxmanifest.lua", line: null };
+}
+
 export function mountDeploy(app) {
   const router = express.Router();
   const bridgeLimiter = rateLimit({ windowMs: 60_000, max: 120, key: (req) => `b${req.ip}` });
@@ -156,6 +217,17 @@ export function mountDeploy(app) {
     } catch (err) {
       sendError(res, err);
     }
+  });
+
+  router.get("/projects/:id/runtime-errors", requireUser, (req, res) => {
+    const project = getProject(req.user.id, req.params.id);
+    res.json(listRuntimeErrors(req.user.id, project.id));
+  });
+
+  router.delete("/projects/:id/runtime-errors", requireUser, (req, res) => {
+    const project = getProject(req.user.id, req.params.id);
+    clearRuntimeErrors(req.user.id, project.id);
+    res.json({ ok: true });
   });
 
   router.get("/deployments/:id", requireUser, (req, res) => {
@@ -193,6 +265,12 @@ export function mountDeploy(app) {
     } catch (err) {
       sendError(res, err);
     }
+  });
+
+  router.post("/bridge/errors", bridgeLimiter, bridgeAuth, (req, res) => {
+    const resource = String(req.body?.resource ?? "");
+    if (!/^[a-z0-9_-]{1,64}$/i.test(resource)) return res.status(400).json({ error: "Ressource invalide." });
+    res.json({ recorded: recordRuntimeErrors(req.fgServer, resource, req.body?.lines) });
   });
 
   app.use("/api", router);

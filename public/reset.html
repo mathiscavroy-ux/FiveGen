@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Nouveau mot de passe — FiveGen</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23ff7a1a'/><path d='M18 46V18h28v7H26v6h16v7H26v8z' fill='%23111'/></svg>" />
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body>
+  <div class="auth-page">
+  <aside class="auth-aside">
+    <a class="brand" href="/"><span class="logo">F</span>FiveGen</a>
+    <div>
+      <h2>Récupère ton compte et tes scripts.</h2>
+    </div>
+    <span class="muted" style="font-size:13px">© FiveGen · <a href="/cgv">Conditions générales</a></span>
+  </aside>
+  <main class="auth-main">
+    <div class="auth-card">
+      <h1>Nouveau mot de passe</h1>
+      <p class="lead">Choisis un mot de passe d'au moins 8 caractères. Tes autres sessions seront déconnectées.</p>
+      <form id="resetForm" novalidate>
+        <label class="field">
+          <span>Nouveau mot de passe</span>
+          <input id="password" class="input" type="password" autocomplete="new-password" minlength="8" required />
+        </label>
+        <label class="field">
+          <span>Confirme-le</span>
+          <input id="confirm" class="input" type="password" autocomplete="new-password" minlength="8" required />
+        </label>
+        <div id="error" class="form-error"></div>
+        <button id="submit" class="btn primary" type="submit">Enregistrer et me connecter</button>
+      </form>
+      <p class="auth-foot"><a href="/login">← Retour à la connexion</a></p>
+    </div>
+  </main>
+  </div>
+  <script type="module">
+    const $ = (s) => document.querySelector(s);
+    const token = new URLSearchParams(location.search).get("token") || "";
+    // keep the token out of the history and of any Referer
+    history.replaceState(null, "", "/reset");
+    if (!token) $("#error").textContent = "Lien incomplet : ouvre le lien reçu par e-mail, ou refais une demande de mot de passe oublié.";
+    $("#resetForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const password = $("#password").value;
+      if (password.length < 8) return ($("#error").textContent = "Au moins 8 caractères.");
+      if (password !== $("#confirm").value) return ($("#error").textContent = "Les deux mots de passe ne sont pas identiques.");
+      $("#submit").disabled = true;
+      try {
+        const res = await fetch("/api/auth/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-FiveGen": "1" },
+          body: JSON.stringify({ token, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Erreur");
+        location.href = "/app";
+      } catch (err) {
+        $("#error").textContent = err.message;
+      } finally {
+        $("#submit").disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

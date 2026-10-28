@@ -744,3 +744,31 @@ table.diff tr.gap td { color: var(--muted); background: var(--panel); text-align
   .brief-head { flex-wrap: wrap; }
   .bq-opt span { font-size: 12.5px; }
 }
+
+/* ---------- account dialog ---------- */
+.account-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; }
+.acc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+.acc-card { display: grid; gap: 8px; align-content: start; border: 1px solid var(--border); background: var(--panel-2); border-radius: var(--radius); padding: 14px; }
+.acc-card h3, .acc-title { margin: 0; font-size: 14px; }
+.acc-title { margin: 20px 0 8px; }
+.acc-status { margin: 0; font-size: 12.5px; }
+.acc-status.ok { color: var(--accent-2); }
+.acc-table { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.acc-table .data, .account-dialog .data { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.account-dialog .data th, .account-dialog .data td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.account-dialog .data th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+.account-dialog .data tr:last-child td { border-bottom: 0; }
+.acc-danger { margin-top: 20px; border: 1px solid rgba(248, 113, 113, .3); border-radius: var(--radius); padding: 0 14px; }
+.acc-danger[open] { padding-bottom: 14px; }
+.acc-danger summary { cursor: pointer; padding: 12px 0; color: #fca5a5; font-weight: 600; }
+.acc-danger p { font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
+
+/* in-game errors reported by the bridge */
+.runtime-box { margin: 10px; border: 1px solid rgba(248, 113, 113, .35); background: rgba(248, 113, 113, .06); border-radius: var(--radius); padding: 10px 12px; }
+.rt-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.rt-head b { color: #fca5a5; }
+.runtime-box ul { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; max-height: 220px; overflow: auto; }
+.runtime-box li { display: grid; gap: 2px; font-size: 12px; }
+.runtime-box li .mono { font-family: var(--mono); white-space: pre-wrap; word-break: break-word; color: var(--text); }
+.runtime-box li .muted { font-size: 11px; }
+.rt-actions { display: flex; gap: 8px; }

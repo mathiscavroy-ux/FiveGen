@@ -139,6 +139,27 @@ test("never overwrites a resource that lives outside [fivegen]", async () => {
   assert.equal(fs.existsSync(path.join(resources, "[fivegen]", "esx_menu")), false);
 });
 
+test("console errors of a deployed resource reach its project, deduplicated", async () => {
+  const { server: s, token } = deploy.createServer(userId, "Errors");
+  const project = makeProject("err_res", [{ path: "fxmanifest.lua", content: "x" }]);
+  const queued = deploy.queueDeployment(userId, s.id, project);
+  deploy.pollForServer(db.db.prepare("SELECT * FROM servers WHERE id = ?").get(s.id));
+  deploy.reportForServer({ id: s.id }, queued.id, "started", "ok");
+
+  const send = (body) =>
+    fetch(`${baseUrl}/api/bridge/errors`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+  const line = "^1SCRIPT ERROR: @err_res/server/main.lua:12: attempt to index a nil value (local 'xPlayer')^7";
+  assert.equal((await send({ resource: "err_res", lines: [line] })).recorded, 1);
+  await send({ resource: "err_res", lines: [line] });
+  assert.equal((await send({ resource: "never_deployed", lines: [line] })).recorded, 0);
+
+  const errors = deploy.listRuntimeErrors(userId, project.id);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].count, 2);
+  assert.doesNotMatch(errors[0].message, /\^\d/);
+  assert.deepEqual(deploy.locateRuntimeError(errors[0].message, "err_res"), { file: "server/main.lua", line: 12 });
+});
+
 test("a revoked token is refused", async () => {
   const { server: s, token } = deploy.createServer(userId, "Revoked");
   assert.ok(deploy.deleteServer(userId, s.id));

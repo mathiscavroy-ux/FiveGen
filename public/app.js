@@ -176,6 +176,7 @@ function renderAccount() {
   $("#costLine").textContent = plural(me.costs.generate, "crédit");
   $("#freeRefinesLine").textContent = me.freeRefines;
   $("#demoBanner").classList.toggle("hidden", !state.options?.demo);
+  $("#verifyBanner").classList.toggle("hidden", me.emailVerified);
 }
 
 function openRedeem(highlightPack) {
@@ -256,7 +257,96 @@ async function handlePaymentReturn() {
   } else if (params.has("buy")) {
     clean();
     openRedeem(params.get("buy"));
+  } else if (params.has("idea")) {
+    clean();
+    $("#fDescription").value = params.get("idea").slice(0, 2000);
+  } else if (params.has("verified")) {
+    clean();
+    const v = params.get("verified");
+    if (v === "expired") toast("Lien de confirmation expiré ou déjà utilisé. Renvoie-toi un e-mail depuis le bandeau.", "err");
+    else toast(v.startsWith("credits-") ? `Adresse confirmée ✓ +${plural(Number(v.slice(8)), "crédit")} offerts.` : "Adresse e-mail confirmée ✓", "ok");
   }
+}
+
+// ---------- account page ----------
+
+const KIND_LABELS = { generate: "Génération", refine: "Modification", fix: "Correction" };
+const STATUS_LABELS = { ok: "Réussi", error: "Échec (crédit rendu)", cancelled: "Annulé (crédit rendu)" };
+const shortDate = (iso) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+
+async function openAccount() {
+  $("#accountMenu").classList.add("hidden");
+  const me = state.me;
+  $("#accEmail").value = me.email;
+  $("#accEmailStatus").textContent = me.emailVerified ? "Adresse confirmée ✓" : "Adresse non confirmée : regarde tes e-mails (et les spams).";
+  $("#accEmailStatus").classList.toggle("ok", me.emailVerified);
+  for (const id of ["#accEmailPass", "#accPassCurrent", "#accPassNext", "#accDeletePass"]) $(id).value = "";
+  $("#accPayments").innerHTML = '<tr><td colspan="4" class="muted">Chargement…</td></tr>';
+  $("#accGenerations").innerHTML = '<tr><td colspan="5" class="muted">Chargement…</td></tr>';
+  $("#accountDialog").showModal();
+  try {
+    const { payments, generations } = await api("/api/me/activity");
+    $("#accPayments").innerHTML = payments.length
+      ? payments
+          .map((p) => `<tr><td>${shortDate(p.created_at)}</td><td>${escapeHtml(p.pack_id)}</td><td>+${p.credits}</td><td>${formatPrice(p.amount, p.currency)}</td></tr>`)
+          .join("")
+      : '<tr><td colspan="4" class="muted">Aucun achat pour l\'instant.</td></tr>';
+    $("#accGenerations").innerHTML = generations.length
+      ? generations
+          .map(
+            (g) => `<tr><td>${shortDate(g.created_at)}</td><td>${escapeHtml(g.project_id.replace(/-[a-z0-9]+$/, ""))}</td><td>${KIND_LABELS[g.kind] ?? escapeHtml(g.kind)}</td><td>${g.cost ? `−${g.cost}` : "offert"}</td><td>${STATUS_LABELS[g.status] ?? escapeHtml(g.status)}</td></tr>`,
+          )
+          .join("")
+      : '<tr><td colspan="5" class="muted">Aucune génération pour l\'instant.</td></tr>';
+  } catch (err) {
+    toast(err.message, "err");
+  }
+}
+
+function bindAccount() {
+  $("#btnAccountPage").onclick = openAccount;
+  $("#btnCloseAccount").onclick = () => $("#accountDialog").close();
+  $("#btnResendVerify").onclick = async () => {
+    try {
+      await api("/api/me/resend-verification", { method: "POST" });
+      toast("E-mail envoyé. Pense à regarder dans les spams.", "ok");
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  };
+  $("#emailForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      state.me = { ...state.me, ...(await api("/api/me/email", { method: "POST", body: { email: $("#accEmail").value.trim(), password: $("#accEmailPass").value } })) };
+      renderAccount();
+      $("#accEmailPass").value = "";
+      $("#accEmailStatus").textContent = state.me.emailVerified ? "Adresse confirmée ✓" : "Nouvelle adresse enregistrée : clique sur le lien reçu pour la confirmer.";
+      toast("Adresse mise à jour", "ok");
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+  $("#passForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api("/api/me/password", { method: "POST", body: { current: $("#accPassCurrent").value, next: $("#accPassNext").value } });
+      $("#accPassCurrent").value = "";
+      $("#accPassNext").value = "";
+      toast("Mot de passe changé ✓", "ok");
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+  $("#deleteAccountForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!confirm("Supprimer définitivement ton compte et tous tes scripts ? Cette action est irréversible.")) return;
+    try {
+      await api("/api/me", { method: "DELETE", body: { password: $("#accDeletePass").value } });
+      location.href = "/";
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
 }
 
 async function onRedeem(e) {
@@ -673,11 +763,43 @@ async function openProject(id) {
     resetLive("Projet chargé.");
     location.hash = `#/p/${id}`;
     renderProject();
+    loadRuntimeErrors();
   } catch (e) {
     toast(e.message, "err");
     location.hash = "";
     showView("new");
   }
+}
+
+// Errors the resource printed in the FiveM server console, reported by fivegen_bridge.
+async function loadRuntimeErrors() {
+  const box = $("#runtimeBox");
+  const id = state.current?.id;
+  if (!id) return box.classList.add("hidden");
+  let errors = [];
+  try {
+    errors = await api(`/api/projects/${id}/runtime-errors`);
+  } catch {
+    // deploy not used: nothing to show
+  }
+  if (state.current?.id !== id) return;
+  state.runtimeErrors = errors;
+  box.classList.toggle("hidden", !errors.length);
+  $("#problemCount").textContent = (state.current.validation?.errors?.length ?? 0) + errors.length || "";
+  if (!errors.length) return;
+  box.innerHTML = `<div class="rt-head"><b>${errors.length} erreur${errors.length > 1 ? "s" : ""} en jeu</b><span class="muted">remontée${errors.length > 1 ? "s" : ""} par ton serveur FiveM</span></div>
+    <ul>${errors.map((e) => `<li><span class="mono">${escapeHtml(e.message)}</span><span class="muted">${e.count}× · ${escapeHtml(e.server)} · ${timeAgo(e.lastAt)}</span></li>`).join("")}</ul>
+    <div class="rt-actions"><button class="btn primary small" id="btnFixRuntime">Corriger ces erreurs${state.me.costs.fix ? "" : " (gratuit)"}</button><button class="btn ghost small" id="btnClearRuntime">Ignorer</button></div>`;
+  $("#btnFixRuntime").onclick = async () => {
+    if (state.busy) return;
+    if (state.me.costs.fix > 0 && !confirm(`La correction coûte ${plural(state.me.costs.fix, "crédit")}. Continuer ?`)) return;
+    box.classList.add("hidden");
+    await runStream(`/api/projects/${id}/fix`, { runtime: true });
+  };
+  $("#btnClearRuntime").onclick = async () => {
+    await api(`/api/projects/${id}/runtime-errors`, { method: "DELETE" }).catch(() => {});
+    loadRuntimeErrors();
+  };
 }
 
 function selectTab(name) {
@@ -1608,6 +1730,11 @@ function bind() {
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".account")) $("#accountMenu").classList.add("hidden");
   });
+  bindAccount();
+  // in-game errors keep arriving while the server runs
+  setInterval(() => {
+    if (state.current?.id && !state.busy && document.visibilityState === "visible") loadRuntimeErrors();
+  }, 30000);
   $("#btnLogout").onclick = async () => {
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     location.href = "/";

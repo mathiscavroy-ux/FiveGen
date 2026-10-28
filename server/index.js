@@ -8,7 +8,8 @@ import { runEngine, runBrief, engineStatus, EngineError } from "./engine.js";
 import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
 import { validateProject } from "./validator.js";
-import { mountDeploy } from "./deploy.js";
+import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors } from "./deploy.js";
+import { mountSeo } from "./seo.js";
 import * as db from "./db.js";
 import {
   hashPassword,
@@ -37,7 +38,9 @@ import {
   listVersions,
   getVersionFiles,
   restoreVersion,
+  deleteUserData,
 } from "./projects.js";
+import { mailEnabled, sendPasswordReset, sendVerification } from "./mailer.js";
 
 const LIMITS = { description: 4000, instruction: 2000, fileBytes: 512 * 1024 };
 
@@ -70,6 +73,7 @@ app.use(express.json({ limit: "2mb" }));
 app.use(sessionMiddleware);
 app.use("/api", csrfGuard);
 app.use(express.static(path.join(ROOT, "public"), { extensions: ["html"] }));
+mountSeo(app);
 
 // ---------- SSE helpers ----------
 
@@ -240,15 +244,37 @@ function charge(req, res, cost) {
 
 const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15, message: "Trop de tentatives. Réessaie dans 10 minutes." });
 
+// Throwaway inboxes: accounts made with them only exist to farm free credits.
+const DISPOSABLE = new Set([
+  "yopmail.com", "yopmail.fr", "mailinator.com", "guerrillamail.com", "guerrillamail.info", "sharklasers.com", "10minutemail.com",
+  "10minutemail.net", "temp-mail.org", "tempmail.com", "tempmail.net", "trashmail.com", "trashmail.fr", "jetable.org", "getnada.com",
+  "dispostable.com", "maildrop.cc", "mohmal.com", "throwawaymail.com", "fakeinbox.com", "mailnesia.com", "emailondeck.com", "spamgourmet.com",
+  "mintemail.com", "tempr.email", "discard.email", "moakt.com", "mail.tm", "tmail.ws", "tempail.com", "minuteinbox.com", "crazymailing.com",
+]);
+const disposable = (email) => DISPOSABLE.has(email.split("@")[1]);
+
+const siteUrl = (req) => config.publicUrl || `${req.protocol}://${req.get("host")}`;
+
+async function sendVerificationMail(req, user) {
+  const token = db.createEmailToken(user.id, "verify", 48 * 60);
+  await sendVerification(user.email, `${siteUrl(req)}/api/auth/verify?token=${token}`, user.free_granted ? 0 : config.freeCredits);
+}
+
 app.post("/api/auth/register", authLimiter, async (req, res) => {
   const email = String(req.body?.email ?? "").trim().toLowerCase();
   const password = String(req.body?.password ?? "");
   if (!validEmail(email)) return res.status(400).json({ error: "Adresse e-mail invalide." });
+  if (disposable(email)) return res.status(400).json({ error: "Les adresses e-mail jetables ne sont pas acceptées." });
   if (password.length < 8 || password.length > 200) return res.status(400).json({ error: "Le mot de passe doit faire au moins 8 caractères." });
   if (!req.body?.acceptTerms) return res.status(400).json({ error: "Tu dois accepter les conditions générales." });
   if (db.getUserByEmail(email)) return res.status(409).json({ error: "Un compte existe déjà avec cette adresse." });
   const isAdmin = Boolean(config.adminEmail) && email === config.adminEmail;
-  const user = db.createUser(email, await hashPassword(password), config.freeCredits, isAdmin);
+  // With e-mail available, the free credits wait for the address to be confirmed.
+  const verified = isAdmin || !mailEnabled;
+  let user = db.createUser(email, await hashPassword(password), 0, isAdmin, { verified, ip: req.ip });
+  if (verified) db.grantFreeCredits(user.id, config.freeCredits, isAdmin ? Infinity : config.freeCreditsPerIp);
+  else await sendVerificationMail(req, user).catch((err) => console.error("[fivegen] e-mail de confirmation non envoyé :", err.message));
+  user = db.getUser(user.id);
   startSession(res, user.id);
   res.json(publicUser(user));
 });
@@ -258,9 +284,58 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
   const user = db.getUserByEmail(email);
   const ok = user && (await verifyPassword(String(req.body?.password ?? ""), user.pass_hash));
   if (!ok) return res.status(401).json({ error: "E-mail ou mot de passe incorrect." });
+  if (user.blocked) return res.status(403).json({ error: "Ce compte est suspendu. Contacte le support FiveGen." });
   if (config.adminEmail && email === config.adminEmail && !user.is_admin) db.setAdmin(user.id);
   startSession(res, user.id);
   res.json(publicUser(db.getUser(user.id)));
+});
+
+// Same answer whether or not the address exists, so the form cannot list accounts.
+const forgotLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: "Trop de demandes. Réessaie dans une heure." });
+
+app.post("/api/auth/forgot", forgotLimiter, async (req, res) => {
+  const email = String(req.body?.email ?? "").trim().toLowerCase();
+  const user = validEmail(email) ? db.getUserByEmail(email) : null;
+  if (user && !user.blocked) {
+    const token = db.createEmailToken(user.id, "reset", 60);
+    await sendPasswordReset(user.email, `${siteUrl(req)}/reset?token=${token}`).catch((err) => console.error("[fivegen] e-mail de réinitialisation non envoyé :", err.message));
+  }
+  res.json({ ok: true });
+});
+
+app.post("/api/auth/reset", authLimiter, async (req, res) => {
+  const password = String(req.body?.password ?? "");
+  if (password.length < 8 || password.length > 200) return res.status(400).json({ error: "Le mot de passe doit faire au moins 8 caractères." });
+  const userId = db.consumeEmailToken(req.body?.token, "reset");
+  const user = userId && db.getUser(userId);
+  if (!user) return res.status(400).json({ error: "Lien expiré ou déjà utilisé. Refais une demande de mot de passe oublié." });
+  db.setPassword(user.id, await hashPassword(password));
+  // Receiving the link proves the address, and old sessions must not survive a reset.
+  db.setVerified(user.id);
+  db.deleteUserSessions(user.id);
+  startSession(res, user.id);
+  res.json(publicUser(db.getUser(user.id)));
+});
+
+// Opened from the e-mail: confirms the address, gives the free credits, back to the studio.
+app.get("/api/auth/verify", (req, res) => {
+  const userId = db.consumeEmailToken(req.query.token, "verify");
+  const user = userId && db.getUser(userId);
+  if (!user) return res.redirect("/app?verified=expired");
+  db.setVerified(user.id);
+  const given = db.grantFreeCredits(user.id, config.freeCredits, config.freeCreditsPerIp);
+  res.redirect(`/app?verified=${given ? `credits-${given}` : "ok"}`);
+});
+
+app.post("/api/me/resend-verification", requireUser, forgotLimiter, async (req, res) => {
+  if (req.user.email_verified) return res.json({ ok: true, already: true });
+  try {
+    await sendVerificationMail(req, req.user);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[fivegen] e-mail de confirmation non envoyé :", err.message);
+    res.status(502).json({ error: "Envoi impossible pour le moment. Réessaie plus tard." });
+  }
 });
 
 app.post("/api/auth/logout", (req, res) => {
@@ -275,6 +350,35 @@ app.post("/api/me/password", requireUser, authLimiter, async (req, res) => {
   if (!(await verifyPassword(String(current ?? ""), req.user.pass_hash))) return res.status(400).json({ error: "Mot de passe actuel incorrect." });
   if (String(next ?? "").length < 8) return res.status(400).json({ error: "Le nouveau mot de passe doit faire au moins 8 caractères." });
   db.setPassword(req.user.id, await hashPassword(String(next)));
+  res.json({ ok: true });
+});
+
+app.post("/api/me/email", requireUser, authLimiter, async (req, res) => {
+  const email = String(req.body?.email ?? "").trim().toLowerCase();
+  if (!(await verifyPassword(String(req.body?.password ?? ""), req.user.pass_hash))) return res.status(400).json({ error: "Mot de passe incorrect." });
+  if (!validEmail(email)) return res.status(400).json({ error: "Adresse e-mail invalide." });
+  if (disposable(email)) return res.status(400).json({ error: "Les adresses e-mail jetables ne sont pas acceptées." });
+  if (email === req.user.email) return res.json(publicUser(req.user));
+  if (db.getUserByEmail(email)) return res.status(409).json({ error: "Un compte existe déjà avec cette adresse." });
+  db.setEmail(req.user.id, email);
+  if (mailEnabled) await sendVerificationMail(req, db.getUser(req.user.id)).catch((err) => console.error("[fivegen] e-mail de confirmation non envoyé :", err.message));
+  else db.setVerified(req.user.id);
+  res.json(publicUser(db.getUser(req.user.id)));
+});
+
+// Purchases and credit use, for the account page.
+app.get("/api/me/activity", requireUser, (req, res) => {
+  res.json({ payments: db.listUserPayments(req.user.id), generations: db.listUserGenerations(req.user.id) });
+});
+
+// GDPR erasure: account, sessions, servers and every project file. Payment records stay
+// (accounting obligation) but lose the link to the account.
+app.delete("/api/me", requireUser, authLimiter, async (req, res) => {
+  if (!(await verifyPassword(String(req.body?.password ?? ""), req.user.pass_hash))) return res.status(400).json({ error: "Mot de passe incorrect." });
+  if (running.has(req.user.id)) return res.status(409).json({ error: "Une génération est en cours : attends qu'elle se termine." });
+  deleteUserData(req.user.id);
+  db.deleteUser(req.user.id);
+  endSession(req, res);
   res.json({ ok: true });
 });
 
@@ -400,7 +504,13 @@ app.post("/api/projects/:id/fix", requireUser, async (req, res) => {
   const project = getProject(req.user.id, req.params.id);
   const validation = validateProject(project.files);
   const problems = [...validation.errors, ...(req.body?.includeWarnings ? validation.warnings : [])];
+  // Errors printed by the resource in the FiveM server console (reported by the bridge).
+  const runtime = req.body?.runtime ? listRuntimeErrors(req.user.id, project.id) : [];
+  for (const e of runtime) {
+    problems.push({ ...locateRuntimeError(e.message, project.name), message: `Erreur en jeu (console du serveur, ${e.count}×) : ${e.message}`, level: "error" });
+  }
   if (!problems.length) return res.status(400).json({ error: "Aucun problème à corriger." });
+  if (runtime.length) clearRuntimeErrors(req.user.id, project.id);
   const cost = config.cost.fix;
   if (!charge(req, res, cost)) return;
   await streamPipeline(res, {
@@ -478,6 +588,49 @@ app.post("/api/admin/users/:id/credits", requireUser, requireAdmin, (req, res) =
   const user = db.getUser(Number(req.params.id));
   if (!user) return res.status(404).json({ error: "Utilisateur introuvable." });
   res.json({ credits: db.addCredits(user.id, delta) });
+});
+
+function adminTarget(req, res) {
+  const user = db.getUser(Number(req.params.id));
+  if (!user) {
+    res.status(404).json({ error: "Utilisateur introuvable." });
+    return null;
+  }
+  if (user.id === req.user.id) {
+    res.status(400).json({ error: "Impossible sur ton propre compte." });
+    return null;
+  }
+  return user;
+}
+
+app.get("/api/admin/users/:id", requireUser, requireAdmin, (req, res) => {
+  const user = db.getUser(Number(req.params.id));
+  if (!user) return res.status(404).json({ error: "Utilisateur introuvable." });
+  res.json({
+    user: { id: user.id, email: user.email, credits: user.credits, blocked: Boolean(user.blocked), emailVerified: Boolean(user.email_verified), signupIp: user.signup_ip, createdAt: user.created_at },
+    projects: listProjects(user.id),
+    generations: db.listUserGenerations(user.id, 50),
+    payments: db.listUserPayments(user.id),
+  });
+});
+
+// Suspended accounts keep their data but cannot log in or use the API.
+app.post("/api/admin/users/:id/block", requireUser, requireAdmin, (req, res) => {
+  const user = adminTarget(req, res);
+  if (!user) return;
+  const blocked = req.body?.blocked !== false;
+  db.setBlocked(user.id, blocked);
+  if (blocked) db.deleteUserSessions(user.id);
+  res.json({ blocked });
+});
+
+app.delete("/api/admin/users/:id", requireUser, requireAdmin, (req, res) => {
+  const user = adminTarget(req, res);
+  if (!user) return;
+  if (running.has(user.id)) return res.status(409).json({ error: "Une génération est en cours sur ce compte." });
+  deleteUserData(user.id);
+  db.deleteUser(user.id);
+  res.json({ ok: true });
 });
 
 app.get("/api/admin/codes", requireUser, requireAdmin, (_req, res) => res.json(db.listCodes()));

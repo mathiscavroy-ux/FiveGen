@@ -267,6 +267,10 @@ textarea.input { height: auto; padding: 12px 14px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--text-2); margin: 4px 0 18px; line-height: 1.5; }
 .check input { accent-color: var(--accent); margin-top: 3px; width: 16px; height: 16px; flex: none; }
 .form-error { color: var(--err); font-size: 13.5px; min-height: 20px; margin-bottom: 10px; }
+.form-info { color: var(--ok); font-size: 13.5px; line-height: 1.5; margin-bottom: 12px; border: 1px solid rgba(52, 211, 153, .3); background: rgba(52, 211, 153, .07); border-radius: 10px; padding: 10px 12px; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; margin: -6px 0 10px; }
+.link-btn:hover { text-decoration: underline; }
+.auth-foot .link-btn { margin: 0; }
 .auth-card .btn { width: 100%; height: 46px; }
 .auth-foot { margin-top: 22px; font-size: 13px; color: var(--muted); text-align: center; }
 
@@ -392,3 +396,31 @@ table.data .input { height: 34px; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .mock-code .line { opacity: 1; }
 }
+
+/* admin: client status and detail */
+.tag { display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-strong, rgba(255,255,255,.13)); color: var(--muted); }
+.tag.ok { color: var(--ok); border-color: rgba(52, 211, 153, .35); }
+.tag.err { color: var(--err); border-color: rgba(248, 113, 113, .4); }
+.user-dialog { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; background: #0f1117; color: var(--text); border: 1px solid rgba(255,255,255,.13); border-radius: 16px; padding: 22px; }
+.user-dialog::backdrop { background: rgba(0, 0, 0, .6); }
+.user-dialog h3 { margin: 18px 0 8px; font-size: 15px; }
+.ud-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.ud-head h2 { margin: 0; font-size: 18px; word-break: break-all; }
+.btn.danger { background: rgba(248, 113, 113, .1); border-color: rgba(248, 113, 113, .35); color: #fca5a5; }
+
+/* SEO landing pages (/scripts) */
+.seo { padding: 48px 0 96px; max-width: 860px; }
+.seo h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -1px; margin: 6px 0 14px; }
+.seo h2 { font-size: 20px; margin: 40px 0 12px; }
+.seo-kicker { font-size: 13px; color: var(--muted); margin: 0; }
+.seo-kicker a { color: var(--muted); }
+.seo-lead { font-size: 17px; line-height: 1.6; color: var(--text-2); margin: 0 0 22px; }
+.seo-list, .seo-steps { line-height: 1.7; color: var(--text-2); padding-left: 20px; }
+.seo-steps li { margin-bottom: 10px; }
+.seo-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.seo-links a { padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 13.5px; color: var(--text-2); text-decoration: none; }
+.seo-links a:hover { border-color: var(--accent); color: var(--text); }
+.seo-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 20px 0 28px; }
+.seo-card { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-decoration: none; color: var(--text); }
+.seo-card span { font-size: 13.5px; line-height: 1.5; color: var(--text-2); }
+.seo-card:hover { border-color: var(--accent); }

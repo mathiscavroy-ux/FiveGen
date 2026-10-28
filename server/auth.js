@@ -58,6 +58,7 @@ export function sessionMiddleware(req, _res, next) {
 
 export function requireUser(req, res, next) {
   if (!req.user) return res.status(401).json({ error: "Connecte-toi pour continuer." });
+  if (req.user.blocked) return res.status(403).json({ error: "Ce compte est suspendu. Contacte le support FiveGen.", code: "BLOCKED" });
   next();
 }
 
@@ -100,6 +101,7 @@ export function publicUser(user) {
     email: user.email,
     credits: user.credits,
     isAdmin: Boolean(user.is_admin),
+    emailVerified: Boolean(user.email_verified),
     costs: config.cost,
     freeRefines: config.freeRefines,
     shopUrl: config.shopUrl,

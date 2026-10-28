@@ -36,7 +36,7 @@
           <span>Adresse e-mail</span>
           <input id="email" class="input" type="email" autocomplete="email" required />
         </label>
-        <label class="field">
+        <label class="field" id="passRow">
           <span>Mot de passe</span>
           <input id="password" class="input" type="password" autocomplete="current-password" minlength="8" required />
         </label>
@@ -44,11 +44,13 @@
           <input id="terms" type="checkbox" />
           <span>J'accepte les <a href="/cgv" target="_blank">conditions générales</a>, y compris l'utilisation d'un moteur de génération automatique pour produire les ressources.</span>
         </label>
+        <button type="button" id="forgotLink" class="link-btn">Mot de passe oublié ?</button>
         <div id="error" class="form-error"></div>
+        <div id="info" class="form-info hidden"></div>
         <button id="submit" class="btn primary" type="submit">Se connecter</button>
         <p id="bonus" class="auth-foot hidden">Crédits offerts à l'inscription pour tester.</p>
       </form>
-      <p class="auth-foot"><a href="/">← Retour au site</a></p>
+      <p class="auth-foot"><button type="button" id="backLogin" class="link-btn hidden">← Retour à la connexion</button> <a href="/" id="backSite">← Retour au site</a></p>
     </div>
   </main>
   </div>
@@ -62,23 +64,35 @@
     const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/app";
 
     function render() {
+      const forgot = mode === "forgot";
+      document.querySelector(".tabs").classList.toggle("hidden", forgot);
+      $("#passRow").classList.toggle("hidden", forgot);
+      $("#forgotLink").classList.toggle("hidden", mode !== "login");
+      $("#backLogin").classList.toggle("hidden", !forgot);
+      $("#backSite").classList.toggle("hidden", forgot);
+      $("#info").classList.add("hidden");
       document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
       $("#termsRow").classList.toggle("hidden", mode !== "register");
       $("#bonus").classList.toggle("hidden", mode !== "register");
-      $("#submit").textContent = mode === "register" ? "Créer mon compte" : "Se connecter";
-      $("#title").textContent = mode === "register" ? "Crée ton compte" : "Bon retour";
-      $("#subtitle").textContent = mode === "register" ? "Ta première ressource en quelques minutes." : "Connecte-toi pour retrouver tes scripts.";
+      $("#submit").textContent = forgot ? "Recevoir le lien" : mode === "register" ? "Créer mon compte" : "Se connecter";
+      $("#title").textContent = forgot ? "Mot de passe oublié" : mode === "register" ? "Crée ton compte" : "Bon retour";
+      $("#subtitle").textContent = forgot
+        ? "Entre ton adresse : tu recevras un lien pour choisir un nouveau mot de passe."
+        : mode === "register" ? "Ta première ressource en quelques minutes." : "Connecte-toi pour retrouver tes scripts.";
       $("#password").autocomplete = mode === "register" ? "new-password" : "current-password";
       $("#error").textContent = "";
     }
 
     document.querySelectorAll("[data-mode]").forEach((b) => (b.onclick = () => ((mode = b.dataset.mode), render())));
+    $("#forgotLink").onclick = () => ((mode = "forgot"), render());
+    $("#backLogin").onclick = () => ((mode = "login"), render());
 
     $("#authForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const body = { email: $("#email").value.trim(), password: $("#password").value, acceptTerms: $("#terms").checked };
       if (mode === "register" && !body.acceptTerms) return ($("#error").textContent = "Accepte les conditions générales pour continuer.");
       $("#submit").disabled = true;
+      $("#error").textContent = "";
       try {
         const res = await fetch(`/api/auth/${mode}`, {
           method: "POST",
@@ -87,6 +101,11 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || "Erreur");
+        if (mode === "forgot") {
+          $("#info").textContent = "Si un compte existe avec cette adresse, un e-mail vient de partir. Pense à regarder dans les spams.";
+          $("#info").classList.remove("hidden");
+          return;
+        }
         location.href = next;
       } catch (err) {
         $("#error").textContent = err.message;

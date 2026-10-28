@@ -50,6 +50,8 @@ export const config = {
   // Modifications included with each script before COST_REFINE applies.
   freeRefines: int(env.FREE_REFINES, 3),
   autoFixRounds: int(env.AUTO_FIX_ROUNDS, 2),
+  // Accounts per network address that receive the free credits, over 30 days.
+  freeCreditsPerIp: int(env.FREE_CREDITS_PER_IP, 2),
   shopUrl: env.SHOP_URL || "",
   supportUrl: env.SUPPORT_URL || "",
   sessionDays: int(env.SESSION_DAYS, 30),
@@ -63,6 +65,25 @@ export const config = {
     taxCode: env.STRIPE_TAX_CODE || "txcd_10000000",
   },
   packs: loadPacks(env.CREDIT_PACKS),
+
+  // Outgoing e-mail (password reset, address check). Without SMTP_HOST the links are
+  // written to the server log and accounts are not asked to confirm their address.
+  mail: {
+    host: env.SMTP_HOST || "",
+    port: int(env.SMTP_PORT, 587),
+    secure: env.SMTP_SECURE === "1" || int(env.SMTP_PORT, 587) === 465,
+    user: env.SMTP_USER || "",
+    pass: env.SMTP_PASS || "",
+    from: env.MAIL_FROM || env.SMTP_USER || "",
+  },
+
+  // Second OpenAI-compatible provider used when the main one keeps failing.
+  fallbackEngine: {
+    baseUrl: (env.FALLBACK_BASE_URL || "").replace(/\/+$/, ""),
+    apiKey: env.FALLBACK_API_KEY || "",
+    model: env.FALLBACK_MODEL || "",
+    maxTokens: int(env.FALLBACK_MAX_TOKENS, 32000),
+  },
 };
 
 // Credit packs sold on the site. Prices in cents. Override with CREDIT_PACKS (JSON array).

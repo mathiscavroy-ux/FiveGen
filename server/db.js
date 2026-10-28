@@ -53,13 +53,101 @@ db.exec(`
 
 const now = () => new Date().toISOString();
 
+// Columns added after the first release. Accounts created before e-mail checks
+// existed are treated as verified and as having had their free credits.
+const userColumns = new Set(db.prepare("PRAGMA table_info(users)").all().map((c) => c.name));
+if (!userColumns.has("email_verified")) {
+  db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
+  db.exec("UPDATE users SET email_verified = 1");
+}
+if (!userColumns.has("blocked")) db.exec("ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0");
+if (!userColumns.has("signup_ip")) db.exec("ALTER TABLE users ADD COLUMN signup_ip TEXT");
+if (!userColumns.has("free_granted")) {
+  db.exec("ALTER TABLE users ADD COLUMN free_granted INTEGER NOT NULL DEFAULT 0");
+  db.exec("UPDATE users SET free_granted = 1");
+}
+// 1 when the free credits were actually given (not refused by the per-address limit).
+if (!userColumns.has("credits_from_free")) db.exec("ALTER TABLE users ADD COLUMN credits_from_free INTEGER NOT NULL DEFAULT 0");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS email_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+`);
+
 // ---------- users ----------
 
-export function createUser(email, passHash, credits, isAdmin) {
+export function createUser(email, passHash, credits, isAdmin, { verified = true, ip = null } = {}) {
   const r = db
-    .prepare("INSERT INTO users (email, pass_hash, credits, is_admin, created_at) VALUES (?, ?, ?, ?, ?)")
-    .run(email, passHash, credits, isAdmin ? 1 : 0, now());
+    .prepare("INSERT INTO users (email, pass_hash, credits, is_admin, created_at, email_verified, signup_ip, free_granted, credits_from_free) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(email, passHash, credits, isAdmin ? 1 : 0, now(), verified ? 1 : 0, ip, credits > 0 ? 1 : 0, credits > 0 ? 1 : 0);
   return getUser(Number(r.lastInsertRowid));
+}
+
+export const setVerified = (id) => db.prepare("UPDATE users SET email_verified = 1 WHERE id = ?").run(id);
+export const setBlocked = (id, blocked) => db.prepare("UPDATE users SET blocked = ? WHERE id = ?").run(blocked ? 1 : 0, id).changes === 1;
+export const setEmail = (id, email) => db.prepare("UPDATE users SET email = ?, email_verified = 0 WHERE id = ?").run(email, id);
+export const deleteUser = (id) => db.prepare("DELETE FROM users WHERE id = ?").run(id).changes === 1;
+
+// Free credits are given once per account, and to a limited number of accounts per
+// network address, so creating accounts in a loop does not pay.
+export function grantFreeCredits(userId, amount, maxPerIp) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const u = getUser(userId);
+    if (!u || u.free_granted) {
+      db.exec("ROLLBACK");
+      return 0;
+    }
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    const sameIp = u.signup_ip
+      ? db.prepare("SELECT COUNT(*) AS n FROM users WHERE signup_ip = ? AND free_granted = 1 AND credits_from_free = 1 AND created_at > ? AND id <> ?").get(u.signup_ip, since, userId).n
+      : 0;
+    const given = sameIp < maxPerIp ? amount : 0;
+    db.prepare("UPDATE users SET free_granted = 1, credits_from_free = ?, credits = credits + ? WHERE id = ?").run(given ? 1 : 0, given, userId);
+    db.exec("COMMIT");
+    return given;
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
+
+// ---------- one-time e-mail links (password reset, address check) ----------
+
+export function createEmailToken(userId, kind, minutes) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  db.prepare("DELETE FROM email_tokens WHERE user_id = ? AND kind = ?").run(userId, kind);
+  db.prepare("INSERT INTO email_tokens (token_hash, user_id, kind, expires_at) VALUES (?, ?, ?, ?)").run(
+    hashToken(token),
+    userId,
+    kind,
+    new Date(Date.now() + minutes * 60000).toISOString(),
+  );
+  return token;
+}
+
+// Single use: the token is deleted when read. Returns the user id or null.
+export function consumeEmailToken(token, kind) {
+  if (!token) return null;
+  const h = hashToken(String(token));
+  const row = db.prepare("SELECT user_id FROM email_tokens WHERE token_hash = ? AND kind = ? AND expires_at > ?").get(h, kind, now());
+  db.prepare("DELETE FROM email_tokens WHERE token_hash = ?").run(h);
+  return row?.user_id ?? null;
+}
+
+export const deleteUserSessions = (userId) => db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+
+export function listUserPayments(userId) {
+  return db.prepare("SELECT created_at, pack_id, credits, amount, currency FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT 100").all(userId);
+}
+
+export function listUserGenerations(userId, limit = 100) {
+  return db
+    .prepare("SELECT created_at, project_id, kind, cost, status, output_tokens FROM generations WHERE user_id = ? ORDER BY id DESC LIMIT ?")
+    .all(userId, limit);
 }
 
 export const getUser = (id) => db.prepare("SELECT * FROM users WHERE id = ?").get(id);
@@ -82,7 +170,7 @@ export function addCredits(userId, amount) {
 export function listUsers() {
   return db
     .prepare(
-      `SELECT u.id, u.email, u.credits, u.is_admin, u.created_at,
+      `SELECT u.id, u.email, u.credits, u.is_admin, u.created_at, u.email_verified, u.blocked, u.signup_ip,
               (SELECT COUNT(*) FROM generations g WHERE g.user_id = u.id AND g.status = 'ok') AS generations
        FROM users u ORDER BY u.created_at DESC`,
     )

@@ -23,7 +23,7 @@ const http = require("http");
 const https = require("https");
 const { execFile } = require("child_process");
 
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const TOKEN = GetConvar("fivegen_token", "");
 const BASE = GetConvar("fivegen_url", "https://flazehdr.alwaysdata.net").replace(/\/+$/, "");
 const FOLDER = GetConvar("fivegen_folder", "[fivegen]");
@@ -42,6 +42,33 @@ function resourcesRoot() {
 }
 const TARGET = path.join(resourcesRoot(), FOLDER);
 const STAGING = path.join(GetResourcePath(GetCurrentResourceName()), ".staging");
+
+// Errors printed in the server console by the resources under [fivegen] are sent to
+// the studio, where they can be fixed from the real error message.
+const pendingErrors = new Map(); // resource -> Set of lines
+const ERROR_LINE = /SCRIPT ERROR|Error (loading|parsing|running)|Failed to load|Couldn't (load|start)|attempt to (index|call|compare|perform|concatenate)/i;
+
+function managed(resource) {
+  const p = GetResourcePath(resource);
+  return Boolean(p) && inside(p, TARGET);
+}
+
+if (typeof RegisterConsoleListener === "function") {
+  RegisterConsoleListener((channel, message) => {
+    const m = /^(?:script|resources):(.+)$/.exec(String(channel));
+    if (!m || m[1] === GetCurrentResourceName() || !ERROR_LINE.test(String(message)) || !managed(m[1])) return;
+    const lines = pendingErrors.get(m[1]) ?? new Set();
+    if (lines.size < 20) lines.add(String(message).trim().slice(0, 1000));
+    pendingErrors.set(m[1], lines);
+  });
+}
+
+async function flushErrors() {
+  for (const [resource, lines] of [...pendingErrors]) {
+    pendingErrors.delete(resource);
+    await request("POST", "/api/bridge/errors", { resource, lines: [...lines] }).catch(() => {});
+  }
+}
 
 function request(method, urlPath, body) {
   return new Promise((resolve, reject) => {
@@ -205,6 +232,7 @@ async function loop() {
       } else {
         if (warned) log(`Reconnecté (serveur « ${res.json.server} »).`);
         warned = "";
+        await flushErrors();
         if (res.json.deployment) {
           await deploy(res.json.deployment);
           wait = 500; // something else may be queued

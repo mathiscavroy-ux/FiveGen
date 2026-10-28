@@ -39,11 +39,26 @@
     <table class="data"><thead><tr><th>Date</th><th>Client</th><th>Pack</th><th>Crédits</th><th>Montant</th><th>Session Stripe</th></tr></thead><tbody id="payments"></tbody></table>
 
     <h2>Clients</h2>
-    <table class="data"><thead><tr><th>E-mail</th><th>Crédits</th><th>Scripts</th><th>Inscrit</th><th>Ajuster</th></tr></thead><tbody id="users"></tbody></table>
+    <input id="userSearch" class="input" placeholder="Rechercher un e-mail ou une adresse IP…" style="max-width:360px;margin-bottom:10px" />
+    <table class="data"><thead><tr><th>E-mail</th><th>Statut</th><th>Crédits</th><th>Scripts</th><th>Inscrit</th><th>Ajuster</th><th></th></tr></thead><tbody id="users"></tbody></table>
 
     <h2>Dernières erreurs</h2>
     <table class="data"><thead><tr><th>Date</th><th>Client</th><th>Action</th><th>Détail</th></tr></thead><tbody id="errors"></tbody></table>
   </main>
+  <dialog id="userDialog" class="user-dialog">
+    <div class="ud-head"><h2 id="udTitle"></h2><button class="btn small" id="udClose">Fermer</button></div>
+    <p id="udMeta" class="muted"></p>
+    <div class="row" style="gap:8px;margin:10px 0 18px">
+      <button class="btn small" id="udBlock"></button>
+      <button class="btn small danger" id="udDelete">Supprimer le compte</button>
+    </div>
+    <h3>Scripts</h3>
+    <table class="data"><thead><tr><th>Nom</th><th>Framework</th><th>Type</th><th>Modifié</th></tr></thead><tbody id="udProjects"></tbody></table>
+    <h3>Générations</h3>
+    <table class="data"><thead><tr><th>Date</th><th>Script</th><th>Action</th><th>Coût</th><th>Statut</th><th>Tokens</th></tr></thead><tbody id="udGenerations"></tbody></table>
+    <h3>Achats</h3>
+    <table class="data"><thead><tr><th>Date</th><th>Pack</th><th>Crédits</th><th>Montant</th></tr></thead><tbody id="udPayments"></tbody></table>
+  </dialog>
   <div id="toasts" class="toasts"></div>
 
   <script type="module">
@@ -126,15 +141,71 @@
         : `<tr><td colspan="6" class="muted">Aucun code.</td></tr>`;
     }
 
-    async function loadUsers() {
-      const users = await api("/api/admin/users");
-      $("#users").innerHTML = users
-        .map(
-          (u) => `<tr><td>${esc(u.email)}${u.is_admin ? ' <span class="muted">(admin)</span>' : ""}</td><td><b id="cr${u.id}">${u.credits}</b></td><td>${u.generations}</td><td>${date(u.created_at)}</td>
-          <td><div class="row"><input class="input" type="number" value="10" style="width:90px" id="d${u.id}" /><button class="btn small" data-add="${u.id}">Appliquer</button></div></td></tr>`,
-        )
-        .join("");
+    let users = [];
+    const status = (u) => (u.blocked ? '<span class="tag err">suspendu</span>' : u.email_verified ? '<span class="tag ok">vérifié</span>' : '<span class="tag">non vérifié</span>');
+
+    function renderUsers() {
+      const q = $("#userSearch").value.trim().toLowerCase();
+      const list = users.filter((u) => !q || u.email.includes(q) || (u.signup_ip ?? "").includes(q));
+      $("#users").innerHTML = list.length
+        ? list
+            .map(
+              (u) => `<tr><td>${esc(u.email)}${u.is_admin ? ' <span class="muted">(admin)</span>' : ""}</td><td>${status(u)}</td><td><b id="cr${u.id}">${u.credits}</b></td><td>${u.generations}</td><td>${date(u.created_at)}</td>
+              <td><div class="row"><input class="input" type="number" value="10" style="width:90px" id="d${u.id}" /><button class="btn small" data-add="${u.id}">Appliquer</button></div></td>
+              <td><button class="btn small" data-user="${u.id}">Détail</button></td></tr>`,
+            )
+            .join("")
+        : '<tr><td colspan="7" class="muted">Aucun client.</td></tr>';
     }
+
+    async function loadUsers() {
+      users = await api("/api/admin/users");
+      renderUsers();
+    }
+
+    let current = null;
+    async function openUser(id) {
+      const d = await api(`/api/admin/users/${id}`);
+      current = d.user;
+      $("#udTitle").textContent = d.user.email;
+      $("#udMeta").textContent = `${d.user.credits} crédit(s) · inscrit le ${date(d.user.createdAt)} · IP d'inscription ${d.user.signupIp ?? "inconnue"} · ${d.user.emailVerified ? "e-mail vérifié" : "e-mail non vérifié"}${d.user.blocked ? " · SUSPENDU" : ""}`;
+      $("#udBlock").textContent = d.user.blocked ? "Réactiver le compte" : "Suspendre le compte";
+      $("#udProjects").innerHTML = d.projects.length
+        ? d.projects.map((p) => `<tr><td>${esc(p.name)}</td><td>${esc(p.framework)}</td><td>${esc(p.type)}</td><td>${date(p.updatedAt)}</td></tr>`).join("")
+        : '<tr><td colspan="4" class="muted">Aucun script.</td></tr>';
+      $("#udGenerations").innerHTML = d.generations.length
+        ? d.generations.map((g) => `<tr><td>${date(g.created_at)}</td><td>${esc(g.project_id)}</td><td>${esc(g.kind)}</td><td>${g.cost}</td><td>${esc(g.status)}</td><td>${g.output_tokens ?? "—"}</td></tr>`).join("")
+        : '<tr><td colspan="6" class="muted">Aucune génération.</td></tr>';
+      $("#udPayments").innerHTML = d.payments.length
+        ? d.payments.map((p) => `<tr><td>${date(p.created_at)}</td><td>${esc(p.pack_id)}</td><td>${p.credits}</td><td>${money(p.amount, p.currency.toUpperCase())}</td></tr>`).join("")
+        : '<tr><td colspan="4" class="muted">Aucun achat.</td></tr>';
+      if (!$("#userDialog").open) $("#userDialog").showModal();
+    }
+
+    $("#userSearch").addEventListener("input", renderUsers);
+    $("#udClose").onclick = () => $("#userDialog").close();
+    $("#udBlock").onclick = async () => {
+      try {
+        await api(`/api/admin/users/${current.id}/block`, { method: "POST", body: { blocked: !current.blocked } });
+        toast(current.blocked ? "Compte réactivé" : "Compte suspendu", "ok");
+        await openUser(current.id);
+        loadUsers();
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    };
+    $("#udDelete").onclick = async () => {
+      if (!confirm(`Supprimer définitivement ${current.email} et tous ses scripts ?`)) return;
+      try {
+        await api(`/api/admin/users/${current.id}`, { method: "DELETE" });
+        $("#userDialog").close();
+        toast("Compte supprimé", "ok");
+        loadUsers();
+        loadOverview();
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    };
 
     $("#codeForm").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -159,12 +230,14 @@
     document.addEventListener("click", async (e) => {
       const del = e.target.closest("[data-del]");
       const add = e.target.closest("[data-add]");
+      const detail = e.target.closest("[data-user]");
       try {
         if (del && confirm(`Supprimer le code ${del.dataset.del} ?`)) {
           await api(`/api/admin/codes/${encodeURIComponent(del.dataset.del)}`, { method: "DELETE" });
           loadCodes();
           loadOverview();
         }
+        if (detail) await openUser(detail.dataset.user);
         if (add) {
           const id = add.dataset.add;
           const { credits } = await api(`/api/admin/users/${id}/credits`, { method: "POST", body: { delta: Number($(`#d${id}`).value) } });

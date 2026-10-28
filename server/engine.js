@@ -18,6 +18,15 @@ const upstream = {
 // reasoning_effort is only understood by the default upstream.
 if (upstream.baseUrl.includes("generativelanguage.googleapis.com")) upstream.id = "gemini";
 
+// Second provider, used once the main one keeps failing (outage, quota, billing).
+const fb = config.fallbackEngine;
+const fallback = fb.baseUrl && fb.model
+  ? { id: fb.baseUrl.includes("generativelanguage.googleapis.com") ? "gemini" : "fallback", label: "FiveGen Engine (secours)", baseUrl: fb.baseUrl, apiKey: fb.apiKey, model: fb.model, maxTokens: fb.maxTokens, needsKey: true, stallMs: upstream.stallMs }
+  : null;
+const primaryModels = () => [config.engine.model, ...config.engine.fallbackModels.filter((m) => m !== config.engine.model)];
+// Content refusals are the same everywhere: switching provider would not help.
+const worthFallback = (err) => fallback && err instanceof ProviderError && !/filtre de contenu/.test(err.message);
+
 const mock = config.mock ? await import("./mock.js") : null;
 const mockRun = mock?.runMock ?? null;
 const mockBrief = mock?.mockBrief ?? null;
@@ -67,17 +76,19 @@ export async function runEngine({ userContent, onEvent, signal }) {
       onEvent(type, payload);
     }
   };
-  const models = [config.engine.model, ...config.engine.fallbackModels.filter((m) => m !== config.engine.model)];
   // Each model gets a few spaced attempts: overload errors from the upstream are usually momentary.
-  const attempts = mockRun ? [null] : models.flatMap((m) => Array.from({ length: RETRIES_PER_MODEL }, (_, i) => ({ model: m, retry: i })));
+  const retries = (provider) => Array.from({ length: RETRIES_PER_MODEL }, (_, i) => ({ provider, retry: i }));
+  const attempts = mockRun ? [null] : primaryModels().flatMap((model) => retries({ ...upstream, model }));
+  if (fallback && !mockRun) attempts.push(...retries(fallback));
   let lastError;
-  for (const attempt of attempts) {
-    const model = attempt?.model;
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    const model = attempt?.provider.model;
     if (attempt?.retry) await wait(1500 * attempt.retry, signal);
     try {
       const r = mockRun
         ? await mockRun({ userContent, onEvent: forward, signal })
-        : await runOpenAICompat({ provider: { ...upstream, model }, userContent, onEvent: forward, signal });
+        : await runOpenAICompat({ provider: attempt.provider, userContent, onEvent: forward, signal });
       return {
         files: r.files,
         deletes: r.deletes,
@@ -89,7 +100,15 @@ export async function runEngine({ userContent, onEvent, signal }) {
     } catch (err) {
       lastError = err;
       // Only switch model while nothing reached the client, otherwise the stream would repeat itself.
-      if (emitted || !isOverload(err) || signal?.aborted) break;
+      if (emitted || signal?.aborted) break;
+      if (!isOverload(err)) {
+        // A configuration error on the main provider: go straight to the fallback.
+        const next = attempts.findIndex((a, j) => j > i && a?.provider === fallback);
+        if (attempt?.provider === fallback || next < 0 || !worthFallback(err)) break;
+        console.warn(`[fivegen] ${model} en erreur (${err.message}), bascule sur le moteur de secours`);
+        i = next - 1;
+        continue;
+      }
       console.warn(`[fivegen] ${model} indisponible (${err.status}), nouvel essai`);
     }
   }
@@ -100,18 +119,23 @@ export async function runEngine({ userContent, onEvent, signal }) {
 export async function runBrief({ description, server, signal }) {
   if (mockBrief) return sanitizeBrief(mockBrief(description));
   const user = buildBriefMessage(description, server);
-  const models = [config.engine.model, ...config.engine.fallbackModels.filter((m) => m !== config.engine.model)];
+  const providers = primaryModels().map((model) => ({ ...upstream, model }));
+  if (fallback) providers.push(fallback);
   let lastError;
-  for (const model of models) {
+  for (const provider of providers) {
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt) await wait(1200, signal);
       try {
-        const text = await completeOpenAICompat({ provider: { ...upstream, model }, system: BRIEF_SYSTEM, user, signal });
+        const text = await completeOpenAICompat({ provider, system: BRIEF_SYSTEM, user, signal });
         return sanitizeBrief(extractJson(text));
       } catch (err) {
         lastError = err;
-        if (signal?.aborted || (err instanceof ProviderError && !isOverload(err))) throw toPublic(err);
-        console.warn(`[fivegen] questions : ${model} essai ${attempt + 1} raté (${err.message})`);
+        if (signal?.aborted) throw toPublic(err);
+        if (err instanceof ProviderError && !isOverload(err)) {
+          if (provider !== fallback && worthFallback(err)) break; // next provider (ends on the fallback)
+          throw toPublic(err);
+        }
+        console.warn(`[fivegen] questions : ${provider.model} essai ${attempt + 1} raté (${err.message})`);
       }
     }
   }
@@ -122,10 +146,19 @@ export async function runBrief({ description, server, signal }) {
 export async function engineStatus() {
   if (mockRun) return { ok: true, mode: "démo" };
   if (!upstream.apiKey) return { ok: false, error: "ENGINE_API_KEY manquante dans .env" };
+  const backup = fallback ? ` · secours : ${fallback.model}` : " · aucun moteur de secours";
   try {
     await testOpenAICompat(upstream);
-    return { ok: true, mode: "production" };
+    return { ok: true, mode: `production${backup}` };
   } catch (e) {
+    if (fallback) {
+      try {
+        await testOpenAICompat(fallback);
+        return { ok: true, mode: `secours actif (${fallback.model}), moteur principal en erreur : ${e.message}` };
+      } catch {
+        // both down: report the main error
+      }
+    }
     return { ok: false, error: e.message };
   }
 }

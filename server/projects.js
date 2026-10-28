@@ -230,6 +230,11 @@ export function deleteProject(userId, id) {
   fs.rmSync(projectDir(userId, id), { recursive: true, force: true });
 }
 
+// Account deletion: every project, version and file of the user.
+export function deleteUserData(userId) {
+  fs.rmSync(path.dirname(projectsRoot(userId)), { recursive: true, force: true });
+}
+
 export function filesRoot(userId, id) {
   return filesDir(userId, id);
 }
