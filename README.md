@@ -63,6 +63,23 @@ Packs et prix : variable `CREDIT_PACKS` (voir `.env.example`), sinon Starter 10 
 
 Sécurité : les crédits ne sont ajoutés que par le webhook signé par Stripe (jamais depuis le navigateur), une seule fois par paiement, et le nombre de crédits vient toujours de la configuration du serveur. Le client coche une case de renonciation au délai de rétractation avant de payer (contenu numérique utilisé immédiatement).
 
+## Déploiement en un clic sur le serveur FiveM
+
+Le client installe une fois la ressource `fivegen_bridge` (dossier `bridge/`, téléchargeable depuis le studio) sur son serveur FiveM. Ensuite, le bouton **Déployer** du studio copie la ressource dans `resources/[fivegen]/` et la démarre (`refresh` puis `ensure`, ou `restart` si elle tourne déjà).
+
+- Le serveur FiveM contacte le site (connexions sortantes uniquement) : ça marche sur un PC à la maison, derrière une box ou chez un hébergeur FiveM, sans ouvrir de port.
+- Un jeton par serveur (`FGS-...`), affiché une seule fois, stocké haché, révocable depuis le studio (« Mes serveurs FiveM »).
+- Le bridge n'écrit que dans `[fivegen]` et refuse d'écraser une ressource du même nom située ailleurs.
+- `server.cfg` du client :
+  ```
+  set fivegen_token "FGS-..."
+  set fivegen_url "https://ton-site"
+  add_ace resource.fivegen_bridge command.refresh allow
+  add_ace resource.fivegen_bridge command.ensure allow
+  add_ace resource.fivegen_bridge command.restart allow
+  ensure fivegen_bridge
+  ```
+
 ## Moteur de génération et coûts
 
 - Par défaut : Gemini Flash via son point d'accès compatible OpenAI. **Active la facturation** sur le projet Google lié à la clé : l'offre gratuite est réservée aux tests, ne peut pas servir des utilisateurs dans l'UE, et Google peut y réutiliser les données.

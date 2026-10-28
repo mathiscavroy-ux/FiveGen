@@ -6,6 +6,7 @@ import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage } fr
 import { runEngine, engineStatus, EngineError } from "./engine.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
 import { validateProject } from "./validator.js";
+import { mountDeploy } from "./deploy.js";
 import * as db from "./db.js";
 import {
   hashPassword,
@@ -401,6 +402,8 @@ app.get("/api/projects/:id/zip", requireUser, (req, res) => {
   archive.directory(filesRoot(req.user.id, project.id), project.name);
   archive.finalize();
 });
+
+mountDeploy(app);
 
 // ---------- admin ----------
 

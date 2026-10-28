@@ -1268,6 +1268,135 @@ async function onDelete() {
 
 // ---------- boot ----------
 
+// ---------- deploy to a FiveM server ----------
+
+const deploy = { servers: [], timer: null, watch: null };
+
+async function openDeploy() {
+  $("#deployDialog").showModal();
+  $("#serverSetup").classList.add("hidden");
+  await loadServers();
+  if (!deploy.servers.length) $("#addServer").open = true;
+  clearInterval(deploy.timer);
+  deploy.timer = setInterval(() => $("#deployDialog").open ? loadServers() : clearInterval(deploy.timer), 5000);
+}
+
+async function loadServers() {
+  try {
+    deploy.servers = await api("/api/servers");
+  } catch (e) {
+    return toast(e.message, "err");
+  }
+  const canDeploy = Boolean(state.current?.files?.length) && !state.busy;
+  $("#serverList").innerHTML = deploy.servers.length
+    ? deploy.servers
+        .map((s) => `<li>
+          <span class="srv-dot ${s.online ? "on" : ""}" title="${s.online ? "En ligne" : "Hors ligne"}"></span>
+          <div class="srv-info"><b>${escapeHtml(s.name)}</b>
+            <span>${s.online ? "En ligne" : s.lastSeenAt ? `Vu ${timeAgo(s.lastSeenAt)}` : "Jamais connecté : installe le bridge"} · jeton …${escapeHtml(s.hint)}</span></div>
+          ${canDeploy ? `<button class="btn small primary" data-deploy="${s.id}">Déployer ${escapeHtml(state.current.name)}</button>` : ""}
+          <button class="btn small ghost" data-remove-server="${s.id}" title="Révoquer le jeton">Supprimer</button>
+        </li>`)
+        .join("")
+    : '<li class="muted empty-srv">Aucun serveur connecté pour l\'instant.</li>';
+}
+
+function showSetup({ token, baseUrl, server }) {
+  const cfg = [
+    `set fivegen_token "${token}"`,
+    `set fivegen_url "${baseUrl}"`,
+    "add_ace resource.fivegen_bridge command.refresh allow",
+    "add_ace resource.fivegen_bridge command.ensure allow",
+    "add_ace resource.fivegen_bridge command.restart allow",
+    "ensure fivegen_bridge",
+  ].join("\n");
+  $("#serverSetup").innerHTML = `
+    <p class="warn-note">Jeton de « ${escapeHtml(server.name)} » : il ne sera plus affiché. Garde-le privé, il permet d'installer des ressources sur ton serveur.</p>
+    <ol class="setup-steps">
+      <li><b>Télécharge le bridge</b> et dézippe le dossier <code>fivegen_bridge</code> dans <code>resources/</code>.
+        <a class="btn small" href="/api/bridge/download" download>Télécharger fivegen_bridge.zip</a></li>
+      <li><b>Ajoute ces lignes</b> à la fin de ton <code>server.cfg</code> :
+        <pre class="cfg">${escapeHtml(cfg)}</pre><button type="button" class="btn small" id="btnCopyCfg">Copier</button></li>
+      <li><b>Redémarre ton serveur.</b> Il apparaît « En ligne » ici en quelques secondes.</li>
+    </ol>`;
+  $("#serverSetup").classList.remove("hidden");
+  $("#btnCopyCfg").onclick = async () => {
+    await navigator.clipboard.writeText(cfg);
+    toast("Configuration copiée", "ok");
+  };
+}
+
+const DEPLOY_STATUS = {
+  pending: ["busy", "En attente : ton serveur récupère la ressource (il vérifie toutes les 5 s)…"],
+  delivered: ["busy", "Fichiers livrés, démarrage de la ressource…"],
+  started: ["ok", "Ressource installée et démarrée"],
+  error: ["err", "Échec du déploiement"],
+  replaced: ["", "Remplacé par un déploiement plus récent"],
+};
+
+function renderDeployStatus(d, serverName) {
+  const [kind, text] = DEPLOY_STATUS[d.status] ?? ["", d.status];
+  const el = $("#deployStatus");
+  el.className = `deploy-status ${kind}`;
+  el.innerHTML = `<b>${escapeHtml(d.resource)} → ${escapeHtml(serverName)}</b><span>${escapeHtml(text)}</span>${d.message ? `<em>${escapeHtml(d.message)}</em>` : ""}`;
+}
+
+async function deployTo(serverId) {
+  const server = deploy.servers.find((s) => s.id === serverId);
+  try {
+    let d = await api(`/api/projects/${state.current.id}/deploy`, { method: "POST", body: { serverId } });
+    if (!server.online) toast("Serveur hors ligne : la ressource sera installée dès qu'il sera allumé.");
+    renderDeployStatus(d, server.name);
+    clearInterval(deploy.watch);
+    const started = Date.now();
+    deploy.watch = setInterval(async () => {
+      try {
+        d = await api(`/api/deployments/${d.id}`);
+      } catch {
+        return;
+      }
+      renderDeployStatus(d, server.name);
+      if (["started", "error", "replaced"].includes(d.status) || Date.now() - started > 15 * 60_000) {
+        clearInterval(deploy.watch);
+        if (d.status === "started") toast(`${d.resource} tourne sur « ${server.name} »`, "ok");
+        if (d.status === "error") toast(d.message ?? "Échec du déploiement", "err");
+      }
+    }, 2000);
+  } catch (e) {
+    toast(e.message, "err");
+  }
+}
+
+function bindDeploy() {
+  $("#btnDeploy").onclick = openDeploy;
+  $("#btnServers").onclick = openDeploy;
+  $("#btnCloseDeploy").onclick = () => $("#deployDialog").close();
+  $("#addServerForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const created = await api("/api/servers", { method: "POST", body: { name: $("#serverName").value } });
+      $("#serverName").value = "";
+      showSetup(created);
+      loadServers();
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+  $("#serverList").addEventListener("click", async (e) => {
+    const dep = e.target.closest("[data-deploy]");
+    const rm = e.target.closest("[data-remove-server]");
+    if (dep) deployTo(Number(dep.dataset.deploy));
+    if (rm && confirm("Supprimer ce serveur ? Son jeton sera révoqué et le bridge ne pourra plus rien installer.")) {
+      try {
+        await api(`/api/servers/${rm.dataset.removeServer}`, { method: "DELETE" });
+        loadServers();
+      } catch (err) {
+        toast(err.message, "err");
+      }
+    }
+  });
+}
+
 async function restore(n) {
   if (!confirm(`Restaurer la version ${n} ? L'état actuel reste disponible dans les versions.`)) return;
   try {
@@ -1328,6 +1457,7 @@ function bindInsights() {
 
 function bind() {
   bindInsights();
+  bindDeploy();
   $("#genForm").addEventListener("submit", onGenerate);
   $("#refineForm").addEventListener("submit", onRefine);
   $("#refineInput").addEventListener("keydown", (e) => {
