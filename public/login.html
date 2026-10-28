@@ -55,7 +55,11 @@
 
   <script type="module">
     const $ = (s) => document.querySelector(s);
-    let mode = new URLSearchParams(location.search).has("register") ? "register" : "login";
+    const params = new URLSearchParams(location.search);
+    let mode = params.has("register") ? "register" : "login";
+    // Only same-site paths, never an absolute URL: avoids open redirects.
+    const rawNext = params.get("next") || "";
+    const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/app";
 
     function render() {
       document.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
@@ -83,7 +87,7 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || "Erreur");
-        location.href = "/app";
+        location.href = next;
       } catch (err) {
         $("#error").textContent = err.message;
       } finally {
@@ -91,7 +95,7 @@
       }
     });
 
-    fetch("/api/me").then((r) => r.ok && (location.href = "/app"));
+    fetch("/api/me").then((r) => r.ok && (location.href = next));
     fetch("/api/public").then((r) => r.json()).then((p) => ($("#bonus").textContent = `${p.freeCredits} crédits offerts à l'inscription pour tester.`)).catch(() => {});
     render();
   </script>

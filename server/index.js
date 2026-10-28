@@ -4,6 +4,7 @@ import { ZipArchive } from "archiver";
 import { config, ROOT } from "./config.js";
 import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage } from "./prompts.js";
 import { runEngine, engineStatus, EngineError } from "./engine.js";
+import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
 import { validateProject } from "./validator.js";
 import * as db from "./db.js";
 import {
@@ -44,6 +45,20 @@ app.use((_req, res, next) => {
   });
   next();
 });
+// Stripe signs the raw body, so this route must run before JSON parsing and the
+// CSRF guard (Stripe cannot send our custom header).
+app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "1mb" }), (req, res) => {
+  if (!paymentsEnabled()) return res.status(503).send("payments disabled");
+  try {
+    const result = handleWebhook(req.body, req.get("stripe-signature"));
+    console.log(`[fivegen] webhook Stripe : ${result}`);
+    res.json({ received: true });
+  } catch (err) {
+    console.error("[fivegen] webhook Stripe refusé :", err.message);
+    res.status(400).send("invalid webhook");
+  }
+});
+
 app.use(express.json({ limit: "2mb" }));
 app.use(sessionMiddleware);
 app.use("/api", csrfGuard);
@@ -236,6 +251,25 @@ app.get("/api/public", (_req, res) =>
   res.json({ freeCredits: config.freeCredits, costs: config.cost, shopUrl: config.shopUrl, supportUrl: config.supportUrl }),
 );
 
+app.get("/api/packs", (_req, res) => res.json(publicPacks()));
+
+const checkoutLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 20, key: (req) => `c${req.user?.id ?? req.ip}` });
+
+app.post("/api/checkout", requireUser, checkoutLimiter, async (req, res) => {
+  if (!paymentsEnabled()) return res.status(503).json({ error: "Le paiement par carte n'est pas encore disponible." });
+  if (req.body?.consent !== true) {
+    return res.status(400).json({ error: "Coche la case : tu demandes l'utilisation immédiate des crédits et renonces au délai de rétractation." });
+  }
+  const baseUrl = config.publicUrl || `${req.protocol}://${req.get("host")}`;
+  try {
+    res.json({ url: await createCheckout({ user: req.user, packId: String(req.body?.packId ?? ""), baseUrl }) });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("[fivegen] création du paiement impossible :", err.message);
+    res.status(502).json({ error: "Le paiement est momentanément indisponible. Réessaie dans un instant." });
+  }
+});
+
 app.get("/api/projects", requireUser, (req, res) => res.json(listProjects(req.user.id)));
 
 app.get("/api/projects/:id", requireUser, (req, res) => res.json(getProject(req.user.id, req.params.id)));
@@ -340,6 +374,10 @@ app.get("/api/admin/overview", requireUser, requireAdmin, async (_req, res) => {
 });
 
 app.get("/api/admin/users", requireUser, requireAdmin, (_req, res) => res.json(db.listUsers()));
+
+app.get("/api/admin/payments", requireUser, requireAdmin, (_req, res) =>
+  res.json({ enabled: paymentsEnabled(), payments: db.listPayments() }),
+);
 
 app.post("/api/admin/users/:id/credits", requireUser, requireAdmin, (req, res) => {
   const delta = Math.trunc(Number(req.body?.delta));

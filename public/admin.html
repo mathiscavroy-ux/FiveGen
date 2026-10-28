@@ -34,6 +34,10 @@
     <h2>Codes</h2>
     <table class="data"><thead><tr><th>Code</th><th>Crédits</th><th>Note</th><th>Créé</th><th>Utilisé par</th><th></th></tr></thead><tbody id="codes"></tbody></table>
 
+    <h2>Paiements par carte</h2>
+    <div id="payStatus" class="status">Chargement…</div>
+    <table class="data"><thead><tr><th>Date</th><th>Client</th><th>Pack</th><th>Crédits</th><th>Montant</th><th>Session Stripe</th></tr></thead><tbody id="payments"></tbody></table>
+
     <h2>Clients</h2>
     <table class="data"><thead><tr><th>E-mail</th><th>Crédits</th><th>Scripts</th><th>Inscrit</th><th>Ajuster</th></tr></thead><tbody id="users"></tbody></table>
 
@@ -78,6 +82,9 @@
         [s.creditsSpent, "crédits consommés"],
         [s.codesUnused, "codes disponibles"],
         [s.codesRedeemed, "codes utilisés"],
+        [money(s.revenue30d), "chiffre d'affaires (30 j)"],
+        [money(s.revenueTotal), "chiffre d'affaires total"],
+        [s.paymentsCount, "paiements par carte"],
         [s.outputTokensToday.toLocaleString("fr-FR"), "volume généré (24 h, tokens)"],
         [`${costs.generate} / ${costs.refine} / ${costs.fix}`, "coût génération / modif / correction"],
         [freeCredits, "crédits offerts à l'inscription"],
@@ -86,6 +93,24 @@
       $("#errors").innerHTML = s.recentErrors.length
         ? s.recentErrors.map((e) => `<tr><td>${date(e.created_at)}</td><td>${esc(e.email)}</td><td>${esc(e.kind)}</td><td class="mono">${esc(e.error)}</td></tr>`).join("")
         : `<tr><td colspan="4" class="muted">Aucune erreur récente.</td></tr>`;
+    }
+
+    const money = (cents, currency = "EUR") => ((cents || 0) / 100).toLocaleString("fr-FR", { style: "currency", currency });
+
+    async function loadPayments() {
+      const { enabled, payments } = await api("/api/admin/payments");
+      $("#payStatus").className = `status ${enabled ? "ok" : "err"}`;
+      $("#payStatus").textContent = enabled
+        ? "Paiement par carte actif (Stripe)"
+        : "Paiement par carte désactivé : ajoute STRIPE_SECRET_KEY et STRIPE_WEBHOOK_SECRET dans les variables du site.";
+      $("#payments").innerHTML = payments.length
+        ? payments
+            .map(
+              (p) => `<tr><td>${date(p.created_at)}</td><td>${esc(p.email ?? "compte supprimé")}</td><td>${esc(p.pack_id)}</td><td>${p.credits}</td>
+              <td>${money(p.amount, p.currency.toUpperCase())}</td><td class="mono">${esc(p.session_id.slice(0, 18))}…</td></tr>`,
+            )
+            .join("")
+        : `<tr><td colspan="6" class="muted">Aucun paiement pour l'instant.</td></tr>`;
     }
 
     async function loadCodes() {
@@ -153,7 +178,7 @@
 
     try {
       await loadOverview();
-      await Promise.all([loadCodes(), loadUsers()]);
+      await Promise.all([loadCodes(), loadUsers(), loadPayments()]);
     } catch (err) {
       if (err.message !== "forbidden") toast(err.message, "err");
     }

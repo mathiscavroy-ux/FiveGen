@@ -49,7 +49,34 @@ export const config = {
   shopUrl: env.SHOP_URL || "",
   supportUrl: env.SUPPORT_URL || "",
   sessionDays: int(env.SESSION_DAYS, 30),
+
+  // Card payments (Stripe Checkout). Disabled until both keys are set.
+  stripe: {
+    secretKey: env.STRIPE_SECRET_KEY || "",
+    webhookSecret: env.STRIPE_WEBHOOK_SECRET || "",
+    currency: (env.STRIPE_CURRENCY || "eur").toLowerCase(),
+  },
+  packs: loadPacks(env.CREDIT_PACKS),
 };
+
+// Credit packs sold on the site. Prices in cents. Override with CREDIT_PACKS (JSON array).
+function loadPacks(raw) {
+  const defaults = [
+    { id: "starter", name: "Starter", credits: 10, price: 499 },
+    { id: "pro", name: "Pro", credits: 30, price: 1299, featured: true },
+    { id: "studio", name: "Studio", credits: 100, price: 3499 },
+  ];
+  if (!raw) return defaults;
+  try {
+    const packs = JSON.parse(raw).filter(
+      (p) => /^[a-z0-9_-]{1,32}$/.test(p.id) && Number.isInteger(p.credits) && p.credits > 0 && Number.isInteger(p.price) && p.price >= 50,
+    );
+    return packs.length ? packs : defaults;
+  } catch {
+    console.warn("[fivegen] CREDIT_PACKS invalide, packs par défaut utilisés.");
+    return defaults;
+  }
+}
 
 // Browsers drop Secure cookies on plain http, so only require them once the site is served over https.
 config.secureCookies = config.publicUrl.startsWith("https://");

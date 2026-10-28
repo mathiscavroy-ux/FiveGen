@@ -298,7 +298,23 @@
       }
       const info = await fetch("/api/public").then((r) => r.json());
       document.getElementById("freeCredits").textContent = info.freeCredits;
-      if (info.shopUrl) document.querySelectorAll(".buy").forEach((a) => Object.assign(a, { href: info.shopUrl, target: "_blank", rel: "noopener" }));
+      const shop = await fetch("/api/packs").then((r) => r.json()).catch(() => null);
+      const cards = [...document.querySelectorAll(".price")];
+      if (shop?.enabled && shop.packs.length === cards.length) {
+        // Live prices from the server config; each button opens the studio checkout.
+        const fmt = (c) => (c / 100).toLocaleString("fr-FR", { style: "currency", currency: shop.currency.toUpperCase() });
+        shop.packs.forEach((p, i) => {
+          const card = cards[i];
+          card.querySelector("h3").textContent = p.name;
+          card.querySelector(".amount").textContent = fmt(p.price);
+          card.querySelector(".per").textContent = `${p.credits} crédits · ${fmt(Math.round(p.price / p.credits))} le script`;
+          const btn = card.querySelector(".buy");
+          btn.href = `/app?buy=${encodeURIComponent(p.id)}`;
+          btn.textContent = `Choisir ${p.name}`;
+        });
+      } else if (info.shopUrl) {
+        document.querySelectorAll(".buy").forEach((a) => Object.assign(a, { href: info.shopUrl, target: "_blank", rel: "noopener" }));
+      }
       if (info.supportUrl) Object.assign(document.getElementById("supportLink"), { href: info.supportUrl }).classList.remove("hidden");
     } catch {
       // static fallback values stay in place

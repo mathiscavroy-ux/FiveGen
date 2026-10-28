@@ -166,13 +166,22 @@
   </div>
 
   <!-- Redeem -->
-  <dialog id="redeemDialog" class="dialog small">
+  <dialog id="redeemDialog" class="dialog">
     <form id="redeemForm" method="dialog">
       <h2>Recharger mes crédits</h2>
-      <p class="muted">Saisis le code reçu après ton achat. Une génération ou une modification coûte <b id="costLine">1 crédit</b> ; les corrections automatiques sont incluses.</p>
+      <p class="muted">Une génération ou une modification coûte <b id="costLine">1 crédit</b> ; les corrections automatiques sont incluses. Les crédits n'expirent pas.</p>
+      <div id="buySection" class="hidden">
+        <div id="packGrid" class="pack-grid"></div>
+        <label class="consent">
+          <input id="buyConsent" type="checkbox" />
+          <span>Je demande l'utilisation immédiate des crédits et je renonce à mon droit de rétractation pour la part utilisée (art. L221-28 du Code de la consommation). <a href="/cgv" target="_blank">CGV</a></span>
+        </label>
+        <p class="pay-note">Paiement sécurisé par carte via Stripe. Les crédits sont ajoutés automatiquement après le paiement.</p>
+        <div class="divider"><span>ou</span></div>
+      </div>
       <label class="field">
         <span>Code d'activation</span>
-        <input id="redeemCode" class="input mono" placeholder="FG-XXXX-XXXX-XXXX" autocomplete="off" required />
+        <input id="redeemCode" class="input mono" placeholder="FG-XXXX-XXXX-XXXX" autocomplete="off" />
       </label>
       <div class="dialog-actions">
         <a id="redeemShop" class="btn ghost hidden" href="#" target="_blank" rel="noopener">Acheter des crédits ↗</a>

@@ -26,7 +26,7 @@ async function api(url, opts = {}) {
     body: opts.body && typeof opts.body !== "string" ? JSON.stringify(opts.body) : opts.body,
   });
   if (res.status === 401) {
-    location.href = "/login";
+    location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
     throw new Error("Session expirée");
   }
   const data = await res.json().catch(() => ({}));
@@ -146,15 +146,90 @@ function renderAccount() {
   $("#demoBanner").classList.toggle("hidden", !state.options?.demo);
 }
 
-function openRedeem() {
+function openRedeem(highlightPack) {
   $("#accountMenu").classList.add("hidden");
   $("#redeemCode").value = "";
   $("#redeemDialog").showModal();
-  $("#redeemCode").focus();
+  const card = typeof highlightPack === "string" && $(`.pack[data-pack="${highlightPack}"]`);
+  if (card) card.classList.add("highlight");
+  else if (!state.packs?.enabled) $("#redeemCode").focus();
+}
+
+const formatPrice = (cents, currency) =>
+  (cents / 100).toLocaleString("fr-FR", { style: "currency", currency: currency.toUpperCase() });
+
+function renderPacks() {
+  const info = state.packs;
+  $("#buySection").classList.toggle("hidden", !info?.enabled);
+  if (!info?.enabled) return;
+  $("#packGrid").innerHTML = "";
+  for (const p of info.packs) {
+    const card = document.createElement("div");
+    card.className = `pack${p.featured ? " featured" : ""}`;
+    card.dataset.pack = p.id;
+    card.innerHTML = `${p.featured ? '<span class="tagline">Le plus choisi</span>' : ""}
+      <b>${escapeHtml(p.name)}</b>
+      <span class="amount">${formatPrice(p.price, info.currency)}</span>
+      <span class="unit">${plural(p.credits, "crédit")} · ${formatPrice(Math.round(p.price / p.credits), info.currency)} le script</span>`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `btn ${p.featured ? "primary" : ""}`;
+    btn.textContent = "Acheter";
+    btn.onclick = () => buyPack(p.id, btn);
+    card.append(btn);
+    $("#packGrid").append(card);
+  }
+}
+
+async function buyPack(packId, btn) {
+  if (!$("#buyConsent").checked) {
+    toast("Coche la case de consentement avant de payer.", "err");
+    $("#buyConsent").closest(".consent").classList.add("highlight");
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Redirection…";
+  try {
+    const { url } = await api("/api/checkout", { method: "POST", body: { packId, consent: true } });
+    location.href = url;
+  } catch (err) {
+    toast(err.message, "err");
+    btn.disabled = false;
+    btn.textContent = "Acheter";
+  }
+}
+
+// Back from Stripe: the webhook may land a few seconds after the redirect, so poll briefly.
+async function handlePaymentReturn() {
+  const params = new URLSearchParams(location.search);
+  const clean = () => history.replaceState(null, "", location.pathname + location.hash);
+  if (params.has("canceled")) {
+    clean();
+    toast("Paiement annulé : aucun montant n'a été débité.");
+  } else if (params.has("paid")) {
+    clean();
+    const before = state.me.credits;
+    toast("Paiement reçu, ajout des crédits…");
+    for (let i = 0; i < 10; i++) {
+      const me = await api("/api/me").catch(() => null);
+      if (me && me.credits > before) {
+        setCredits(me.credits);
+        toast(`Merci ! +${plural(me.credits - before, "crédit")} sur ton compte.`, "ok");
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    // The webhook may already have run before this page loaded.
+    toast(`Paiement validé ✓ Solde actuel : ${plural(state.me.credits, "crédit")}. S'il manque des crédits, recharge la page dans une minute.`, "ok");
+  } else if (params.has("buy")) {
+    clean();
+    openRedeem(params.get("buy"));
+  }
 }
 
 async function onRedeem(e) {
   e.preventDefault();
+  if (!$("#redeemCode").value.trim()) return toast("Saisis ton code d'activation.", "err");
   try {
     const r = await api("/api/redeem", { method: "POST", body: { code: $("#redeemCode").value } });
     setCredits(r.credits);
@@ -743,13 +818,19 @@ async function boot() {
   initEditor();
   bind();
   try {
-    [state.me, state.options] = await Promise.all([api("/api/me"), api("/api/options")]);
+    [state.me, state.options, state.packs] = await Promise.all([
+      api("/api/me"),
+      api("/api/options"),
+      api("/api/packs").catch(() => ({ enabled: false, packs: [] })),
+    ]);
   } catch (e) {
     if (e.message !== "Session expirée") toast(`Serveur injoignable : ${e.message}`, "err");
     return;
   }
   renderForm();
   renderAccount();
+  renderPacks();
+  handlePaymentReturn();
   await refreshProjects();
   const m = location.hash.match(/^#\/p\/([\w-]+)/);
   if (m) openProject(m[1]);

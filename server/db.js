@@ -40,6 +40,15 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_generations_user ON generations(user_id, created_at);
+  CREATE TABLE IF NOT EXISTS payments (
+    session_id TEXT PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    pack_id TEXT NOT NULL,
+    credits INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `);
 
 const now = () => new Date().toISOString();
@@ -163,6 +172,34 @@ export function redeemCode(code, userId) {
   }
 }
 
+// ---------- card payments ----------
+
+// Idempotent: Stripe may deliver the same event several times. Returns true only
+// the first time a session is recorded, which is when credits are added.
+export function recordPayment({ sessionId, userId, packId, credits, amount, currency }) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const inserted = db
+      .prepare("INSERT OR IGNORE INTO payments (session_id, user_id, pack_id, credits, amount, currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(sessionId, userId, packId, credits, amount, currency, now()).changes === 1;
+    if (inserted) db.prepare("UPDATE users SET credits = credits + ? WHERE id = ?").run(credits, userId);
+    db.exec("COMMIT");
+    return inserted;
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
+
+export function listPayments(limit = 200) {
+  return db
+    .prepare(
+      `SELECT p.created_at, p.pack_id, p.credits, p.amount, p.currency, p.session_id, u.email
+       FROM payments p LEFT JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT ?`,
+    )
+    .all(limit);
+}
+
 // ---------- generation log ----------
 
 export function logGeneration({ userId, projectId, kind, cost, status, error, outputTokens }) {
@@ -184,6 +221,9 @@ export function stats() {
     outputTokensToday: one("SELECT COALESCE(SUM(output_tokens), 0) FROM generations WHERE created_at > ?", day),
     codesUnused: one("SELECT COUNT(*) FROM codes WHERE redeemed_at IS NULL"),
     codesRedeemed: one("SELECT COUNT(*) FROM codes WHERE redeemed_at IS NOT NULL"),
+    paymentsCount: one("SELECT COUNT(*) FROM payments"),
+    revenueTotal: one("SELECT COALESCE(SUM(amount), 0) FROM payments"),
+    revenue30d: one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE created_at > ?", new Date(Date.now() - 30 * 86400000).toISOString()),
     recentErrors: db
       .prepare("SELECT g.created_at, u.email, g.kind, g.error FROM generations g JOIN users u ON u.id = g.user_id WHERE g.status = 'error' ORDER BY g.id DESC LIMIT 10")
       .all(),

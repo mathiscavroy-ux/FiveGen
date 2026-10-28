@@ -374,3 +374,21 @@ textarea.input { height: auto; padding: 10px 12px; line-height: 1.55; }
 ::-webkit-scrollbar-track { background: transparent; }
 
 .preset-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+/* ---------- credit packs (Stripe) ---------- */
+.dialog:has(#buySection:not(.hidden)) { width: min(640px, calc(100vw - 32px)); }
+.pack-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.pack { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--panel-2); }
+.pack.featured { border-color: rgba(255,106,26,.6); box-shadow: 0 0 0 3px rgba(255,106,26,.1); }
+.pack.highlight { animation: packPulse 1.2s ease 2; }
+.pack .tagline { position: absolute; top: -9px; left: 14px; background: var(--grad); color: #180c04; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.pack b { font-size: 14px; }
+.pack .amount { font-size: 24px; font-weight: 800; letter-spacing: -.5px; }
+.pack .unit { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.pack .btn { width: 100%; justify-content: center; margin-top: auto; }
+.consent { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin-bottom: 8px; cursor: pointer; }
+.consent input { accent-color: var(--accent); margin-top: 3px; flex: none; width: 15px; height: 15px; }
+.pay-note { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+.divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; margin: 14px 0; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+@keyframes packPulse { 50% { box-shadow: 0 0 0 4px rgba(255,106,26,.35); } }
