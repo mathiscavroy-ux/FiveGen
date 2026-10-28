@@ -1,0 +1,112 @@
+/* FiveGen design tokens, shared by every page. Dark is the default; light applies when
+   <html data-theme="light"> (set by theme.js from the saved choice or the system).
+   Code windows on the landing page (.mock, .term) stay dark in both themes. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root,
+[data-theme="light"] .mock,
+[data-theme="light"] .term {
+  color-scheme: dark;
+  --bg: #08090c;
+  --bg-2: #0c0e13;
+  --bg-rgb: 8 9 12;
+  --surface: #111319;
+  --surface-2: #171a22;
+  --surface-3: #1e222c;
+  --field: #0f1217;
+  --fg: 255 255 255;
+  --line: rgb(255 255 255 / 0.08);
+  --line-strong: rgb(255 255 255 / 0.14);
+  --text: #eceef3;
+  --text-2: #b4b9c6;
+  --muted: #7e8496;
+  --faint: #4a5063;
+  --accent: #ff6a1a;
+  --accent-2: #ff9a4d;
+  --accent-3: #ff3d2e;
+  --accent-text: #ffb37a;
+  --accent-soft: rgb(255 106 26 / 0.12);
+  --on-accent: #160b04;
+  --grad: linear-gradient(135deg, #ff9a4d 0%, #ff6a1a 45%, #ff3d2e 100%);
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --err: #f87171;
+  --ok-text: #6ee7b7;
+  --warn-text: #fcd34d;
+  --err-text: #fca5a5;
+  --code-bg: #0b0d10;
+  --code-bg-2: #08090c;
+  --code-text: #c9d1e1;
+  --shade-k: 1;
+  --backdrop: rgb(3 4 6 / 0.7);
+  --shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 20px 50px -20px rgb(0 0 0 / 0.7);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --bg-2: #eef0f4;
+  --bg-rgb: 246 247 249;
+  --surface: #ffffff;
+  --surface-2: #f6f7f9;
+  --surface-3: #eceef2;
+  --field: #ffffff;
+  --fg: 16 19 26;
+  --line: rgb(16 19 26 / 0.09);
+  --line-strong: rgb(16 19 26 / 0.16);
+  --text: #12141a;
+  --text-2: #3d4352;
+  --muted: #626879;
+  --faint: #a3a9b8;
+  --accent: #f4600f;
+  --accent-2: #c2410c;
+  --accent-3: #e2361f;
+  --accent-text: #c2410c;
+  --accent-soft: rgb(244 96 15 / 0.1);
+  --on-accent: #1a0c03;
+  --grad: linear-gradient(135deg, #ff8a3d 0%, #f4600f 50%, #e2361f 100%);
+  --ok: #047857;
+  --warn: #b45309;
+  --err: #dc2626;
+  --ok-text: #065f46;
+  --warn-text: #a16207;
+  --err-text: #b91c1c;
+  --code-bg: #fbfbfc;
+  --code-bg-2: #f6f7f9;
+  --code-text: #24292f;
+  --shade-k: 0.35;
+  --backdrop: rgb(16 19 26 / 0.35);
+  --shadow: 0 1px 2px rgb(16 19 26 / 0.06), 0 16px 40px -18px rgb(16 19 26 / 0.18);
+  --shadow-sm: 0 1px 2px rgb(16 19 26 / 0.08);
+}
+
+:root {
+  --radius: 14px;
+  --radius-lg: 20px;
+  --font: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  /* studio names for the same tokens */
+  --panel: var(--surface);
+  --panel-2: var(--surface-2);
+  --panel-3: var(--surface-3);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+}
+
+/* only while switching, so other transitions on the page are left alone */
+html.theme-switching, html.theme-switching * {
+  transition: background-color .25s ease, border-color .25s ease, color .2s ease, fill .2s ease !important;
+}
+
+/* theme switch button (sun / moon) */
+.theme-toggle {
+  display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none;
+  border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--text-2); cursor: pointer; padding: 0;
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--accent); }
+.theme-toggle svg { width: 17px; height: 17px; }
+.theme-toggle .moon { display: none; }
+[data-theme="light"] .theme-toggle .sun { display: none; }
+[data-theme="light"] .theme-toggle .moon { display: block; }

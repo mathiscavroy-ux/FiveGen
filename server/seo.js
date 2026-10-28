@@ -79,6 +79,8 @@ function layout(req, { title, description, path, body }) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/theme.css" />
+  <script src="/theme.js"></script>
   <title>${esc(title)} — FiveGen</title>
   <meta name="description" content="${esc(description)}" />
   <link rel="canonical" href="${esc(url)}" />
@@ -96,7 +98,7 @@ function layout(req, { title, description, path, body }) {
 <body>
   <nav class="nav"><div class="wrap">
     <a class="brand" href="/"><span class="logo">F</span>FiveGen</a>
-    <div class="nav-links"><a href="/scripts">Scripts</a><a href="/#pricing">Tarifs</a><a class="btn primary small" href="/login?register">Essayer</a></div>
+    <div class="nav-links"><a href="/scripts">Scripts</a><a href="/#pricing">Tarifs</a><button type="button" class="theme-toggle" data-theme-toggle></button><a class="btn primary small" href="/login?register">Essayer</a></div>
   </div></nav>
   <main class="wrap seo">${body}</main>
   <footer><div class="wrap"><p class="muted" style="font-size:13px">© FiveGen · <a href="/scripts">Scripts FiveM</a> · <a href="/a-propos">À propos</a> · <a href="/cgv">Conditions générales</a></p></div></footer>

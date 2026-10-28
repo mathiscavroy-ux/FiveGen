@@ -651,11 +651,15 @@ function modeFor(path) {
   return modes[ext] ?? "text/plain";
 }
 
+// The editor follows the site theme.
+const editorTheme = () => (document.documentElement.dataset.theme === "light" ? "idea" : "material-darker");
+window.addEventListener("fivegen:theme", () => state.editor?.setOption?.("theme", editorTheme()));
+
 function initEditor() {
   const host = $("#editorHost");
   if (window.CodeMirror) {
     state.editor = window.CodeMirror(host, {
-      theme: "material-darker",
+      theme: editorTheme(),
       lineNumbers: true,
       indentUnit: 4,
       tabSize: 4,
