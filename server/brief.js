@@ -8,7 +8,7 @@ const ids = (list) => list.map((x) => x.id).join(" | ");
 export const BRIEF_SYSTEM = `Tu es le chef de projet de FiveGen, un studio qui écrit des ressources FiveM (GTA V RP). Un client décrit le script qu'il veut, souvent en une phrase. Tu ne codes rien : tu comprends la demande et tu prépares les questions qui permettront d'écrire exactement le bon script du premier coup.
 
 Règles :
-- Réponds UNIQUEMENT par un objet JSON valide, sans texte autour ni bloc de code.
+- Réponds UNIQUEMENT par un objet JSON valide, compact (sur une seule ligne, sans indentation), sans texte autour ni bloc de code. Garde les libellés courts.
 - Questions en français simple, tutoiement, 3 à 6 questions maximum, chacune utile pour le code (fonctionnalités, règles de jeu, emplacements, prix, droits par grade, intégrations). Pas de question sur le framework, l'inventaire, les dépendances, la langue ou le nom de la ressource : le formulaire les demande déjà.
 - Privilégie les choix (single ou multi) avec 2 à 6 options concrètes ; une seule question "text" au plus, pour un détail libre. Mets une valeur par défaut raisonnable sur chaque question (la plupart des clients gardent les défauts).
 - Pour une question multi, pré-coche par défaut les fonctionnalités qu'un serveur RP attend.
@@ -92,7 +92,22 @@ export function extractJson(text) {
   const start = s.indexOf("{");
   const end = s.lastIndexOf("}");
   if (start < 0 || end <= start) throw new Error("no JSON object in reply");
-  return JSON.parse(s.slice(start, end + 1));
+  try {
+    return JSON.parse(s.slice(start, end + 1));
+  } catch (err) {
+    // A reply cut short (output limit) loses its end: "questions" is the last key, so
+    // closing the array after the last complete question keeps everything before it.
+    const body = s.slice(start);
+    for (let i = body.lastIndexOf("}"); i > 0; i = body.lastIndexOf("}", i - 1)) {
+      try {
+        const repaired = JSON.parse(`${body.slice(0, i + 1)}]}`);
+        if (Array.isArray(repaired.questions) && repaired.questions.length) return repaired;
+      } catch {
+        // keep trimming
+      }
+    }
+    throw err;
+  }
 }
 
 // Answers sent back with /api/generate, bounded before they reach the prompt.

@@ -8,6 +8,13 @@ test("extracts the JSON object even with text or fences around it", () => {
   assert.throws(() => extractJson("pas de json"));
 });
 
+test("a reply cut by the output limit keeps its complete questions", () => {
+  const cut = '{"understood":"x","name":"a","questions":[{"id":"q1","label":"A ?","kind":"single","options":[{"value":"a","label":"A"},{"value":"b","label":"B"}],"default":"a"},{"id":"q2","label":"B ?","kind":"single","options":[{"value":"au';
+  const b = extractJson(cut);
+  assert.equal(b.understood, "x");
+  assert.deepEqual(b.questions.map((q) => q.id), ["q1"]);
+});
+
 test("sanitizes the engine brief to what the studio can render", () => {
   const b = sanitizeBrief({
     understood: "Un job police",

@@ -591,8 +591,19 @@ async function onBrief(e) {
   }
   const btn = $("#btnBrief");
   const original = btn.innerHTML;
+  const hint = $("#costHint");
+  const originalHint = hint.textContent;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Analyse de ta demande…';
+  btn.innerHTML = '<span class="spin"></span> Analyse…';
+  // The engine answers in a few seconds: show what it is doing meanwhile.
+  const steps = ["Lecture de ta demande", "Recherche de ce qu'un serveur RP attend", "Choix des questions utiles", "Préparation du questionnaire"];
+  const startedAt = Date.now();
+  const tick = () => {
+    const s = Math.floor((Date.now() - startedAt) / 1000);
+    hint.textContent = `${steps[Math.min(steps.length - 1, Math.floor(s / 3))]}… ${s} s`;
+  };
+  tick();
+  const timer = setInterval(tick, 500);
   const profile = loadServerProfile();
   try {
     const brief = await api("/api/brief", { method: "POST", body: { description, server: profile ?? {} } });
@@ -607,6 +618,8 @@ async function onBrief(e) {
     toast(`${err.message} Tu peux quand même lancer la génération.`, "err");
     renderBrief({ understood: "", name: "", type: "other", framework: null, ui: "auto", dependencies: [], questions: [] });
   } finally {
+    clearInterval(timer);
+    hint.textContent = originalHint;
     btn.disabled = false;
     btn.innerHTML = original;
   }

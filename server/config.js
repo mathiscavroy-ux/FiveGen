@@ -37,6 +37,8 @@ export const config = {
     effort: env.ENGINE_EFFORT || "high",
     // A generation silent for this long is abandoned (then retried or refunded).
     stallSeconds: int(env.ENGINE_STALL_SECONDS, 90),
+    // Optional faster model for the questions step (same provider as ENGINE_MODEL).
+    briefModel: (env.BRIEF_MODEL || "").trim(),
   },
 
   // Business rules

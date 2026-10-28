@@ -119,15 +119,21 @@ export async function runEngine({ userContent, onEvent, signal }) {
 export async function runBrief({ description, server, signal }) {
   if (mockBrief) return sanitizeBrief(mockBrief(description));
   const user = buildBriefMessage(description, server);
-  const providers = primaryModels().map((model) => ({ ...upstream, model }));
+  // BRIEF_MODEL: a faster model for the questions, which need no heavy reasoning.
+  const models = config.engine.briefModel ? [config.engine.briefModel, ...primaryModels()] : primaryModels();
+  const providers = [...new Set(models)].map((model) => ({ ...upstream, model }));
   if (fallback) providers.push(fallback);
   let lastError;
+  const started = Date.now();
   for (const provider of providers) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt) await wait(1200, signal);
+      if (attempt) await wait(800, signal);
       try {
-        const text = await completeOpenAICompat({ provider, system: BRIEF_SYSTEM, user, signal });
-        return sanitizeBrief(extractJson(text));
+        // Gateways cache identical requests: a retry must differ, or it gets the same broken reply.
+        const text = await completeOpenAICompat({ provider, system: BRIEF_SYSTEM, user: attempt ? `${user}\n<!-- essai ${attempt + 1} -->` : user, maxTokens: 4000, signal });
+        const brief = sanitizeBrief(extractJson(text));
+        console.log(`[fivegen] questions prêtes en ${((Date.now() - started) / 1000).toFixed(1)} s (${provider.model})`);
+        return brief;
       } catch (err) {
         lastError = err;
         if (signal?.aborted) throw toPublic(err);
