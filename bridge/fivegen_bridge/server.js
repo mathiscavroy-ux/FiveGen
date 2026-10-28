@@ -1,10 +1,17 @@
 // FiveGen bridge: polls the FiveGen site for resources to deploy, writes them under
 // resources/[fivegen]/ and starts them. Outbound HTTPS only, nothing to open on the
-// router. Server-side JavaScript is used because Lua cannot create folders.
+// router.
+//
+// The FXServer sandbox only lets a resource write inside its own folder, so files are
+// staged in fivegen_bridge/.staging/ and then copied to resources/[fivegen]/ by the OS
+// copy tool (robocopy on Windows, cp elsewhere). That copy is a child process, hence
+// add_unsafe_child_process_permission. The bridge only ever runs those copy tools, with
+// fixed arguments and no shell.
 //
 // server.cfg:
 //   set fivegen_token "FGS-..."
 //   set fivegen_url "https://ton-site-fivegen"
+//   add_unsafe_child_process_permission fivegen_bridge
 //   add_ace resource.fivegen_bridge command.refresh allow
 //   add_ace resource.fivegen_bridge command.ensure allow
 //   add_ace resource.fivegen_bridge command.restart allow
@@ -14,8 +21,9 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const https = require("https");
+const { execFile } = require("child_process");
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 const TOKEN = GetConvar("fivegen_token", "");
 const BASE = GetConvar("fivegen_url", "https://flazehdr.alwaysdata.net").replace(/\/+$/, "");
 const FOLDER = GetConvar("fivegen_folder", "[fivegen]");
@@ -33,6 +41,7 @@ function resourcesRoot() {
   return dir;
 }
 const TARGET = path.join(resourcesRoot(), FOLDER);
+const STAGING = path.join(GetResourcePath(GetCurrentResourceName()), ".staging");
 
 function request(method, urlPath, body) {
   return new Promise((resolve, reject) => {
@@ -76,29 +85,64 @@ function request(method, urlPath, body) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const inside = (child, parent) => path.resolve(child).startsWith(path.resolve(parent) + path.sep);
 
-function writeResource(resource, files) {
+function run(file, args, okCodes = [0]) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { windowsHide: true, timeout: 60000 }, (err, stdout, stderr) => {
+      const code = err ? (typeof err.code === "number" ? err.code : null) : 0;
+      if (code !== null && okCodes.includes(code)) return resolve();
+      reject(err && code === null ? err : new Error(`${path.basename(file)} a échoué (code ${code}) ${String(stderr || stdout).trim().slice(0, 300)}`));
+    });
+  });
+}
+
+// Mirrors the staged folder into resources/[fivegen]/<resource>.
+async function copyToTarget(src, dest) {
+  try {
+    if (process.platform === "win32") {
+      // robocopy exit codes below 8 mean success
+      await run("robocopy", [src, dest, "/MIR", "/R:1", "/W:1", "/NJH", "/NJS", "/NFL", "/NDL", "/NP"], [0, 1, 2, 3, 4, 5, 6, 7]);
+    } else {
+      await run("rm", ["-rf", "--", dest]);
+      await run("mkdir", ["-p", "--", path.dirname(dest)]);
+      await run("cp", ["-R", "--", src, dest]);
+    }
+  } catch (err) {
+    if (err.code === "ERR_ACCESS_DENIED" || /restricted/i.test(err.message)) {
+      throw new Error("Copie bloquée par le sandbox FiveM : ajoute la ligne add_unsafe_child_process_permission fivegen_bridge dans server.cfg (avant ensure fivegen_bridge) puis redémarre le serveur.");
+    }
+    throw err;
+  }
+}
+
+async function writeResource(resource, files) {
   if (!/^[a-z0-9_-]{1,64}$/i.test(resource)) throw new Error(`Nom de ressource refusé : ${resource}`);
   const dest = path.join(TARGET, resource);
+  const stage = path.join(STAGING, resource);
 
   // Never overwrite a resource that lives outside the [fivegen] folder.
   const existing = GetResourcePath(resource);
-  if (existing && fs.existsSync(existing) && !inside(existing, TARGET)) {
+  if (existing && !inside(existing, TARGET)) {
     throw new Error(`Une ressource "${resource}" existe déjà hors de ${FOLDER} (${existing}). Renomme le projet ou supprime l'autre ressource.`);
   }
 
   // Validate every path before touching the disk.
   const planned = files.map((f) => {
     const rel = String(f.path).replace(/\\/g, "/");
-    const full = path.resolve(dest, rel);
-    if (rel.startsWith("/") || rel.split("/").includes("..") || !inside(full, dest)) throw new Error(`Chemin refusé : ${rel}`);
+    const full = path.resolve(stage, rel);
+    if (rel.startsWith("/") || rel.split("/").includes("..") || !inside(full, stage)) throw new Error(`Chemin refusé : ${rel}`);
     return { full, content: String(f.content) };
   });
 
-  fs.mkdirSync(TARGET, { recursive: true });
-  if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
-  for (const f of planned) {
-    fs.mkdirSync(path.dirname(f.full), { recursive: true });
-    fs.writeFileSync(f.full, f.content, "utf8");
+  // Staging lives inside this resource, the only place the sandbox lets us write.
+  fs.rmSync(stage, { recursive: true, force: true });
+  try {
+    for (const f of planned) {
+      fs.mkdirSync(path.dirname(f.full), { recursive: true });
+      fs.writeFileSync(f.full, f.content, "utf8");
+    }
+    await copyToTarget(stage, dest);
+  } finally {
+    fs.rmSync(stage, { recursive: true, force: true });
   }
   return dest;
 }
@@ -122,7 +166,7 @@ async function startResource(resource) {
 async function deploy(job) {
   log(`Déploiement de ^5${job.resource}^7 (${job.files.length} fichiers)…`);
   try {
-    const dest = writeResource(job.resource, job.files);
+    const dest = await writeResource(job.resource, job.files);
     const how = await startResource(job.resource);
     log(`^2${job.resource} ${how}^7 depuis ${dest}`);
     await request("POST", `/api/bridge/deployments/${job.id}`, { status: "started", message: `Ressource ${how} sur le serveur.` });

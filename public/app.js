@@ -1305,6 +1305,7 @@ function showSetup({ token, baseUrl, server }) {
   const cfg = [
     `set fivegen_token "${token}"`,
     `set fivegen_url "${baseUrl}"`,
+    "add_unsafe_child_process_permission fivegen_bridge",
     "add_ace resource.fivegen_bridge command.refresh allow",
     "add_ace resource.fivegen_bridge command.ensure allow",
     "add_ace resource.fivegen_bridge command.restart allow",
