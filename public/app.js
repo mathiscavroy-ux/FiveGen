@@ -428,32 +428,121 @@ function serverSummary() {
   return `${label(state.options.frameworks, state.form.framework)}${deps.length ? ` · ${deps.join(", ")}` : ""}`;
 }
 
-function renderQuestion(q) {
-  const box = document.createElement("fieldset");
+// ---------- questionnaire (one question per screen) ----------
+
+const KEYS = "ABCDEFGH";
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+function renderQuestion(q, index, total) {
+  const step = document.createElement("section");
+  step.className = "wz-step";
+  step.dataset.step = "question";
+  const box = document.createElement("div");
   box.className = "bq";
+  box.setAttribute("role", "group");
+  box.setAttribute("aria-labelledby", `wzq_${q.id}`);
   box.dataset.id = q.id;
   box.dataset.kind = q.kind;
-  box.innerHTML = `<legend>${escapeHtml(q.label)}</legend>${q.help ? `<p class="muted bq-help">${escapeHtml(q.help)}</p>` : ""}`;
+  const hint = q.kind === "multi" ? "Plusieurs choix possibles" : q.kind === "single" ? "Un seul choix" : "Réponse libre, facultative";
+  box.innerHTML = `<span class="wz-kicker">Question ${index + 1} sur ${total}</span>
+    <h3 class="wz-title" id="wzq_${escapeHtml(q.id)}">${escapeHtml(q.label)}</h3>
+    <p class="wz-sub muted">${q.help ? `${escapeHtml(q.help)} · ` : ""}${hint}</p>`;
   if (q.kind === "text") {
-    const input = document.createElement("input");
-    input.className = "input";
+    const input = document.createElement("textarea");
+    input.className = "input wz-text";
+    input.rows = 3;
     input.maxLength = 400;
-    input.placeholder = q.placeholder || "Facultatif";
+    input.placeholder = q.placeholder || "Écris ici, ou passe à la suite";
     input.value = q.default || "";
     box.append(input);
   } else {
     const opts = document.createElement("div");
-    opts.className = "bq-options";
-    for (const o of q.options) {
+    opts.className = `wz-options${q.options.length > 4 ? " many" : ""}`;
+    q.options.forEach((o, i) => {
       const checked = q.kind === "multi" ? q.default.includes(o.value) : q.default === o.value;
       const l = document.createElement("label");
-      l.className = "bq-opt";
-      l.innerHTML = `<input type="${q.kind === "multi" ? "checkbox" : "radio"}" name="bq_${escapeHtml(q.id)}" value="${escapeHtml(o.value)}" ${checked ? "checked" : ""} /><span>${escapeHtml(o.label)}</span>`;
+      l.className = "wz-opt";
+      l.innerHTML = `<input type="${q.kind === "multi" ? "checkbox" : "radio"}" name="bq_${escapeHtml(q.id)}" value="${escapeHtml(o.value)}" ${checked ? "checked" : ""} />
+        <span class="wz-opt-body"><kbd>${KEYS[i] ?? ""}</kbd><span class="wz-opt-label">${escapeHtml(o.label)}</span><span class="wz-tick ${q.kind}">${CHECK_SVG}</span></span>`;
       opts.append(l);
-    }
+    });
     box.append(opts);
   }
-  return box;
+  step.append(box);
+  return step;
+}
+
+function wizardSteps() {
+  return $$("#genForm .wz-step");
+}
+
+function goStep(index, { focus = true } = {}) {
+  const steps = wizardSteps();
+  const i = Math.max(0, Math.min(index, steps.length - 1));
+  const back = i < (state.wizard?.index ?? 0);
+  state.wizard = { index: i };
+  steps.forEach((s, j) => {
+    s.classList.toggle("active", j === i);
+    s.classList.toggle("from-left", j === i && back);
+  });
+  const questions = state.brief?.questions.length ?? 0;
+  const current = steps[i];
+  const isFinal = current.dataset.step === "final";
+  const isIntro = current.dataset.step === "intro";
+  $("#wzBar").style.width = `${Math.round((i / (steps.length - 1)) * 100)}%`;
+  $("#wzCount").textContent = isIntro ? "Récapitulatif" : isFinal ? "Prêt" : `${i} / ${questions}`;
+  $("#wzPrev").classList.toggle("invisible", i === 0);
+  $("#wzNext").classList.toggle("hidden", isFinal || isIntro);
+  $(".wz-nav").classList.toggle("hidden", isIntro);
+  const kind = current.querySelector(".bq")?.dataset.kind;
+  $("#wzHint").innerHTML = kind === "text" ? "<kbd>Ctrl</kbd> + <kbd>Entrée</kbd> pour continuer" : kind ? "<kbd>A</kbd>–<kbd>" + KEYS[Math.max(0, current.querySelectorAll(".wz-opt").length - 1)] + "</kbd> pour choisir · <kbd>Entrée</kbd> pour continuer" : "";
+  if (isFinal) renderRecap();
+  if (focus) (current.querySelector("textarea, input:checked, input, [data-wz-next], #btnGenerate") ?? current).focus({ preventScroll: true });
+}
+
+function renderRecap() {
+  const answers = collectAnswers();
+  $("#wzRecap").innerHTML = answers.length
+    ? answers
+        .map(
+          (a, i) => `<li><button type="button" class="wz-recap-item" data-wz-go="${i + 1}"><span class="muted">${escapeHtml(a.question)}</span><b>${escapeHtml(a.answer || "—")}</b><span class="wz-edit">Modifier</span></button></li>`,
+        )
+        .join("")
+    : '<li class="muted">Ta demande est claire : aucune question supplémentaire.</li>';
+  $("#briefServerSummary").textContent = serverSummary();
+}
+
+function bindWizard() {
+  const form = $("#genForm");
+  $("#wzNext").onclick = () => goStep(state.wizard.index + 1);
+  $("#wzPrev").onclick = () => goStep(state.wizard.index - 1);
+  form.addEventListener("click", (e) => {
+    if (e.target.closest("[data-wz-next]")) goStep(state.wizard.index + 1);
+    if (e.target.closest("[data-wz-edit]")) showBriefStep("idea");
+    const go = e.target.closest("[data-wz-go]");
+    if (go) goStep(Number(go.dataset.wzGo));
+  });
+  // A single choice moves on by itself, like a questionnaire.
+  form.addEventListener("change", (e) => {
+    if (e.target.type === "radio" && e.target.closest(".wz-step.active")) setTimeout(() => goStep(state.wizard.index + 1), 260);
+  });
+  form.addEventListener("keydown", (e) => {
+    const step = form.querySelector(".wz-step.active");
+    if (!step || step.dataset.step === "final") return;
+    const typing = e.target.matches("textarea, input[type=text], input:not([type])");
+    if (e.key === "Enter" && (!typing || e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      goStep(state.wizard.index + 1);
+      return;
+    }
+    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = KEYS.indexOf(e.key.toUpperCase());
+    const opt = k >= 0 ? step.querySelectorAll(".wz-opt input")[k] : null;
+    if (opt) {
+      e.preventDefault();
+      opt.click();
+    }
+  });
 }
 
 function renderBrief(brief) {
@@ -469,12 +558,12 @@ function renderBrief(brief) {
   $("#fUi").value = brief.ui || "auto";
   const list = $("#briefQuestions");
   list.innerHTML = "";
-  for (const q of brief.questions) list.append(renderQuestion(q));
-  if (!brief.questions.length) list.innerHTML = '<p class="muted">Ta demande est claire : vérifie les réglages de ton serveur puis lance la génération.</p>';
+  brief.questions.forEach((q, i) => list.append(renderQuestion(q, i, brief.questions.length)));
   // First script: the server block must be checked, afterwards it stays folded.
   $("#briefServer").open = !profile;
-  $("#briefServerSummary").textContent = serverSummary();
+  state.wizard = { index: 0 };
   showBriefStep("brief");
+  goStep(0);
   $("#genForm").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -482,7 +571,7 @@ function collectAnswers() {
   return $$("#briefQuestions .bq").map((box) => {
     const q = state.brief.questions.find((x) => x.id === box.dataset.id);
     let answer;
-    if (q.kind === "text") answer = box.querySelector("input").value.trim();
+    if (q.kind === "text") answer = box.querySelector("textarea, input").value.trim();
     else {
       const picked = [...box.querySelectorAll("input:checked")].map((i) => q.options.find((o) => o.value === i.value)?.label ?? i.value);
       answer = q.kind === "multi" ? (picked.length ? picked.join(", ") : "aucune") : picked[0] ?? "";
@@ -1416,6 +1505,11 @@ async function onGenerate(e) {
   const name = $("#fName").value.trim();
   const description = $("#fDescription").value.trim();
   if (!name || !description) return toast("Nom et description requis.", "err");
+  if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+    $("#briefServer").open = true;
+    $("#fName").focus();
+    return toast("Nom de ressource : lettres, chiffres, _ et - uniquement.", "err");
+  }
   if (state.me.credits < state.me.costs.generate) {
     toast("Crédits insuffisants.", "err");
     return openRedeem();
@@ -1731,6 +1825,7 @@ function bind() {
     if (!e.target.closest(".account")) $("#accountMenu").classList.add("hidden");
   });
   bindAccount();
+  bindWizard();
   // in-game errors keep arriving while the server runs
   setInterval(() => {
     if (state.current?.id && !state.busy && document.visibilityState === "visible") loadRuntimeErrors();

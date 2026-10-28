@@ -70,47 +70,69 @@
             </div>
           </form>
 
-          <form id="genForm" class="card form brief hidden">
-            <div class="brief-head">
+          <form id="genForm" class="card form wizard hidden" novalidate>
+            <div class="wz-top">
               <button type="button" id="btnBriefBack" class="btn ghost small">← Modifier ma demande</button>
-              <span class="muted brief-step">Étape 2 / 2</span>
+              <div class="wz-progress" aria-hidden="true"><span id="wzBar"></span></div>
+              <span id="wzCount" class="wz-count"></span>
             </div>
-            <div class="understood">
-              <span class="u-label">Ce que j&#39;ai compris</span>
-              <p id="briefUnderstood"></p>
+
+            <div class="wz-stage">
+              <section class="wz-step" data-step="intro">
+                <span class="wz-kicker">Ce que j&#39;ai compris</span>
+                <p id="briefUnderstood" class="wz-understood"></p>
+                <p class="muted wz-sub">Quelques questions rapides pour viser juste. Les réponses les plus courantes sont déjà choisies : tu peux aller vite.</p>
+                <div class="wz-intro-actions">
+                  <button type="button" class="btn primary big" data-wz-next>C&#39;est bien ça, on y va <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+                  <button type="button" class="btn ghost" data-wz-edit>Non, je reformule</button>
+                </div>
+              </section>
+
+              <div id="briefQuestions"></div>
+
+              <section class="wz-step" data-step="final">
+                <span class="wz-kicker">Dernière étape</span>
+                <h3 class="wz-title">Vérifie et lance la génération</h3>
+                <ul id="wzRecap" class="wz-recap"></ul>
+
+                <details id="briefServer" class="brief-server">
+                  <summary><span>Ton serveur</span><span id="briefServerSummary" class="muted"></span></summary>
+                  <div class="row">
+                    <label class="field">
+                      <span>Nom de la ressource</span>
+                      <input id="fName" class="input" required placeholder="ex : police_job" pattern="[A-Za-z0-9_\-]+" />
+                    </label>
+                    <label class="field">
+                      <span>Langue</span>
+                      <select id="fLanguage" class="input"></select>
+                    </label>
+                  </div>
+                  <div class="field">
+                    <span>Framework</span>
+                    <div id="fFramework" class="chips"></div>
+                  </div>
+                  <div class="field">
+                    <span>Ressources installées sur ton serveur</span>
+                    <div id="fDeps" class="checks"></div>
+                  </div>
+                  <label class="field">
+                    <span>Interface</span>
+                    <select id="fUi" class="input"></select>
+                  </label>
+                  <p class="muted small-note">Mémorisé pour tes prochains scripts.</p>
+                </details>
+
+                <div class="form-actions">
+                  <span id="genCostHint" class="muted cost-hint"></span>
+                  <button type="submit" id="btnGenerate" class="btn primary big">Générer le script <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+                </div>
+              </section>
             </div>
-            <div id="briefQuestions" class="brief-questions"></div>
 
-            <details id="briefServer" class="brief-server">
-              <summary><span>Ton serveur</span><span id="briefServerSummary" class="muted"></span></summary>
-              <div class="row">
-                <label class="field">
-                  <span>Nom de la ressource</span>
-                  <input id="fName" class="input" required placeholder="ex : police_job" pattern="[A-Za-z0-9_\-]+" />
-                </label>
-                <label class="field">
-                  <span>Langue</span>
-                  <select id="fLanguage" class="input"></select>
-                </label>
-              </div>
-              <div class="field">
-                <span>Framework</span>
-                <div id="fFramework" class="chips"></div>
-              </div>
-              <div class="field">
-                <span>Ressources installées sur ton serveur</span>
-                <div id="fDeps" class="checks"></div>
-              </div>
-              <label class="field">
-                <span>Interface</span>
-                <select id="fUi" class="input"></select>
-              </label>
-              <p class="muted small-note">Mémorisé pour tes prochains scripts.</p>
-            </details>
-
-            <div class="form-actions">
-              <span id="genCostHint" class="muted cost-hint"></span>
-              <button type="submit" id="btnGenerate" class="btn primary big">Générer le script <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+            <div class="wz-nav">
+              <button type="button" id="wzPrev" class="btn ghost">← Précédent</button>
+              <span class="wz-hint" id="wzHint"></span>
+              <button type="button" id="wzNext" class="btn primary">Suivant →</button>
             </div>
           </form>
         </div>
