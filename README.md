@@ -33,20 +33,26 @@ Avec le vrai moteur : copie `.env.example` en `.env`, remplis `ENGINE_API_KEY` e
 npm start
 ```
 
-## Mettre en ligne (VPS, environ 5 €/mois)
+## Mettre en ligne (VPS, environ 6 € TTC/mois)
 
-1. VPS Linux (Hetzner, OVH, Contabo…) avec Node.js 22.13 ou plus (`node:sqlite` intégré, aucune base à installer).
-2. Copie le dossier, puis `npm install --omit=dev`.
-3. Crée `.env` depuis `.env.example` : `ENGINE_API_KEY`, `ADMIN_EMAIL`, `PUBLIC_URL`, `NODE_ENV=production`, `TRUST_PROXY=1`, `SHOP_URL`.
-4. Lance-le en service (pm2 : `pm2 start server/index.js --name fivegen`, puis `pm2 save`).
-5. HTTPS avec Caddy (`/etc/caddy/Caddyfile`) :
+VPS Ubuntu 24.04 (IONOS VPS S+, OVH, Hetzner…). `deploy/install-vps.sh` installe tout : Node.js 24, le site en service systemd qui redémarre seul, Caddy (HTTPS automatique), le pare-feu, la sauvegarde chaque nuit et les mises à jour de sécurité.
+
+1. Depuis ton PC (PowerShell, dans le dossier FiveGen) :
    ```
-   fivegen.tondomaine.com {
-       reverse_proxy 127.0.0.1:3210
-   }
+   scp deploy/install-vps.sh root@IP_DU_VPS:
+   ssh root@IP_DU_VPS
+   bash install-vps.sh
    ```
-6. Inscris-toi sur le site avec l'adresse `ADMIN_EMAIL` : tu as accès à `/admin`.
-7. Sauvegarde régulièrement le dossier `data/` (base `fivegen.db` + projets des clients).
+2. Le script affiche une clé : ajoute-la sur GitHub (Settings → Deploy keys, lecture seule), puis Entrée. Le VPS lit le dépôt privé avec cette clé.
+3. Remplis `/opt/fivegen/app/.env` (`nano`) : `ENGINE_API_KEY`, `ENGINE_MODEL`, `ADMIN_EMAIL`, Stripe, SMTP (IONOS : `smtp.ionos.fr`, port 587). `PUBLIC_URL`, `HOST`, `PORT`, `NODE_ENV`, `TRUST_PROXY` et `BACKUP_DIR` sont déjà réglés. Puis `systemctl restart fivegen`.
+4. DNS du domaine : enregistrements A `@` et `www` vers l'IP du VPS, pas d'AAAA. Le certificat HTTPS arrive seul.
+5. Pare-feu de l'hébergeur (IONOS : Réseau → Stratégies de pare-feu) : ports 22, 80 et 443.
+6. Webhook Stripe : `https://ton-domaine/api/stripe/webhook`.
+7. Inscris-toi sur le site avec l'adresse `ADMIN_EMAIL` : tu as accès à `/admin`.
+
+Mise à jour : `bash /opt/fivegen/app/deploy/update.sh` (récupère la dernière version, réinstalle les dépendances si besoin, relance). Journaux : `journalctl -u fivegen -f`. Sauvegardes : `/opt/fivegen/backups`.
+
+Reprendre les données d'un ancien hébergeur : arrête le site (`systemctl stop fivegen`), copie `data/fivegen.db` et `data/users/` dans `/opt/fivegen/app/data/`, puis `chown -R fivegen:fivegen /opt/fivegen/app/data` et `systemctl start fivegen`.
 
 ## Paiement par carte (Stripe)
 
