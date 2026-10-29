@@ -879,7 +879,7 @@ table.diff tr.gap td { color: var(--muted); background: var(--panel); text-align
 }
 
 /* ---------- studio layout refresh ---------- */
-.topbar { height: 60px; padding: 0 18px; background: rgb(var(--bg-rgb) / .88); }
+.topbar { position: relative; z-index: 40; height: 60px; padding: 0 18px; background: rgb(var(--bg-rgb) / .88); }
 .topbar .theme-toggle { width: 34px; height: 34px; }
 @media (min-width: 981px) { .layout { grid-template-columns: 272px minmax(0, 1fr); } }
 .sidebar { background: var(--bg-2); border-right: 1px solid var(--border); padding: 18px 12px; }
