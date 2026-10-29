@@ -4,6 +4,7 @@ import { config } from "./config.js";
 import { runOpenAICompat, completeOpenAICompat, testOpenAICompat, ProviderError } from "./openai-compat.js";
 import { BRIEF_SYSTEM, buildBriefMessage, extractJson, sanitizeBrief } from "./brief.js";
 import { costOf, reasoningEffort } from "./provider.js";
+import { SYSTEM_PROMPT } from "./prompts.js";
 
 // Every engine call is reported here with its tokens and cost (index.js stores it).
 let usageListener = null;
@@ -188,6 +189,38 @@ export async function runBrief({ description, server, signal, meta }) {
   }
   if (lastError instanceof ProviderError) throw toPublic(lastError);
   throw new EngineError("Le moteur FiveGen n'a pas pu analyser ta demande. Réessaie ou passe directement à la génération.", String(lastError));
+}
+
+// Plan of a resource for the parallel generation: short JSON, same system prompt as the
+// generation (served from the cache). Throws when no usable plan comes back.
+export async function runPlan({ userContent, signal, meta }) {
+  if (mock?.mockPlan) {
+    await wait(1500, signal).catch((err) => {
+      throw toPublic(err);
+    });
+    return mock.mockPlan(userContent);
+  }
+  const providers = primaryModels().map((model) => ({ ...upstream, model }));
+  if (fallback) providers.push(fallback);
+  let lastError;
+  for (const provider of providers) {
+    const started = Date.now();
+    try {
+      const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "generate"), system: SYSTEM_PROMPT, user: userContent, maxTokens: 16000, timeoutMs: 240000, signal });
+      await report(meta && { ...meta, purpose: "plan" }, { model, usage, started, ok: true });
+      const s = String(text);
+      const plan = JSON.parse(s.slice(s.indexOf("{"), s.lastIndexOf("}") + 1));
+      if (!Array.isArray(plan.files) || !plan.files.length) throw new Error("plan sans fichiers");
+      return plan;
+    } catch (err) {
+      lastError = err;
+      if (signal?.aborted) throw toPublic(err);
+      if (err instanceof ProviderError) await report(meta && { ...meta, purpose: "plan" }, { model: provider.model, usage: null, started, ok: false });
+      console.warn(`[fivegen] plan : ${provider.model} raté (${err.message})`);
+      if (err instanceof ProviderError && !isOverload(err) && !worthFallback(err)) break;
+    }
+  }
+  throw lastError ?? new Error("plan indisponible");
 }
 
 export async function engineStatus() {

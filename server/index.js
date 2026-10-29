@@ -7,6 +7,7 @@ import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage, bui
 import { applyEdits } from "./patch.js";
 import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from "./engine.js";
 import { providerUsage, modelPricing } from "./provider.js";
+import { generateParallel } from "./parallel.js";
 import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
 import { validateProjectFull } from "./validator.js";
@@ -175,7 +176,9 @@ function checkProject(userId, projectId) {
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
   send("phase", { phase: kind, label: LABELS[kind] });
-  const result = await runEngine({ userContent, onEvent: send, signal, meta: { userId, projectId, purpose: kind } });
+  // a new resource: plan, then groups of files written at the same time (null: single call)
+  const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec: project.spec, send, signal, meta: { userId, projectId } }) : null;
+  const result = parallel ?? (await runEngine({ userContent, onEvent: send, signal, meta: { userId, projectId, purpose: kind } }));
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }

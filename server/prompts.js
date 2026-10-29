@@ -98,6 +98,80 @@ ${briefBlock(spec)}
 Écris tous les fichiers nécessaires au format demandé, puis les notes d'installation.`;
 }
 
+// ---------- parallel generation: plan first, then groups of files written at once ----------
+
+// Step 1: the list of files and every name they share (events, Config keys, locale
+// keys, NUI messages, SQL tables). Short JSON, no code: it is the contract the
+// groups written in parallel all follow.
+export function buildPlanMessage(spec) {
+  return `Prépare le plan d'une ressource FiveM complète. Ne l'écris pas encore : d'autres appels écriront les fichiers EN MÊME TEMPS, chacun une partie, en suivant ton plan à la lettre.
+
+<specification>
+${describeSpec(spec)}
+</specification>
+
+<exigences_du_type>
+${recipe(spec)}
+</exigences_du_type>
+
+<demande_du_client>
+${spec.description}
+</demande_du_client>
+${briefBlock(spec)}
+<plan_demande>
+Réponds UNIQUEMENT par un objet JSON compact (pas de texte autour, pas de code Lua) :
+{
+  "files": [{ "path": "client/exams.lua", "role": "ce que contient le fichier, en une phrase" }],
+  "contract": {
+    "events": [{ "name": "ressource:server:startExam", "from": "client", "to": "server", "args": ["category (string)"] }],
+    "callbacks": [{ "name": "ressource:getProgress", "side": "server", "args": [], "returns": "table {points, licenses}" }],
+    "config": ["Config.Exams.B.price", "Config.Locations.school"],
+    "locales": ["exam_passed", "not_enough_money"],
+    "nui": { "messages": [{ "action": "open", "data": "{ exams = [...] }" }], "callbacks": [{ "name": "startTheory", "body": "{ category }" }] },
+    "sql": [{ "table": "ressource_licenses", "columns": "identifier VARCHAR(60), license VARCHAR(20), obtained_at INT" }],
+    "exports": [], "commands": [], "items": []
+  }
+}
+Règles :
+- 6 à 16 fichiers : fxmanifest.lua, config.lua, locales, client/*.lua, server/*.lua, html/* si interface NUI, sql/*.sql si base de données, README.md.
+- Le contrat liste TOUS les noms utilisés par plus d'un fichier, avec leur forme exacte. Préfixe les événements par le nom de la ressource.
+- Reste bref : pas de code, pas de valeurs de config détaillées, juste les noms et formes.
+</plan_demande>`;
+}
+
+// Step 2: one group of files, written alongside the others from the same plan.
+export function buildPartMessage(spec, plan, paths, { notes = false } = {}) {
+  const others = (plan.files ?? []).filter((f) => !paths.includes(f.path));
+  return `Tu écris une PARTIE d'une ressource FiveM. Les autres fichiers sont écrits en même temps par d'autres appels, à partir du même plan.
+
+<specification>
+${describeSpec(spec)}
+</specification>
+
+<exigences_du_type>
+${recipe(spec)}
+</exigences_du_type>
+
+<demande_du_client>
+${spec.description}
+</demande_du_client>
+${briefBlock(spec)}
+<plan_de_la_ressource>
+${JSON.stringify(plan)}
+</plan_de_la_ressource>
+
+<fichiers_a_ecrire>
+${paths.map((p) => `- ${p}`).join("\n")}
+</fichiers_a_ecrire>
+
+<ecrits_par_les_autres>
+${others.map((f) => `- ${f.path} : ${f.role ?? ""}`).join("\n") || "- aucun"}
+</ecrits_par_les_autres>
+
+Écris UNIQUEMENT les fichiers à écrire, complets, au format FILE. Utilise exactement les noms du contrat (événements et leurs arguments, callbacks, clés Config, clés de traduction, actions et callbacks NUI, tables et colonnes SQL, exports) : les autres fichiers comptent dessus. Tout nom qui n'est pas dans le contrat reste local à ton fichier. Ne réécris pas les fichiers des autres.
+${notes ? "Termine par le bloc NOTES : installation et utilisation de la ressource complète." : "Pas de bloc NOTES."}`;
+}
+
 // Answers given in the questions step: they override the defaults of the script family.
 function briefBlock(spec) {
   const answers = (spec.answers ?? []).filter((a) => a.answer);

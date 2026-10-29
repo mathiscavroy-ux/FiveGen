@@ -97,8 +97,25 @@ Généré par FiveGen
 `;
 }
 
+// Parallel generation in demo mode: the plan lists the demo resource, each group gets its files.
+const blocks = (text) => [...text.matchAll(/=== FILE: (.+?) ===\n[\s\S]*?=== END FILE ===\n?/g)].map((m) => ({ path: m[1], text: m[0] }));
+
+export function mockPlan(userContent) {
+  const name = userContent.match(/Nom de la ressource : (\S+)/)?.[1] ?? "demo_job";
+  return {
+    files: blocks(resource(name, SERVER_BROKEN)).map((b) => ({ path: b.path, role: "fichier de démonstration" })),
+    contract: { events: [], callbacks: [], config: ["Config.Reward", "Config.Cooldown", "Config.Point"], locales: [], nui: { messages: [], callbacks: [] }, sql: [], exports: [], commands: [], items: [] },
+  };
+}
+
 function pickResponse(userContent) {
   const name = userContent.match(/Nom de la ressource : (\S+)/)?.[1] ?? "demo_job";
+  if (userContent.includes("<fichiers_a_ecrire>")) {
+    const wanted = new Set([...userContent.split("<fichiers_a_ecrire>")[1].split("</fichiers_a_ecrire>")[0].matchAll(/^- (.+)$/gm)].map((m) => m[1].trim()));
+    const full = resource(name, SERVER_BROKEN);
+    const notes = userContent.includes("Termine par le bloc NOTES") ? full.slice(full.indexOf("=== NOTES ===")) : "";
+    return blocks(full).filter((b) => wanted.has(b.path)).map((b) => b.text).join("\n") + notes;
+  }
   if (userContent.includes("<relecture>")) {
     return `=== NOTES ===
 RAS

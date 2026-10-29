@@ -1587,6 +1587,15 @@ function pipeValidation(v) {
 
 function pipePhase(phase, label) {
   if (!state.run) return;
+  if (phase === "plan" || phase === "write") {
+    openStep(
+      phase === "plan" ? "plan" : "write",
+      label,
+      phase === "plan" ? "Le moteur liste les fichiers et fixe les noms qu'ils partagent (événements, config, traductions, tables)." : "Chaque groupe de fichiers est écrit en même temps, à partir du plan.",
+    );
+    renderPipeline();
+    return;
+  }
   if (phase === "review") {
     openStep("review", label, "Le moteur relit la ressource : sécurité serveur, nettoyage, persistance, demandes du client.");
     renderPipeline();
@@ -1717,7 +1726,7 @@ function actSet(mode, title, detail = "") {
 }
 
 function actStart(kind) {
-  Object.assign(act, { kind, line: "", file: "", edit: false, feed: [], found: 0, samples: [], thought: 0 });
+  Object.assign(act, { kind, line: "", lines: {}, parallel: null, file: "", edit: false, feed: [], found: 0, samples: [], thought: 0 });
   $("#actFeed").innerHTML = "";
   actSet("thinking", "Réflexion", ACT_HINTS[kind]?.[0] ?? "");
   clearInterval(actTimer);
@@ -1738,18 +1747,20 @@ function actThinking(chars) {
   if (act.mode !== "thinking") actSet("thinking", "Réflexion", ACT_HINTS[act.kind]?.[0] ?? "");
 }
 
-function actDelta(text) {
+// group: index of the parallel group the text comes from (their streams interleave)
+function actDelta(text, group = 0) {
   if (act.mode === "idle" || act.mode === "done" || act.mode === "error") return;
   act.samples.push([Date.now(), text.length]);
-  if (act.mode !== "writing") actSet("writing", act.edit ? "Modification ciblée" : "Écriture du code");
-  const lines = (act.line + text).split("\n");
-  act.line = lines.pop().slice(-400);
+  if (act.mode !== "writing") actSet("writing", act.parallel ?? (act.edit ? "Modification ciblée" : "Écriture du code"));
+  act.lines ??= {};
+  const lines = ((act.lines[group] ?? "") + text).split("\n");
+  act.lines[group] = lines.pop().slice(-400);
   for (const line of lines) {
     const block = line.match(/^=== (FILE|EDIT|DELETE): (.+?) ===/);
     if (block) {
       act.file = block[2].trim();
       act.edit = block[1] === "EDIT";
-      $("#actTitle").textContent = block[1] === "EDIT" ? "Modification ciblée" : block[1] === "DELETE" ? "Suppression" : "Écriture du code";
+      $("#actTitle").textContent = act.parallel ?? (block[1] === "EDIT" ? "Modification ciblée" : block[1] === "DELETE" ? "Suppression" : "Écriture du code");
       actWritingDetail();
       continue;
     }
@@ -1788,14 +1799,22 @@ function actTick() {
 
 function actWritingDetail() {
   const count = act.found ? ` · ${act.found} élément(s)` : "";
-  $("#actDetail").textContent = act.file ? `${act.file}${count}` : `Le code arrive en direct${count}`;
+  $("#actDetail").textContent = act.parallel ? `Dernier fichier : ${act.file || "…"}${count}` : act.file ? `${act.file}${count}` : `Le code arrive en direct${count}`;
 }
 
 function actPhase(phase, label) {
-  if (phase === "review") {
+  if (phase === "plan") {
+    act.kind = "generate";
+    actSet("thinking", "Plan de la ressource", "Liste des fichiers et des noms partagés");
+  } else if (phase === "write") {
+    act.parallel = label;
+    actSet("writing", label, "Les groupes de fichiers s'écrivent en même temps");
+  } else if (phase === "review") {
+    act.parallel = null;
     act.kind = "review";
     actSet("review", "Relecture du code", ACT_HINTS.review[0]);
   } else if (phase === "fix") {
+    act.parallel = null;
     act.kind = "fix";
     actSet("fix", label, ACT_HINTS.fix[0]);
   }
@@ -1869,6 +1888,7 @@ async function runStream(url, body, { fresh = false, attach = null } = {}) {
   if (attach?.startedAt) state.run.startedAt = attach.startedAt;
   runTitle.start(kind);
   let reattach = null;
+  const partLines = {};
 
   try {
     await streamPost(
@@ -1890,6 +1910,21 @@ async function runStream(url, body, { fresh = false, attach = null } = {}) {
           actPhase(phase, l);
         },
         thinking: ({ chars }) => actThinking(chars),
+        plan: ({ files }) => {
+          const step = activeStep();
+          if (step?.id === "plan") for (const f of files) step.children.push({ label: f.path, status: "done", meta: f.role ? f.role.slice(0, 60) : "" });
+          renderPipeline();
+          actPush(`Plan prêt : ${files.length} fichiers`, "ok");
+        },
+        // parallel groups: their text interleaves, so lines are kept apart per group
+        pdelta: ({ g, t }) => {
+          partLines[g] = (partLines[g] ?? "") + t;
+          const lines = partLines[g].split("\n");
+          partLines[g] = lines.pop();
+          if (lines.length) appendLive(`${lines.join("\n")}\n`);
+          pipeDelta(t);
+          actDelta(t, g);
+        },
         checking: () => actSet("check", "Vérification et test d'exécution", ACT_HINTS.check[0]),
         delta: (t) => {
           appendLive(t);
