@@ -912,6 +912,58 @@ table.diff tr.gap td { color: var(--muted); background: var(--panel); text-align
 .composer-steps span { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font: 700 13px var(--mono); background: var(--accent-soft); color: var(--accent-2); }
 .composer-steps b { display: block; font-size: 13.5px; }
 .composer-steps small { display: block; font-size: 12px; color: var(--muted); }
+
+/* live analysis of the request while typing */
+.live-analysis { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); animation: laIn .25s ease; }
+.la-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; }
+.la-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: laPulse 1.6s ease infinite; }
+.la-meta { margin-left: auto; font: 11.5px var(--mono); color: var(--muted); }
+.la-grid { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 7px 12px; align-items: center; font-size: 12.5px; }
+.la-k { color: var(--muted); }
+.la-v { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+.la-chip { padding: 2px 9px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text-2); font-size: 12px; animation: laIn .2s ease; }
+.la-chip.strong { background: var(--accent-soft); border-color: transparent; color: var(--accent-text); font-weight: 600; }
+.la-empty { color: var(--faint); font-size: 12px; }
+.la-precision { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+.la-meter { height: 7px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.la-meter i { display: block; height: 100%; border-radius: 999px; background: var(--err); transition: width .35s cubic-bezier(.2, .8, .2, 1), background-color .35s; }
+.la-precision.good .la-meter i { background: var(--warn); }
+.la-precision.great .la-meter i { background: var(--ok); }
+.la-precision b { font-size: 12px; color: var(--err-text); }
+.la-precision.good b { color: var(--warn-text); }
+.la-precision.great b { color: var(--ok-text); }
+.la-tips { margin: 9px 0 0; padding: 0 0 0 18px; font-size: 12px; color: var(--text-2); display: grid; gap: 3px; }
+.la-foot { margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+
+/* analysis by the engine: real steps and a hundredth timer */
+.brief-progress { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--border-strong); border-radius: 14px; background: linear-gradient(135deg, var(--accent-soft), transparent 60%), var(--panel); animation: laIn .2s ease; }
+.bp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.bp-head b { font-size: 14px; }
+.bp-head time { margin-left: auto; font: 600 20px var(--mono); letter-spacing: -.5px; font-variant-numeric: tabular-nums; color: var(--text); }
+.bp-orb { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+.bp-head.ok .bp-orb { animation: none; border-color: var(--ok); background: var(--ok); }
+.bp-head.err .bp-orb { animation: none; border-color: var(--err); background: var(--err); }
+.bp-head.ok time { color: var(--ok-text); }
+.bp-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bp-steps li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: start; font-size: 13px; color: var(--muted); }
+.bp-steps li b { font-weight: 600; }
+.bp-steps small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.bp-steps em { font: normal 12px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); padding-top: 1px; }
+.bp-node { width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: var(--panel-2); border: 2px solid var(--border-strong); }
+.bp-steps li.active { color: var(--text); }
+.bp-steps li.active .bp-node { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); animation: pulse 1s ease infinite; }
+.bp-steps li.active em { color: var(--accent-text); }
+.bp-steps li.done { color: var(--text-2); }
+.bp-steps li.done .bp-node { background: var(--ok); border-color: var(--ok); }
+.bp-steps li.error { color: var(--err-text); }
+.bp-steps li.error .bp-node { background: var(--err); border-color: var(--err); }
+.bp-bar { margin-top: 12px; height: 4px; border-radius: 999px; background: var(--panel-2); overflow: hidden; position: relative; }
+.bp-bar i { position: absolute; inset: 0 auto 0 0; width: 35%; border-radius: 999px; background: var(--grad); animation: bpSlide 1.3s ease-in-out infinite; }
+@keyframes bpSlide { 0% { left: -35%; } 100% { left: 100%; } }
+@keyframes laPulse { 0% { box-shadow: 0 0 0 0 rgb(255 106 26 / .5); } 70% { box-shadow: 0 0 0 7px rgb(255 106 26 / 0); } 100% { box-shadow: 0 0 0 0 rgb(255 106 26 / 0); } }
+@keyframes laIn { from { opacity: 0; transform: translateY(4px); } }
+@media (max-width: 600px) { .la-grid { grid-template-columns: 1fr; gap: 3px; } .la-k { margin-top: 6px; } }
+@media (prefers-reduced-motion: reduce) { .live-analysis, .brief-progress, .la-chip, .la-pulse, .bp-orb, .bp-bar i, .bp-steps li.active .bp-node { animation: none; } }
 #viewNew .wizard { max-width: 860px; margin: 0 auto; width: 100%; }
 
 /* project header and panels */

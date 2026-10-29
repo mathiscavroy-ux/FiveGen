@@ -260,6 +260,7 @@ async function handlePaymentReturn() {
   } else if (params.has("idea")) {
     clean();
     $("#fDescription").value = params.get("idea").slice(0, 2000);
+    renderLiveAnalysis();
   } else if (params.has("verified")) {
     clean();
     const v = params.get("verified");
@@ -580,6 +581,168 @@ function collectAnswers() {
   });
 }
 
+// ---------- live analysis of the request (in the browser, while typing) ----------
+
+const LA_FRAMEWORKS = [
+  [/\bqbox\b|\bqbx/i, "Qbox"],
+  [/\bqb[- ]?core\b|\bqbcore\b|\bqb\b/i, "QBCore"],
+  [/\besx\b|es_extended/i, "ESX Legacy"],
+  [/standalone|sans framework|autonome/i, "Standalone"],
+];
+const LA_TYPES = [
+  [/police|lspd|sheriff|bcso|gendarm/i, "Job police"],
+  [/ambulan|\bems\b|m[ée]decin|h[ôo]pital/i, "Job EMS"],
+  [/m[ée]cano|garagiste|d[ée]pann|remorqu/i, "Job mécano"],
+  [/location|louer|\brent/i, "Location"],
+  [/concession|dealer/i, "Concession"],
+  [/garage|parking|fourri[èe]re/i, "Garage"],
+  [/boutique|shop|magasin|[ée]picerie|sup[ée]rette|vendeur/i, "Boutique"],
+  [/\bhud\b|jauge|compteur|speedo/i, "HUD"],
+  [/admin|staff|mod[ée]ration|\bban\b/i, "Outil admin"],
+  [/braquage|drogue|ill[ée]gal|blanchi|cambriol/i, "Activité illégale"],
+  [/mission|livraison|course|convoi/i, "Missions"],
+  [/maison|appartement|logement|propri[ée]t[ée]/i, "Logement"],
+  [/t[ée]l[ée]phone|\bphone\b/i, "Téléphone"],
+  [/\bjob\b|m[ée]tier|entreprise/i, "Job / métier"],
+  [/\bitem\b|consommable|objet utilisable/i, "Item utilisable"],
+];
+const LA_RESOURCES = [
+  [/ox_lib/i, "ox_lib"], [/ox_target/i, "ox_target"], [/ox_inventory/i, "ox_inventory"], [/oxmysql/i, "oxmysql"],
+  [/qb-target/i, "qb-target"], [/qb-inventory/i, "qb-inventory"], [/qb-menu/i, "qb-menu"], [/esx_menu|esx_context/i, "menus ESX"],
+  [/pma-voice/i, "pma-voice"], [/ps-dispatch/i, "ps-dispatch"], [/illenium/i, "illenium-appearance"],
+];
+const LA_FEATURES = [
+  [/menu|interface|\bnui\b|\bui\b|tablette/i, "Interface"],
+  [/\bpnj\b|\bped\b|vendeur|loueur/i, "PNJ"],
+  [/blip|carte/i, "Blip"],
+  [/\bsql\b|base de donn|sauvegard|persist|historique/i, "Sauvegarde"],
+  [/commande|\/[a-z]{2,}/i, "Commande"],
+  [/grade|rang|patron|\bboss\b|chef/i, "Grades"],
+  [/cooldown|d[ée]lai|anti[- ]?spam/i, "Cooldown"],
+  [/v[ée]hicule|voiture|\bmoto\b|camion/i, "Véhicules"],
+  [/\barme|armurerie|weapon/i, "Armes"],
+  [/argent|\bprix\b|payer|paiement|amende|facture|banque|caution/i, "Argent"],
+  [/\bitems?\b|inventaire/i, "Items"],
+  [/menott|fouill|interpell/i, "Interpellation"],
+  [/minuteur|timer|dur[ée]e|chrono/i, "Minuteur"],
+  [/notif/i, "Notifications"],
+  [/traduct|langue|anglais|fran[çc]ais/i, "Traductions"],
+];
+
+function analyseIdea(text) {
+  const profile = loadServerProfile();
+  const hit = (list) => list.filter(([re]) => re.test(text)).map(([, name]) => name);
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const framework = hit(LA_FRAMEWORKS)[0] ?? null;
+  const fromProfile = !framework && profile?.framework ? label(state.options.frameworks, profile.framework) : null;
+  const types = hit(LA_TYPES).slice(0, 2);
+  const resources = [...new Set(hit(LA_RESOURCES))];
+  const features = hit(LA_FEATURES);
+  // how precise the request is: length, features, framework, resources
+  const score = Math.min(100, Math.round(Math.min(words, 60) * 0.9 + features.length * 7 + (framework || fromProfile ? 12 : 0) + resources.length * 4));
+  const level = score >= 70 ? ["great", "Très précise"] : score >= 40 ? ["good", "Correcte"] : ["low", "Encore vague"];
+  const tips = [];
+  if (!framework && !fromProfile) tips.push("Précise ton framework (ESX, QBCore ou Qbox), sinon il te sera demandé.");
+  if (words < 12) tips.push("Ajoute 2 ou 3 détails : fonctionnalités, interface, emplacements.");
+  if (!features.includes("Interface") && words >= 12) tips.push("Interface voulue ? (menu ox_lib, interface NUI, ou aucune)");
+  const questions = Math.max(3, Math.min(6, 3 + (framework || fromProfile ? 0 : 1) + (features.length < 3 ? 2 : features.length < 6 ? 1 : 0)));
+  const minutes = Math.min(7, 3 + Math.floor(features.length / 4));
+  return { words, framework, fromProfile, types, resources, features, score, level, tips, questions, minutes };
+}
+
+function renderLiveAnalysis() {
+  const box = $("#liveAnalysis");
+  const text = $("#fDescription").value.trim();
+  if (text.length < 4 || !$("#briefProgress").classList.contains("hidden")) return box.classList.add("hidden");
+  const a = analyseIdea(text);
+  const chips = (list, empty) => (list.length ? list.map((x) => `<span class="la-chip">${escapeHtml(x)}</span>`).join("") : `<span class="la-empty">${empty}</span>`);
+  box.innerHTML = `
+    <div class="la-head"><span class="la-pulse"></span><b>Analyse en direct</b><span class="la-meta">${a.words} mot${a.words > 1 ? "s" : ""}</span></div>
+    <div class="la-grid">
+      <span class="la-k">Framework</span><span class="la-v">${a.framework ? `<span class="la-chip strong">${escapeHtml(a.framework)}</span>` : a.fromProfile ? `<span class="la-chip">${escapeHtml(a.fromProfile)}</span><span class="la-empty">profil de ton serveur</span>` : '<span class="la-empty">non précisé</span>'}</span>
+      <span class="la-k">Type</span><span class="la-v">${chips(a.types, "à déterminer")}</span>
+      ${a.resources.length ? `<span class="la-k">Ressources</span><span class="la-v">${chips(a.resources, "")}</span>` : ""}
+      <span class="la-k">Fonctions</span><span class="la-v">${chips(a.features, "aucune repérée pour l'instant")}</span>
+    </div>
+    <div class="la-precision ${a.level[0]}"><span>Précision de la demande</span><div class="la-meter"><i style="width:${a.score}%"></i></div><b>${a.level[1]}</b></div>
+    ${a.tips.length ? `<ul class="la-tips">${a.tips.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>` : ""}
+    <div class="la-foot">≈ ${a.questions} questions ensuite · génération estimée ${a.minutes} à ${a.minutes + 1} min</div>`;
+  box.classList.remove("hidden");
+}
+
+// ---------- analysis by the engine: real steps, timer to the hundredth ----------
+
+const fmtClock = (ms) => {
+  const t = Math.max(0, ms);
+  const m = Math.floor(t / 60000);
+  const s = Math.floor((t % 60000) / 1000);
+  const cs = Math.floor((t % 1000) / 10);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+};
+const fmtSec = (ms) => `${(ms / 1000).toFixed(2).replace(".", ",")} s`;
+
+function briefProgress() {
+  const box = $("#briefProgress");
+  const startedAt = performance.now();
+  const steps = [
+    { id: "send", label: "Envoi de la demande", detail: "" },
+    { id: "engine", label: "Analyse par le moteur", detail: "Lecture de la demande, choix des questions utiles" },
+    { id: "questions", label: "Questions reçues", detail: "" },
+    { id: "ready", label: "Questionnaire prêt", detail: "" },
+  ].map((s) => ({ ...s, status: "pending", at: null }));
+  let frame = 0;
+  let finished = null;
+  const render = () => {
+    box.innerHTML = `
+      <div class="bp-head ${finished ? (finished.ok ? "ok" : "err") : ""}"><span class="bp-orb"></span><b>${finished ? (finished.ok ? "Analyse terminée" : "Analyse interrompue") : "Analyse de ta demande"}</b><time id="bpClock">${fmtClock((finished?.at ?? performance.now()) - startedAt)}</time></div>
+      <ol class="bp-steps">${steps
+        .map((s) => `<li class="${s.status}"><span class="bp-node"></span><div><b>${escapeHtml(s.label)}</b>${s.detail ? `<small>${escapeHtml(s.detail)}</small>` : ""}</div><em>${s.at !== null ? fmtSec(s.at) : s.status === "active" ? `<span data-live-since="${s.since}"></span>` : ""}</em></li>`)
+        .join("")}</ol>
+      ${finished ? "" : '<div class="bp-bar"><i></i></div>'}`;
+  };
+  const tick = () => {
+    const now = performance.now();
+    if (!finished) {
+      const clock = $("#bpClock");
+      if (clock) clock.textContent = fmtClock(now - startedAt);
+      for (const el of box.querySelectorAll("[data-live-since]")) el.textContent = fmtSec(now - Number(el.dataset.liveSince));
+    }
+    frame = requestAnimationFrame(tick);
+  };
+  const set = (id, status, detail) => {
+    const s = steps.find((x) => x.id === id);
+    s.status = status;
+    if (status === "active") s.since = performance.now();
+    if (status === "done" || status === "error") s.at = performance.now() - startedAt;
+    if (detail !== undefined) s.detail = detail;
+    render();
+  };
+  $("#liveAnalysis").classList.add("hidden");
+  box.classList.remove("hidden");
+  set("send", "active");
+  frame = requestAnimationFrame(tick);
+  return {
+    sent: () => (set("send", "done"), set("engine", "active")),
+    received: (count) => (set("engine", "done"), set("questions", "done", count ? `${count} question${count > 1 ? "s" : ""} adaptée${count > 1 ? "s" : ""} à ta demande` : "aucune question nécessaire")),
+    ready: () => {
+      set("ready", "done");
+      finished = { ok: true, at: performance.now() };
+      render();
+    },
+    failed: (message) => {
+      const active = steps.find((s) => s.status === "active");
+      if (active) set(active.id, "error", message);
+      finished = { ok: false, at: performance.now() };
+      render();
+    },
+    close: () => {
+      cancelAnimationFrame(frame);
+      box.classList.add("hidden");
+      box.innerHTML = "";
+    },
+  };
+}
+
 async function onBrief(e) {
   e.preventDefault();
   if (state.busy) return;
@@ -591,37 +754,37 @@ async function onBrief(e) {
   }
   const btn = $("#btnBrief");
   const original = btn.innerHTML;
-  const hint = $("#costHint");
-  const originalHint = hint.textContent;
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span> Analyse…';
-  // The engine answers in a few seconds: show what it is doing meanwhile.
-  const steps = ["Lecture de ta demande", "Recherche de ce qu'un serveur RP attend", "Choix des questions utiles", "Préparation du questionnaire"];
-  const startedAt = Date.now();
-  const tick = () => {
-    const s = Math.floor((Date.now() - startedAt) / 1000);
-    hint.textContent = `${steps[Math.min(steps.length - 1, Math.floor(s / 3))]}… ${s} s`;
-  };
-  tick();
-  const timer = setInterval(tick, 500);
+  // Real milestones of the request, with a timer to the hundredth.
+  const progress = briefProgress();
   const profile = loadServerProfile();
+  const request = api("/api/brief", { method: "POST", body: { description, server: profile ?? {} } });
+  requestAnimationFrame(() => progress.sent());
   try {
-    const brief = await api("/api/brief", { method: "POST", body: { description, server: profile ?? {} } });
+    const brief = await request;
+    progress.received(brief.questions?.length ?? 0);
     if (brief.refused) {
+      progress.failed(brief.understood || "Demande refusée");
       toast(brief.understood || "Cette demande ne peut pas être générée.", "err");
+      await new Promise((r) => setTimeout(r, 1600));
       return;
     }
+    progress.ready();
+    await new Promise((r) => setTimeout(r, 700)); // lets the final time be read
     renderBrief(brief);
   } catch (err) {
+    progress.failed(err.message);
     if (err.code === "NO_CREDITS") return openRedeem();
     // The questions are a help, never a wall: fall back to the form alone.
     toast(`${err.message} Tu peux quand même lancer la génération.`, "err");
+    await new Promise((r) => setTimeout(r, 1200));
     renderBrief({ understood: "", name: "", type: "other", framework: null, ui: "auto", dependencies: [], questions: [] });
   } finally {
-    clearInterval(timer);
-    hint.textContent = originalHint;
+    progress.close();
     btn.disabled = false;
     btn.innerHTML = original;
+    renderLiveAnalysis();
   }
 }
 
@@ -1979,6 +2142,11 @@ function bind() {
   $("#briefServer").addEventListener("click", () => requestAnimationFrame(() => ($("#briefServerSummary").textContent = serverSummary())));
   $("#fDescription").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("#ideaForm").requestSubmit();
+  });
+  let laTimer;
+  $("#fDescription").addEventListener("input", () => {
+    clearTimeout(laTimer);
+    laTimer = setTimeout(renderLiveAnalysis, 120);
   });
   $("#refineForm").addEventListener("submit", onRefine);
   $("#refineInput").addEventListener("keydown", (e) => {

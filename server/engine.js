@@ -152,7 +152,10 @@ export async function runEngine({ userContent, onEvent, signal, meta }) {
 
 // Questions step. Cheap and short, so a broken reply is simply retried on the next model.
 export async function runBrief({ description, server, signal, meta }) {
-  if (mockBrief) return sanitizeBrief(mockBrief(description));
+  if (mockBrief) {
+    await wait(1800 + Math.random() * 1200, signal); // about as long as the real engine, so the demo shows the analysis
+    return sanitizeBrief(mockBrief(description));
+  }
   const user = buildBriefMessage(description, server);
   // BRIEF_MODEL: a faster model for the questions, which need no heavy reasoning.
   const models = config.engine.briefModel ? [config.engine.briefModel, ...primaryModels()] : primaryModels();
