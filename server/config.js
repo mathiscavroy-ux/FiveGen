@@ -42,7 +42,8 @@ export const config = {
   },
 
   // Business rules
-  adminEmail: (env.ADMIN_EMAIL || "").trim().toLowerCase(),
+  // ADMIN_EMAIL accepts several addresses separated by commas.
+  adminEmails: (env.ADMIN_EMAIL || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
   freeCredits: int(env.FREE_CREDITS, 2),
   cost: {
     generate: int(env.COST_GENERATE, 1),

@@ -308,7 +308,7 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
   if (password.length < 8 || password.length > 200) return res.status(400).json({ error: "Le mot de passe doit faire au moins 8 caractères." });
   if (!req.body?.acceptTerms) return res.status(400).json({ error: "Tu dois accepter les conditions générales." });
   if (db.getUserByEmail(email)) return res.status(409).json({ error: "Un compte existe déjà avec cette adresse." });
-  const isAdmin = Boolean(config.adminEmail) && email === config.adminEmail;
+  const isAdmin = config.adminEmails.includes(email);
   // With e-mail available, the free credits wait for the address to be confirmed.
   const verified = isAdmin || !mailEnabled;
   let user = db.createUser(email, await hashPassword(password), 0, isAdmin, { verified, ip: req.ip });
@@ -325,7 +325,7 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
   const ok = user && (await verifyPassword(String(req.body?.password ?? ""), user.pass_hash));
   if (!ok) return res.status(401).json({ error: "E-mail ou mot de passe incorrect." });
   if (user.blocked) return res.status(403).json({ error: "Ce compte est suspendu. Contacte le support FiveGen." });
-  if (config.adminEmail && email === config.adminEmail && !user.is_admin) db.setAdmin(user.id);
+  if (config.adminEmails.includes(email) && !user.is_admin) db.setAdmin(user.id);
   startSession(res, user.id);
   res.json(publicUser(db.getUser(user.id)));
 });
@@ -729,7 +729,7 @@ setInterval(() => db.purgeSessions(), 6 * 3600 * 1000).unref();
 
 app.listen(config.port, config.host, async () => {
   console.log(`\n  FiveGen en ligne : ${config.publicUrl || `http://localhost:${config.port}`}${config.mock ? "  (mode démo)" : ""}`);
-  if (!config.adminEmail) console.log("  ⚠ ADMIN_EMAIL non défini : aucun compte administrateur.");
+  if (!config.adminEmails.length) console.log("  ⚠ ADMIN_EMAIL non défini : aucun compte administrateur.");
   const status = await engineStatus();
   console.log(status.ok ? `  Moteur : OK (${status.mode})\n` : `  ⚠ Moteur : ${status.error}\n`);
 });

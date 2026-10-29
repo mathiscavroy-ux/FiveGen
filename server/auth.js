@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { promisify } from "node:util";
 import { config } from "./config.js";
-import { createSession, userFromSession, deleteSession } from "./db.js";
+import { createSession, userFromSession, deleteSession, setAdmin } from "./db.js";
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = "fg_session";
@@ -52,7 +52,12 @@ export function endSession(req, res) {
 
 // Attaches req.user when a valid session cookie is present.
 export function sessionMiddleware(req, _res, next) {
-  req.user = userFromSession(readCookie(req, COOKIE));
+  const user = userFromSession(readCookie(req, COOKIE));
+  if (user && !user.is_admin && config.adminEmails.includes(user.email.toLowerCase())) {
+    setAdmin(user.id);
+    user.is_admin = 1;
+  }
+  req.user = user;
   next();
 }
 
