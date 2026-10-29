@@ -114,7 +114,25 @@ function createJob({ userId, projectId, kind }) {
     for (const v of job.viewers) v.send(event, data);
   };
   jobs.set(userId, job);
+  keepAwake();
   return job;
+}
+
+// Hosts behind Phusion Passenger (o2switch) may stop an app that gets no request for a
+// few minutes, which would kill a generation whose tab was closed. While one runs, the
+// app visits itself through its public address once a minute.
+let awakeTimer = null;
+function keepAwake() {
+  if (awakeTimer || !config.publicUrl) return;
+  awakeTimer = setInterval(() => {
+    if (![...jobs.values()].some((j) => !j.done)) {
+      clearInterval(awakeTimer);
+      awakeTimer = null;
+      return;
+    }
+    fetch(`${config.publicUrl}/robots.txt`, { signal: AbortSignal.timeout(10000) }).catch(() => {});
+  }, 60000);
+  awakeTimer.unref();
 }
 
 function watchJob(job, res) {
