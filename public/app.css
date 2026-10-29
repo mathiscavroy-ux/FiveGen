@@ -410,6 +410,70 @@ textarea.input { height: auto; padding: 10px 12px; line-height: 1.55; }
 .live { margin: 0; padding: 10px 14px; overflow: auto; min-height: 0; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
 .phase { margin-bottom: 10px; color: var(--text-2); }
 
+/* live activity card: what the engine is doing right now */
+.activity { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(135deg, var(--accent-soft), transparent 55%), var(--surface-2); transition: border-color .3s; }
+.activity.idle { background: var(--surface-2); }
+.activity.done { border-color: rgb(52 211 153 / .35); background: linear-gradient(135deg, rgb(52 211 153 / .1), transparent 55%), var(--surface-2); }
+.activity.error { border-color: rgb(248 113 113 / .35); background: linear-gradient(135deg, rgb(248 113 113 / .1), transparent 55%), var(--surface-2); }
+.act-orb { position: relative; width: 44px; height: 44px; border-radius: 50%; background: var(--surface-3); display: flex; align-items: center; justify-content: center; gap: 3px; }
+.act-orb i { display: none; }
+.act-orb::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.act-body { min-width: 0; }
+.act-head { display: flex; align-items: center; gap: 10px; }
+.act-head b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-head time { margin-left: auto; font: 11.5px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.activity:not(.idle) + .phase { display: none; }
+.act-speed:empty { display: none; }
+.act-speed { font: 500 11px var(--mono); color: var(--accent-text); background: var(--accent-soft); padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.act-detail { margin-top: 2px; font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
+.act-feed { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; }
+.act-feed:empty { display: none; }
+.act-feed li { display: flex; align-items: center; gap: 8px; font: 11.5px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-feed li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; opacity: .7; }
+.act-feed li.ok::before { background: var(--ok); }
+.act-feed li.warn::before { background: var(--warn); }
+.act-feed li.err::before { background: var(--err); }
+.act-feed li.new { color: var(--text); animation: actIn .35s ease; }
+
+/* thinking / review: dots orbiting a breathing core, shimmering title */
+.activity.thinking .act-orb, .activity.review .act-orb { background: radial-gradient(circle, var(--accent-soft) 0 40%, transparent 72%), var(--surface-3); animation: actBreath 2.4s ease-in-out infinite; }
+.activity.thinking .act-orb::after, .activity.review .act-orb::after { width: 10px; height: 10px; background: var(--grad); box-shadow: 0 0 12px var(--accent); }
+.activity.thinking .act-orb i, .activity.review .act-orb i { display: block; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--accent-2); animation: actOrbit 1.8s linear infinite; }
+.activity.review .act-orb i { background: var(--ok); }
+.act-orb i:nth-child(2) { animation-delay: -.45s !important; opacity: .75; }
+.act-orb i:nth-child(3) { animation-delay: -.9s !important; opacity: .5; }
+.act-orb i:nth-child(4) { animation-delay: -1.35s !important; opacity: .3; }
+.activity.thinking .act-head b, .activity.review .act-head b { background: linear-gradient(90deg, var(--text) 35%, var(--accent-2) 50%, var(--text) 65%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: actShimmer 2.2s linear infinite; }
+
+/* writing: equalizer bars */
+.activity.writing .act-orb::after { display: none; }
+.activity.writing .act-orb i { display: block; width: 4px; height: 18px; border-radius: 2px; background: var(--grad); animation: actBar .9s ease-in-out infinite; opacity: 1; }
+.activity.writing .act-orb i:nth-child(2) { animation-delay: -.2s !important; }
+.activity.writing .act-orb i:nth-child(3) { animation-delay: -.4s !important; }
+.activity.writing .act-orb i:nth-child(4) { animation-delay: -.6s !important; }
+
+/* check / fix: scanning ring */
+.activity.check .act-orb i:first-child, .activity.fix .act-orb i:first-child { display: block; position: absolute; inset: 3px; border-radius: 50%; border: 3px solid transparent; border-top-color: var(--ok); border-right-color: var(--ok); animation: spin .9s linear infinite; }
+.activity.fix .act-orb i:first-child { border-top-color: var(--warn); border-right-color: var(--warn); }
+.activity.check .act-orb::after { background: var(--ok); animation: pulse 1s ease infinite; }
+.activity.fix .act-orb::after { background: var(--warn); animation: pulse 1s ease infinite; }
+
+/* end states */
+.activity.done .act-orb { background: rgb(52 211 153 / .15); animation: actPop .4s ease; }
+.activity.done .act-orb::after { content: "✓"; width: auto; height: auto; background: none; color: var(--ok); font-weight: 800; font-size: 18px; }
+.activity.error .act-orb { background: rgb(248 113 113 / .15); }
+.activity.error .act-orb::after { content: "!"; width: auto; height: auto; background: none; color: var(--err); font-weight: 800; font-size: 18px; }
+
+@keyframes actOrbit { from { transform: rotate(0deg) translateX(17px); } to { transform: rotate(360deg) translateX(17px); } }
+@keyframes actBreath { 50% { box-shadow: 0 0 0 6px var(--accent-soft); } }
+@keyframes actShimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@keyframes actBar { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+@keyframes actIn { from { opacity: 0; transform: translateY(4px); } }
+@keyframes actPop { 50% { transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) {
+  .activity *, .activity .act-orb, .activity .act-orb::after { animation: none !important; }
+}
+
 .pipe-steps { list-style: none; margin: 0; padding: 0; position: relative; }
 .pipe-steps > .step { position: relative; display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding-bottom: 14px; }
 .pipe-steps > .step::before { content: ""; position: absolute; left: 10px; top: 20px; bottom: 0; width: 2px; background: var(--border); }

@@ -158,9 +158,15 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   addHistory(userId, projectId, { type: kind, instruction: instruction ?? null, files: touched, outputTokens: result.outputTokens });
   if (result.stopReason === "max_tokens") send("status", "Ressource très volumineuse : certains fichiers ont pu être coupés, la vérification va le signaler.");
 
-  let validation = await checkProject(userId, projectId);
-  updateMeta(userId, projectId, { validation });
-  send("validation", validation);
+  // "checking" lets the studio show the static checks and the dry run while they run.
+  const recheck = async () => {
+    send("checking", {});
+    const result = await checkProject(userId, projectId);
+    updateMeta(userId, projectId, { validation: result });
+    send("validation", result);
+    return result;
+  };
+  let validation = await recheck();
 
   if (kind === "generate" && config.reviewPass) {
     send("phase", { phase: "review", label: "Relecture" });
@@ -176,9 +182,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
         snapshot(userId, projectId, { type: "review", label: "Relecture" });
         updateMeta(userId, projectId, { notes: mergeNotes(getProject(userId, projectId).notes, review.notes, "Relecture") });
         addHistory(userId, projectId, { type: "review", instruction: "Relecture", files: reviewed, outputTokens: review.outputTokens });
-        validation = await checkProject(userId, projectId);
-        updateMeta(userId, projectId, { validation });
-        send("validation", validation);
+        validation = await recheck();
       }
     } catch (err) {
       // Same as the fix rounds: the generated script is saved, the review is a bonus.
@@ -210,9 +214,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     const current = getProject(userId, projectId);
     updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
     addHistory(userId, projectId, { type: "autofix", instruction: `${validation.errors.length} erreur(s)`, files: fixed, outputTokens: fix.outputTokens });
-    validation = await checkProject(userId, projectId);
-    updateMeta(userId, projectId, { validation });
-    send("validation", validation);
+    validation = await recheck();
   }
   send("done", getProject(userId, projectId));
 }

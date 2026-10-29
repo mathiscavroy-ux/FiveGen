@@ -1382,6 +1382,152 @@ function renderPipeline() {
   });
 }
 
+// ---------- live activity card ----------
+// What the engine is doing right now: thinking, writing a file (with the pieces of
+// code it recognises as they stream: events, callbacks, SQL tables…), checking,
+// reviewing or fixing. Purely visual, fed by the same stream as the pipeline.
+
+const ACT_HINTS = {
+  generate: ["Lecture de ta demande", "Choix de la structure des fichiers", "Plan des échanges client ↔ serveur", "Règles de sécurité côté serveur", "Choix des fonctions du framework"],
+  refine: ["Lecture de la modification demandée", "Repérage du code concerné", "Préparation des remplacements ciblés"],
+  fix: ["Lecture des erreurs détectées", "Repérage des lignes concernées", "Préparation des corrections"],
+  review: ["Relecture de la sécurité serveur", "Contrôle du nettoyage à l'arrêt", "Contrôle de la persistance", "Contrôle des demandes du client"],
+  check: ["Syntaxe et manifest", "Fonctions FiveM et framework", "Cohérence Config, traductions, interface", "Exécution dans un FiveM simulé"],
+};
+
+// One line of streamed code → a short description of what is being built.
+const ACT_PATTERNS = [
+  [/^=== NOTES ===/, () => "Rédaction des notes d'installation"],
+  [/RegisterNetEvent\(\s*['"]([^'"]+)/, (m) => `Événement réseau ${m[1]}`],
+  [/RegisterNUICallback\(\s*['"]([^'"]+)/, (m) => `Callback interface ${m[1]}`],
+  [/(?:RegisterServerCallback|lib\.callback\.register|CreateCallback)\(\s*['"]([^'"]+)/, (m) => `Callback serveur ${m[1]}`],
+  [/(?:RegisterCommand|lib\.addCommand)\(\s*['"]([^'"]+)/, (m) => `Commande /${m[1]}`],
+  [/(?:RegisterUsableItem|CreateUseableItem)\(\s*['"]([^'"]+)/, (m) => `Item utilisable ${m[1]}`],
+  [/CREATE TABLE(?: IF NOT EXISTS)?\s+`?(\w+)/i, (m) => `Table SQL ${m[1]}`],
+  [/INSERT (?:IGNORE )?INTO\s+`?job_grades/i, () => "Grades du job"],
+  [/AddEventHandler\(\s*['"]onResourceStop/, () => "Nettoyage à l'arrêt de la ressource"],
+  [/(?:esx:playerLoaded|OnPlayerLoaded|playerDropped)/, () => "Connexion / déconnexion du joueur"],
+  [/lib\.registerContext|ESX\.OpenContext|lib\.registerMenu|lib\.inputDialog/, () => "Menu"],
+  [/ox_target['"\]]*[:.]add\w+/, () => "Interaction ox_target"],
+  [/AddBlipFor\w+\(/, () => "Blip sur la carte"],
+  [/Create(?:Ped|Vehicle|Object)\(/, () => "Création d'entité"],
+  [/lib\.progress(?:Bar|Circle)\(/, () => "Barre de progression"],
+  [/MySQL\.\w+/, () => "Requête base de données"],
+  [/addEventListener\(\s*['"]message/, () => "Réception des messages de l'interface"],
+  [/^\s*(?:local\s+)?function\s+([\w.:]+)\s*\(/, (m) => `Fonction ${m[1]}`],
+  [/^\s*Config\.(\w+)\s*=/, (m) => `Réglage Config.${m[1]}`],
+  [/^\s*(?:Citizen\.)?CreateThread\(/, () => "Boucle de jeu"],
+];
+
+const act = { mode: "idle", kind: "generate", since: 0, line: "", file: "", feed: [], found: 0, samples: [], thought: 0 };
+let actTimer = null;
+
+function actSet(mode, title, detail = "") {
+  act.mode = mode;
+  act.since = Date.now();
+  $("#activity").className = `activity ${mode}`;
+  $("#actTitle").textContent = title;
+  $("#actDetail").textContent = detail;
+  if (mode !== "writing") $("#actSpeed").textContent = "";
+  actTick();
+}
+
+function actStart(kind) {
+  Object.assign(act, { kind, line: "", file: "", edit: false, feed: [], found: 0, samples: [], thought: 0 });
+  $("#actFeed").innerHTML = "";
+  actSet("thinking", "Réflexion", ACT_HINTS[kind]?.[0] ?? "");
+  clearInterval(actTimer);
+  actTimer = setInterval(actTick, 1000);
+}
+
+function actPush(text, tone = "") {
+  if (act.feed.at(-1)?.text === text) return;
+  act.feed.push({ text, tone });
+  act.found++;
+  act.feed = act.feed.slice(-5);
+  if (act.mode === "writing") actWritingDetail();
+  $("#actFeed").innerHTML = act.feed.map((f, i) => `<li class="${f.tone}${i === act.feed.length - 1 ? " new" : ""}">${escapeHtml(f.text)}</li>`).join("");
+}
+
+function actThinking(chars) {
+  act.thought = chars;
+  if (act.mode !== "thinking") actSet("thinking", "Réflexion", ACT_HINTS[act.kind]?.[0] ?? "");
+}
+
+function actDelta(text) {
+  if (act.mode === "idle" || act.mode === "done" || act.mode === "error") return;
+  act.samples.push([Date.now(), text.length]);
+  if (act.mode !== "writing") actSet("writing", act.edit ? "Modification ciblée" : "Écriture du code");
+  const lines = (act.line + text).split("\n");
+  act.line = lines.pop().slice(-400);
+  for (const line of lines) {
+    const block = line.match(/^=== (FILE|EDIT|DELETE): (.+?) ===/);
+    if (block) {
+      act.file = block[2].trim();
+      act.edit = block[1] === "EDIT";
+      $("#actTitle").textContent = block[1] === "EDIT" ? "Modification ciblée" : block[1] === "DELETE" ? "Suppression" : "Écriture du code";
+      actWritingDetail();
+      continue;
+    }
+    for (const [re, describe] of ACT_PATTERNS) {
+      const m = line.match(re);
+      if (m) {
+        actPush(describe(m));
+        break;
+      }
+    }
+  }
+}
+
+function actFile(f) {
+  actPush(`${f.path} terminé · ${fmtNum(f.content.split("\n").length)} lignes`, f.truncated ? "err" : "ok");
+}
+
+function actTick() {
+  if (act.mode === "idle") return;
+  const ended = act.mode === "done" || act.mode === "error";
+  $("#actTimer").textContent = ended ? "" : fmtDuration(Date.now() - act.since);
+  if (ended) return;
+  const hints = ACT_HINTS[act.mode === "thinking" ? act.kind : act.mode];
+  if (hints) {
+    const hint = hints[Math.floor((Date.now() - act.since) / 3000) % hints.length];
+    $("#actDetail").textContent = act.mode === "thinking" && act.thought ? `${hint} · ${fmtNum(act.thought)} caractères de raisonnement` : hint;
+  }
+  if (act.mode === "writing") {
+    const now = Date.now();
+    act.samples = act.samples.filter(([t]) => now - t < 3000);
+    const rate = act.samples.reduce((n, [, c]) => n + c, 0) / 3;
+    $("#actSpeed").textContent = rate > 0 ? `≈ ${fmtNum(Math.round(rate))} car/s` : "";
+    actWritingDetail();
+  }
+}
+
+function actWritingDetail() {
+  const count = act.found ? ` · ${act.found} élément(s)` : "";
+  $("#actDetail").textContent = act.file ? `${act.file}${count}` : `Le code arrive en direct${count}`;
+}
+
+function actPhase(phase, label) {
+  if (phase === "review") {
+    act.kind = "review";
+    actSet("review", "Relecture du code", ACT_HINTS.review[0]);
+  } else if (phase === "fix") {
+    act.kind = "fix";
+    actSet("fix", label, ACT_HINTS.fix[0]);
+  }
+}
+
+function actValidation(v) {
+  const e = v.errors.length;
+  const w = v.warnings.length;
+  actPush(e ? `Vérification : ${e} erreur(s) à corriger` : w ? `Vérification OK · ${w} avertissement(s)` : "Vérification OK", e ? "err" : w ? "warn" : "ok");
+}
+
+function actEnd(ok, message) {
+  clearInterval(actTimer);
+  actSet(ok ? "done" : "error", ok ? "Ressource livrée" : "Interrompu", ok ? `${act.found} élément(s) suivi(s) · prête à télécharger ou déployer` : message ?? "");
+}
+
 // ---------- generation flows ----------
 
 // Streamed output arrives in thousands of tiny chunks: buffer them, paint at most
@@ -1423,6 +1569,7 @@ async function runStream(url, body, { fresh = false } = {}) {
   const live = createLiveWriter($("#liveText"));
   const appendLive = (t) => live.write(t);
   const kind = url.endsWith("/refine") ? "refine" : url.endsWith("/fix") ? "fix" : "generate";
+  actStart(kind);
   pipeStart(
     kind,
     kind === "generate"
@@ -1449,10 +1596,14 @@ async function runStream(url, body, { fresh = false } = {}) {
           $("#phaseLine").textContent = `${l}…`;
           appendLive(`\n──── ${l} ────\n`);
           pipePhase(phase, l);
+          actPhase(phase, l);
         },
+        thinking: ({ chars }) => actThinking(chars),
+        checking: () => actSet("check", "Vérification et test d'exécution", ACT_HINTS.check[0]),
         delta: (t) => {
           appendLive(t);
           pipeDelta(t);
+          actDelta(t);
         },
         fileStart: (p) => {
           const path = p.trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
@@ -1470,6 +1621,7 @@ async function runStream(url, body, { fresh = false } = {}) {
           else renderTree();
           [...$("#fileTree").children].find((li) => li.title === f.path)?.classList.add("fresh");
           pipeFile(f);
+          actFile(f);
         },
         status: (msg) => {
           toast(msg);
@@ -1482,6 +1634,7 @@ async function runStream(url, body, { fresh = false } = {}) {
           renderTree();
           renderStatus();
           pipeValidation(v);
+          actValidation(v);
         },
         done: (project) => {
           state.current = project;
@@ -1489,12 +1642,14 @@ async function runStream(url, body, { fresh = false } = {}) {
           $("#phaseLine").textContent = v?.ok ? "Terminé ✓ script valide." : `Terminé avec ${v?.errors.length ?? "?"} erreur(s) restante(s).`;
           toast(v?.ok ? "Script prêt !" : "Script généré, mais des erreurs restent (onglet Problèmes).", v?.ok ? "ok" : "err");
           pipeEnd(true);
+          actEnd(true);
         },
         failure: ({ message, project }) => {
           if (project) state.current = project;
           $("#phaseLine").textContent = `Échec : ${message}`;
           toast(message, "err");
           pipeEnd(false, message);
+          actEnd(false, message);
         },
       },
       state.abort.signal,
@@ -1503,6 +1658,7 @@ async function runStream(url, body, { fresh = false } = {}) {
     const msg = e.name === "AbortError" ? "Génération arrêtée." : e.message;
     $("#phaseLine").textContent = msg;
     pipeEnd(false, msg);
+    actEnd(false, msg);
     toast(msg, e.name === "AbortError" ? "" : "err");
     if (e.code === "NO_CREDITS") openRedeem();
     if (fresh && !state.current?.id) showView("new");

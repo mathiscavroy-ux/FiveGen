@@ -70,10 +70,20 @@ function wait(ms, signal) {
 
 export async function runEngine({ userContent, onEvent, signal }) {
   let emitted = false;
+  // Reasoning text never leaves the server: the studio only gets a throttled counter
+  // so it can show that the engine is thinking.
+  let thought = 0;
+  let thoughtSentAt = 0;
   const forward = (type, payload) => {
     if (type === "delta" || type === "fileStart" || type === "file") {
       emitted = true;
       onEvent(type, payload);
+    } else if (type === "thinking" && typeof payload === "string") {
+      thought += payload.length;
+      if (Date.now() - thoughtSentAt > 400) {
+        thoughtSentAt = Date.now();
+        onEvent("thinking", { chars: thought });
+      }
     }
   };
   // Each model gets a few spaced attempts: overload errors from the upstream are usually momentary.

@@ -219,6 +219,14 @@
           </div>
           <div class="tab-panels">
             <div class="tab-panel" data-panel="live">
+              <div id="activity" class="activity idle" aria-live="polite">
+                <div class="act-orb" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+                <div class="act-body">
+                  <div class="act-head"><b id="actTitle">En attente</b><span id="actSpeed" class="act-speed"></span><time id="actTimer"></time></div>
+                  <div id="actDetail" class="act-detail">Lance une génération pour voir le moteur travailler en direct.</div>
+                  <ul id="actFeed" class="act-feed"></ul>
+                </div>
+              </div>
               <div id="phaseLine" class="phase muted">En attente.</div>
               <ol id="pipeSteps" class="pipe-steps"></ol>
               <details class="raw" id="rawBox">
