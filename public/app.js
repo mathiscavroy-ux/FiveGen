@@ -933,7 +933,7 @@ function setBusy(busy) {
 // ---------- insights: file info, analysis, versions ----------
 
 const VERSION_LABELS = {
-  generate: "Génération", refine: "Modification", fix: "Correction", autofix: "Correction automatique",
+  generate: "Génération", refine: "Modification", fix: "Correction", autofix: "Correction automatique", review: "Relecture",
   edit: "Édition manuelle", restore: "Restauration", initial: "État de départ",
 };
 const fmtBytes = (n) => (n < 1024 ? `${n} o` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} Ko`);
@@ -1211,6 +1211,8 @@ const CHECK_GROUPS = [
   ["truncated", "Fichiers complets", (p) => /tronqué/i.test(p.message)],
   ["nui", "Références de l'interface", (p) => /Référence vers/.test(p.message)],
   ["events", "Événements client ↔ serveur", (p) => /TriggerServerEvent/.test(p.message)],
+  ["runtime", "Test d'exécution (FiveM simulé)", (p) => /^Test d'exécution/.test(p.message)],
+  ["api", "Fonctions FiveM et frameworks", (p) => /n'existe pas|n'existe que|côté (client|serveur)/i.test(p.message)],
   ["manifest", "Manifest & dépendances", () => true],
 ];
 
@@ -1246,7 +1248,7 @@ function openStep(id, label, detail = "") {
 
 function writingStep() {
   const cur = activeStep();
-  if (cur && (cur.id === "write" || cur.id === "fix")) return cur;
+  if (cur && (cur.id === "write" || cur.id === "fix" || cur.id === "review")) return cur;
   return openStep("write", "Écriture des fichiers");
 }
 
@@ -1300,7 +1302,13 @@ function pipeValidation(v) {
 }
 
 function pipePhase(phase, label) {
-  if (!state.run || phase !== "fix") return;
+  if (!state.run) return;
+  if (phase === "review") {
+    openStep("review", label, "Le moteur relit la ressource : sécurité serveur, nettoyage, persistance, demandes du client.");
+    renderPipeline();
+    return;
+  }
+  if (phase !== "fix") return;
   state.run.round++;
   openStep("fix", label, "Les erreurs détectées sont renvoyées au moteur avec le code concerné.");
   renderPipeline();

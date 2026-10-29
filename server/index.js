@@ -2,12 +2,12 @@ import path from "node:path";
 import express from "express";
 import { ZipArchive } from "archiver";
 import { config, ROOT } from "./config.js";
-import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage } from "./prompts.js";
+import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage, buildReviewMessage } from "./prompts.js";
 import { applyEdits } from "./patch.js";
 import { runEngine, runBrief, engineStatus, EngineError } from "./engine.js";
 import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
-import { validateProject } from "./validator.js";
+import { validateProjectFull } from "./validator.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors } from "./deploy.js";
 import { mountSeo } from "./seo.js";
 import * as db from "./db.js";
@@ -133,7 +133,14 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
   return [...new Set(touched)];
 }
 
-// Generation → save → check → automatic fix rounds (free) while errors remain.
+// Static checks plus the dry run of the resource in a fake FiveM.
+function checkProject(userId, projectId) {
+  const project = getProject(userId, projectId);
+  return validateProjectFull(getFiles(userId, projectId), project.spec, { resource: project.name });
+}
+
+// Generation → save → check → review pass (new resources) → automatic fix rounds
+// (free) while errors remain.
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
   send("phase", { phase: kind, label: LABELS[kind] });
@@ -151,9 +158,35 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   addHistory(userId, projectId, { type: kind, instruction: instruction ?? null, files: touched, outputTokens: result.outputTokens });
   if (result.stopReason === "max_tokens") send("status", "Ressource très volumineuse : certains fichiers ont pu être coupés, la vérification va le signaler.");
 
-  let validation = validateProject(getFiles(userId, projectId), project.spec);
+  let validation = await checkProject(userId, projectId);
   updateMeta(userId, projectId, { validation });
   send("validation", validation);
+
+  if (kind === "generate" && config.reviewPass) {
+    send("phase", { phase: "review", label: "Relecture" });
+    try {
+      const review = await runEngine({
+        userContent: buildReviewMessage(project.spec, getFiles(userId, projectId), validation.warnings),
+        onEvent: send,
+        signal,
+      });
+      state.outputTokens += review.outputTokens ?? 0;
+      if (review.files.length || review.edits.length || review.deletes.length) {
+        const reviewed = await saveResult({ userId, projectId, result: review, spec: project.spec, send, signal, state });
+        snapshot(userId, projectId, { type: "review", label: "Relecture" });
+        updateMeta(userId, projectId, { notes: mergeNotes(getProject(userId, projectId).notes, review.notes, "Relecture") });
+        addHistory(userId, projectId, { type: "review", instruction: "Relecture", files: reviewed, outputTokens: review.outputTokens });
+        validation = await checkProject(userId, projectId);
+        updateMeta(userId, projectId, { validation });
+        send("validation", validation);
+      }
+    } catch (err) {
+      // Same as the fix rounds: the generated script is saved, the review is a bonus.
+      if (signal.aborted) throw err;
+      console.error("[fivegen] relecture interrompue :", err.detail ?? err);
+      send("status", "Relecture interrompue : le script est livré après la vérification automatique.");
+    }
+  }
 
   for (let round = 1; round <= config.autoFixRounds && !validation.ok; round++) {
     send("phase", { phase: "fix", label: `Correction automatique ${round}/${config.autoFixRounds}` });
@@ -177,7 +210,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     const current = getProject(userId, projectId);
     updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
     addHistory(userId, projectId, { type: "autofix", instruction: `${validation.errors.length} erreur(s)`, files: fixed, outputTokens: fix.outputTokens });
-    validation = validateProject(getFiles(userId, projectId), project.spec);
+    validation = await checkProject(userId, projectId);
     updateMeta(userId, projectId, { validation });
     send("validation", validation);
   }
@@ -502,7 +535,7 @@ app.post("/api/projects/:id/refine", requireUser, async (req, res) => {
 
 app.post("/api/projects/:id/fix", requireUser, async (req, res) => {
   const project = getProject(req.user.id, req.params.id);
-  const validation = validateProject(project.files, project.spec);
+  const validation = await checkProject(req.user.id, project.id);
   const problems = [...validation.errors, ...(req.body?.includeWarnings ? validation.warnings : [])];
   // Errors printed by the resource in the FiveM server console (reported by the bridge).
   const runtime = req.body?.runtime ? listRuntimeErrors(req.user.id, project.id) : [];
@@ -523,14 +556,14 @@ app.post("/api/projects/:id/fix", requireUser, async (req, res) => {
   });
 });
 
-app.put("/api/projects/:id/files", requireUser, (req, res) => {
+app.put("/api/projects/:id/files", requireUser, async (req, res) => {
   const { path: filePath, content } = req.body ?? {};
   if (typeof filePath !== "string" || typeof content !== "string") return res.status(400).json({ error: "path et content requis" });
   if (Buffer.byteLength(content) > LIMITS.fileBytes) return res.status(400).json({ error: "Fichier trop volumineux." });
   writeFiles(req.user.id, req.params.id, [{ path: filePath, content }]);
   snapshot(req.user.id, req.params.id, { type: "edit", label: filePath });
   addHistory(req.user.id, req.params.id, { type: "edit", instruction: filePath });
-  updateMeta(req.user.id, req.params.id, { validation: validateProject(getFiles(req.user.id, req.params.id), getProject(req.user.id, req.params.id).spec) });
+  updateMeta(req.user.id, req.params.id, { validation: await checkProject(req.user.id, req.params.id) });
   res.json(getProject(req.user.id, req.params.id));
 });
 
@@ -543,17 +576,17 @@ app.get("/api/projects/:id/versions/:n", requireUser, (req, res) => {
   res.json(getVersionFiles(req.user.id, req.params.id, req.params.n));
 });
 
-app.post("/api/projects/:id/versions/:n/restore", requireUser, (req, res) => {
+app.post("/api/projects/:id/versions/:n/restore", requireUser, async (req, res) => {
   if (running.has(req.user.id)) return res.status(409).json({ error: "Une génération est en cours sur ton compte." });
   getProject(req.user.id, req.params.id);
   restoreVersion(req.user.id, req.params.id, req.params.n);
   addHistory(req.user.id, req.params.id, { type: "restore", instruction: `version ${req.params.n}`, files: [] });
-  updateMeta(req.user.id, req.params.id, { validation: validateProject(getFiles(req.user.id, req.params.id), getProject(req.user.id, req.params.id).spec) });
+  updateMeta(req.user.id, req.params.id, { validation: await checkProject(req.user.id, req.params.id) });
   res.json(getProject(req.user.id, req.params.id));
 });
 
-app.post("/api/projects/:id/validate", requireUser, (req, res) => {
-  const validation = validateProject(getFiles(req.user.id, req.params.id), getProject(req.user.id, req.params.id).spec);
+app.post("/api/projects/:id/validate", requireUser, async (req, res) => {
+  const validation = await checkProject(req.user.id, req.params.id);
   updateMeta(req.user.id, req.params.id, { validation });
   res.json(validation);
 });

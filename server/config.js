@@ -52,6 +52,8 @@ export const config = {
   // Modifications included with each script before COST_REFINE applies.
   freeRefines: int(env.FREE_REFINES, 3),
   autoFixRounds: int(env.AUTO_FIX_ROUNDS, 2),
+  // Second engine pass that rereads a new resource against a checklist (REVIEW_PASS=0 disables).
+  reviewPass: env.REVIEW_PASS !== "0",
   // Accounts per network address that receive the free credits, over 30 days.
   freeCreditsPerIp: int(env.FREE_CREDITS_PER_IP, 2),
   shopUrl: env.SHOP_URL || "",

@@ -121,6 +121,14 @@ Pour régénérer le catalogue après une mise à jour d'ESX ou des ressources o
 npm run api-catalog -- --natives <dossier des natives> --resources <serveur>/resources --scheduler <serveur>/citizen/scripting/lua --qb <qb-core> --qbx <qbx_core>
 ```
 
+## Test d'exécution et relecture
+
+Chaque génération passe, avant livraison :
+1. par les vérifications statiques (syntaxe, manifest, API, SQL, cohérence Config / traductions / NUI) ;
+2. par un **test d'exécution dans un FiveM simulé** (`server/smoketest.js`, Lua 5.4 via wasmoon). Chaque fichier client et serveur est chargé avec des natives, ESX, QBCore, ox_lib, ox_inventory et oxmysql simulés. Les threads tournent quelques tours, et les événements réseau et callbacks serveur sont appelés avec des arguments vides, comme un client malveillant. Une erreur réelle (variable nil, globale d'un autre fichier, boucle sans `Wait`) est une erreur à corriger. Un événement qui plante faute d'arguments est un avertissement (`SMOKE_TEST=0` coupe ce test) ;
+3. par une **relecture du moteur** (nouvelles ressources seulement). Elle suit une liste de contrôle : demandes du client, sécurité serveur, nettoyage, persistance, cohérence, messages. Les avertissements précédents lui sont transmis, et elle renvoie des remplacements ciblés (`REVIEW_PASS=0` la coupe) ;
+4. par la correction automatique tant qu'il reste des erreurs.
+
 ## Référencement
 
 - `/scripts` et une page par famille de script (`/scripts/job-police-esx-qbcore`, `/scripts/hud-fivem`…), rendues côté serveur avec titre, description, balises de partage et données structurées. Le bouton « Générer ce script » ouvre le studio avec l'idée pré-remplie.
@@ -156,6 +164,7 @@ server/
   knowledge/      base de connaissances FiveM (privée)
   parser.js       lecture des fichiers produits
   validator.js    vérifications Lua / manifest / NUI / événements
+  smoketest.js    test d'exécution dans un FiveM simulé (wasmoon)
   projects.js     stockage des projets par client, ZIP
   mock.js, demo.js  mode démo
 public/           site (accueil, connexion, studio, admin, pages légales)

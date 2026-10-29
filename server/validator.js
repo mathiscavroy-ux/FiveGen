@@ -2,16 +2,54 @@ import vm from "node:vm";
 import luaparse from "luaparse";
 import { checkApiCalls } from "./apicheck.js";
 import { checkConsistency } from "./consistency.js";
+import { smokeTest } from "./smoketest.js";
 
 // CfxLua accepts a few extensions a stock Lua parser rejects. The prompt asks the
 // model to avoid them; this normalisation keeps the syntax check from failing on
 // the ones that slip through anyway.
 export function normaliseCfxLua(src) {
-  return src
+  return backticksOutsideStrings(src)
     .replace(/<\s*(const|close)\s*>/g, "")
-    .replace(/`([^`\n]*)`/g, '"$1"')
     .replace(/\?\./g, ".")
     .replace(/^(\s*)([\w.:\[\]'"]+)\s*([+\-*/])=(?!=)\s*/gm, "$1$2 = $2 $3 ");
+}
+
+// `name` (CfxLua hash literal) becomes "name", but a backtick inside a quoted string
+// (SQL such as "SELECT * FROM `users`") stays untouched.
+function backticksOutsideStrings(src) {
+  let out = "";
+  let quote = null;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quote) {
+      out += c;
+      if (c === "\\") out += src[++i] ?? "";
+      else if (c === quote || c === "\n") quote = null;
+    } else if (c === "-" && src[i + 1] === "-") {
+      const end = src.indexOf("\n", i);
+      const stop = end === -1 ? src.length : end;
+      out += src.slice(i, stop);
+      i = stop - 1;
+    } else if (c === "[" && /^\[=*\[/.test(src.slice(i, i + 12))) {
+      const eq = src.slice(i).match(/^\[(=*)\[/)[1];
+      const end = src.indexOf(`]${eq}]`, i);
+      const stop = end === -1 ? src.length : end + eq.length + 2;
+      out += src.slice(i, stop);
+      i = stop - 1;
+    } else if (c === '"' || c === "'") {
+      quote = c;
+      out += c;
+    } else if (c === "`") {
+      const end = src.indexOf("`", i + 1);
+      const nl = src.indexOf("\n", i + 1);
+      if (end === -1 || (nl !== -1 && nl < end)) out += c;
+      else {
+        out += `"${src.slice(i + 1, end)}"`;
+        i = end;
+      }
+    } else out += c;
+  }
+  return out;
 }
 
 export function checkLua(file, src) {
@@ -303,4 +341,19 @@ export function validateProject(files, spec = {}) {
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };
+}
+
+/**
+ * Static checks plus the dry run in a fake FiveM (smoketest.js). The dry run only
+ * happens when every Lua file compiles, otherwise its errors would repeat the syntax ones.
+ */
+export async function validateProjectFull(files, spec = {}, { resource } = {}) {
+  const result = validateProject(files, spec);
+  if (process.env.SMOKE_TEST === "0") return result;
+  if (result.errors.some((e) => e.file?.endsWith(".lua") && /syntaxe|tronqué/i.test(e.message))) return result;
+  const runtime = await smokeTest(files, { manifestEntries, globToRegex, normalise: normaliseCfxLua }, { resource });
+  if (!runtime.length) return result;
+  const errors = [...result.errors, ...runtime.filter((p) => p.level === "error")];
+  const warnings = [...result.warnings, ...runtime.filter((p) => p.level !== "error")];
+  return { ...result, ok: errors.length === 0, errors, warnings };
 }

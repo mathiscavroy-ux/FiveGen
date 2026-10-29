@@ -99,6 +99,12 @@ Généré par FiveGen
 
 function pickResponse(userContent) {
   const name = userContent.match(/Nom de la ressource : (\S+)/)?.[1] ?? "demo_job";
+  if (userContent.includes("<relecture>")) {
+    return `=== NOTES ===
+RAS
+=== END NOTES ===
+`;
+  }
   if (userContent.includes("<erreurs_detectees>")) {
     return `=== EDIT: server/main.lua ===
 <<<<<<< SEARCH

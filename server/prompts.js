@@ -153,6 +153,42 @@ Applique la modification demandée, et seulement elle. Mets à jour fxmanifest.l
 ${EDIT_RULES}`;
 }
 
+// Second pass right after a generation: the engine rereads its own resource against a
+// checklist of what static checks cannot see. Warnings from the checks (including the
+// dry run in a fake FiveM) are listed so this pass fixes them too.
+export function buildReviewMessage(spec, files, warnings = []) {
+  const hints = warnings.length
+    ? `\n<avertissements_verification>\n${warnings.map((w) => `- ${w.file}${w.line ? `:${w.line}` : ""} — ${w.message}`).join("\n")}\n</avertissements_verification>\n`
+    : "";
+  return `Relis la ressource FiveM que tu viens d'écrire, comme un développeur senior avant livraison.
+
+<specification>
+${describeSpec(spec)}
+</specification>
+${briefBlock(spec)}
+<fichiers_actuels>
+${filesBlock(files)}
+</fichiers_actuels>
+${hints}
+<relecture>
+Vérifie point par point :
+1. Chaque précision du client et chaque fonctionnalité de la spécification est réellement implémentée (pas de TODO, pas de fonction vide, pas de « à compléter »).
+2. Sécurité serveur : chaque événement réseau et callback valide ses arguments (type, tonumber, bornes), le job et le grade du joueur, la distance, l'existence de la cible, et applique un cooldown aux actions répétables. Aucun argent, item ou job n'est donné sur la seule parole du client.
+3. Robustesse : xPlayer, résultats SQL, items, entités et retours de lib.inputDialog testés avant usage ; aucune variable locale d'un fichier utilisée dans un autre ; pas de boucle sans Wait.
+4. Nettoyage : entités, blips, zones, NUI (SetNuiFocus false) et états libérés dans onResourceStop et à la déconnexion.
+5. Persistance : ce qui doit survivre à un redémarrage ou une reconnexion est stocké (SQL ou métadonnées) et le SQL fourni crée toutes les tables et lignes utilisées.
+6. Cohérence : clés Config, traductions, actions NUI et callbacks présents des deux côtés ; README et fxmanifest à jour.
+7. Messages : chaque refus notifie la vraie raison au joueur.
+</relecture>
+
+Corrige uniquement les vrais problèmes trouvés, sans réécrire ce qui fonctionne ni changer le comportement voulu. Si tout est correct, ne renvoie aucun bloc EDIT ni FILE, seulement :
+=== NOTES ===
+RAS
+=== END NOTES ===
+
+${EDIT_RULES}`;
+}
+
 // Big resources: only the files the errors point at (plus manifest and config) are
 // sent in full, the rest by name, to keep each fix round small.
 const FULL_CONTEXT_CHARS = 40000;
