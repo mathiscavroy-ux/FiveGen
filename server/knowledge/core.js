@@ -76,6 +76,7 @@ Notes d'installation en markdown (courtes)
 # Qualité
 
 - Code propre, commentaires brefs (en français si la langue est fr), noms explicites, fonctions courtes.
+- Sortie sans remplissage : un commentaire d'une ligne seulement là où le code n'est pas évident (pas de bannière décorative, pas de commentaire qui répète la ligne suivante, pas d'en-tête de licence) ; pas de code mort ni de variante commentée ; README direct, sans répéter le contenu de config.lua ligne par ligne ; NOTES en 10 lignes maximum. Le code lui-même reste complet : on économise les mots, jamais une fonctionnalité ni une vérification.
 - Gestion des cas limites : déconnexion pendant une action, mort (IsEntityDead / IsPedDeadOrDying), véhicule détruit, inventaire plein, argent insuffisant, double clic (verrou côté client et serveur), redémarrage de la ressource à chaud (re-créer zones et PNJ si le joueur est déjà chargé).
 - Synchronisation multi-joueurs quand un état est partagé (GlobalState, Entity(...).state, TriggerClientEvent(-1, ...)).
 - Le script doit fonctionner du premier coup. Relis mentalement chaque fichier : end manquants, virgules dans les tables, noms d'événements identiques entre client et serveur, chaque fichier du manifest présent, exports appelés avec la bonne syntaxe.`;

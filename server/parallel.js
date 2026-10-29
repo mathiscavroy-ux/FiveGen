@@ -4,6 +4,12 @@
 // they share, then groups of files are written at the same time from that plan.
 import { buildPlanMessage, buildPartMessage } from "./prompts.js";
 import { runEngine, runPlan } from "./engine.js";
+import { modelAvailable } from "./provider.js";
+import { config } from "./config.js";
+
+// Files written from the plan without deep reasoning: they go to the cheaper model.
+// The logic (config, client, server, interface script) stays on the main model.
+export const isLightFile = (p) => /(^|\/)readme[^/]*$|\.md$|(^|\/)locales?\/|\.sql$|^fxmanifest\.lua$|\.(html|css)$/i.test(p);
 
 // The run lasts as long as its slowest group: up to 6 calls, split by expected size.
 const MAX_GROUPS = 6;
@@ -14,21 +20,21 @@ const clean = (p) => String(p ?? "").trim().replace(/\\/g, "/").replace(/^(\.\/)
 const weight = (p) => (/^(client|server)\/.+\.lua$/.test(p) ? 3 : /\.(js|css)$|config\.lua$|locales?\//.test(p) ? 2 : 1);
 const total = (g) => g.reduce((n, p) => n + weight(p), 0);
 
-// Manifest, config, locales, SQL and README together; client, server and interface
-// apart. Then the heaviest group is split in two (balanced by weight) while there is
-// room for another call and it is worth it.
+// Simple files (manifest, locales, SQL, README, HTML/CSS) together; client and server
+// apart; config, shared and interface script together. Then the heaviest group is split
+// in two (balanced by weight) while there is room for another call and it is worth it.
 export function groupFiles(paths) {
-  const base = [];
+  const light = [];
   const client = [];
   const server = [];
-  const ui = [];
+  const rest = [];
   for (const p of paths) {
-    if (/^(html|web|ui|nui)\//.test(p)) ui.push(p);
+    if (isLightFile(p)) light.push(p);
     else if (/^client\//.test(p)) client.push(p);
     else if (/^server\//.test(p)) server.push(p);
-    else base.push(p);
+    else rest.push(p);
   }
-  const groups = [base, client, server, ui].filter((g) => g.length);
+  const groups = [light, rest, client, server].filter((g) => g.length);
   while (groups.length < MAX_GROUPS) {
     const heaviest = groups.filter((g) => g.length > 1).sort((a, b) => total(b) - total(a))[0];
     if (!heaviest || total(heaviest) < MIN_SPLIT_WEIGHT) break;
@@ -66,6 +72,7 @@ export async function generateParallel({ spec, send, signal, meta }) {
 
   const groups = groupFiles(plan.files.map((f) => f.path));
   send("phase", { phase: "write", label: `Écriture en parallèle · ${groups.length} groupe${groups.length > 1 ? "s" : ""}` });
+  const light = (await modelAvailable(config.engine.lightModel)) ? config.engine.lightModel : null;
   const runGroup = (paths, i, notes) =>
     runEngine({
       userContent: buildPartMessage(spec, plan, paths, { notes }),
@@ -73,6 +80,7 @@ export async function generateParallel({ spec, send, signal, meta }) {
       onEvent: (type, payload) => (type === "delta" ? send("pdelta", { g: i, t: payload }) : send(type, payload)),
       signal,
       meta: { ...meta, purpose: "generate" },
+      model: light && paths.every(isLightFile) ? light : undefined,
     });
   const settle = (p) => p.then((value) => ({ status: "fulfilled", value }), (reason) => ({ status: "rejected", reason }));
 

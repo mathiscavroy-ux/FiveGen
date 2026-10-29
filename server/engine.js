@@ -91,7 +91,8 @@ async function withEffort(provider, purpose) {
 }
 
 // meta: { userId, projectId, purpose } for the usage log.
-export async function runEngine({ userContent, onEvent, signal, meta }) {
+// model: optional model tried first (then the usual ones, so a failure still delivers).
+export async function runEngine({ userContent, onEvent, signal, meta, model: preferred }) {
   let emitted = false;
   // Reasoning text never leaves the server: the studio only gets a throttled counter
   // so it can show that the engine is thinking.
@@ -111,7 +112,8 @@ export async function runEngine({ userContent, onEvent, signal, meta }) {
   };
   // Each model gets a few spaced attempts: overload errors from the upstream are usually momentary.
   const retries = (provider) => Array.from({ length: RETRIES_PER_MODEL }, (_, i) => ({ provider, retry: i }));
-  const attempts = mockRun ? [null] : primaryModels().flatMap((model) => retries({ ...upstream, model }));
+  const models = preferred ? [preferred, ...primaryModels().filter((m) => m !== preferred)] : primaryModels();
+  const attempts = mockRun ? [null] : models.flatMap((model) => retries({ ...upstream, model }));
   if (fallback && !mockRun) attempts.push(...retries(fallback));
   let lastError;
   for (let i = 0; i < attempts.length; i++) {

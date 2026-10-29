@@ -6,7 +6,7 @@ import { config, ROOT } from "./config.js";
 import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage, buildReviewMessage } from "./prompts.js";
 import { applyEdits } from "./patch.js";
 import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from "./engine.js";
-import { providerUsage, modelPricing } from "./provider.js";
+import { providerUsage, modelPricing, modelAvailable } from "./provider.js";
 import { generateParallel } from "./parallel.js";
 import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
@@ -228,6 +228,8 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
         onEvent: send,
         signal,
         meta: { userId, projectId, purpose: "review" },
+        // the review reads more than it writes: the cheaper model is enough, the main one stays as fallback
+        model: (await modelAvailable(config.engine.reviewModel)) ? config.engine.reviewModel : undefined,
       });
       state.outputTokens += review.outputTokens ?? 0;
       if (review.files.length || review.edits.length || review.deletes.length) {

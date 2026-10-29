@@ -39,6 +39,10 @@ export const config = {
     // output budget), no level 360-420 s with nothing streamed. Sent only to models that list it.
     effort: env.ENGINE_EFFORT || "low",
     effortEdits: env.ENGINE_EFFORT_EDITS || "low",
+    // Cheaper model for files that need no deep reasoning (README, locales, SQL, manifest,
+    // HTML/CSS) and for the review. Used only when the provider lists it; "" disables.
+    lightModel: (env.ENGINE_LIGHT_MODEL ?? "anthropic/claude-sonnet-5.5").trim(),
+    reviewModel: (env.ENGINE_REVIEW_MODEL ?? env.ENGINE_LIGHT_MODEL ?? "anthropic/claude-sonnet-5.5").trim(),
     // A generation silent for this long is abandoned (then retried or refunded).
     stallSeconds: int(env.ENGINE_STALL_SECONDS, 90),
     // Optional faster model for the questions step (same provider as ENGINE_MODEL).

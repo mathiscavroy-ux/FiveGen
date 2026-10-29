@@ -92,6 +92,11 @@ export async function modelPricing() {
   return value;
 }
 
+/** True when the provider's model list has this model (no list, no match). */
+export async function modelAvailable(model) {
+  return Boolean(model) && (await modelPricing()).has(model);
+}
+
 /**
  * Reasoning level to send for a model, or null when the model does not take one.
  * Without an explicit level some upstreams hold the whole answer until the end:
