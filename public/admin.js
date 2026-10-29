@@ -24,7 +24,7 @@ const span = (sec) => {
 const windowName = (sec) => (sec < 172800 ? `${Math.round(sec / 3600)} heures` : `${Math.round(sec / 86400)} jours`);
 const USD_EUR = 0.92; // indicative rate, only for the margin estimate
 
-const PURPOSES = { generate: "Génération", review: "Relecture", autofix: "Correction auto", fix: "Correction", refine: "Modification", rewrite: "Réécriture", brief: "Questions" };
+const PURPOSES = { generate: "Génération", plan: "Plan", review: "Relecture", autofix: "Correction auto", fix: "Correction", refine: "Modification", rewrite: "Réécriture", brief: "Questions" };
 const KINDS = { generate: "Génération", refine: "Modification", fix: "Correction" };
 
 async function api(url, opts = {}) {
