@@ -86,4 +86,7 @@ Erreurs relevées dans des ressources générées (à ne plus reproduire) :
 - Menottes : côté client SetEnableHandcuffs(ped, true), animation 'mp_arresting' 'idle' en boucle (flag 49), DisablePlayerFiring et contrôles bloqués, et Player(src).state:set('isCuffed', true, true) côté serveur. ox_inventory et les autres scripts reconnaissent alors l'état (fouille, braquage).
 - Fouille avec ox_inventory : exports.ox_inventory:openInventory('player', serverId) côté client ; autorisé pour les jobs du convar inventory:police (setr inventory:police ["police"]), sinon seulement si la cible est menottée, morte ou mains levées.
 - Amendes ESX : préférer côté serveur exports.esx_billing:BillPlayer(targetId, xPlayer.identifier, 'society_police', motif, montant) plutôt qu'un aller-retour client → serveur.
-- En cas de refus, notifier la vraie raison (distance, grade, modèle non autorisé, cooldown) et pas un message générique.`;
+- En cas de refus, notifier la vraie raison (distance, grade, modèle non autorisé, cooldown) et pas un message générique.
+- GetParentResourceName() n'existe que dans le JavaScript de la NUI ; en Lua c'est GetCurrentResourceName().
+- IsPlayerAceAllowed est une native serveur : pour une commande réservée aux admins, RegisterCommand(nom, fonction, true) (ace command.nom) ou une vérification côté serveur, jamais IsPlayerAceAllowed dans un fichier client.
+- Une même variable (let/const) déclarée deux fois dans un fichier JS empêche toute l'interface de se charger.`;
