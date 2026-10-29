@@ -5,11 +5,18 @@
 import { buildPlanMessage, buildPartMessage } from "./prompts.js";
 import { runEngine, runPlan } from "./engine.js";
 
-const MAX_GROUPS = 4;
+// The run lasts as long as its slowest group: up to 6 calls, split by expected size.
+const MAX_GROUPS = 6;
+const MIN_SPLIT_WEIGHT = 6; // below this a group is quick enough on its own
 const clean = (p) => String(p ?? "").trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
 
+// Rough size of a file to write: client/server scripts are the long ones.
+const weight = (p) => (/^(client|server)\/.+\.lua$/.test(p) ? 3 : /\.(js|css)$|config\.lua$|locales?\//.test(p) ? 2 : 1);
+const total = (g) => g.reduce((n, p) => n + weight(p), 0);
+
 // Manifest, config, locales, SQL and README together; client, server and interface
-// apart. A group of 4 files or more is split while there is room for another call.
+// apart. Then the heaviest group is split in two (balanced by weight) while there is
+// room for another call and it is worth it.
 export function groupFiles(paths) {
   const base = [];
   const client = [];
@@ -23,10 +30,11 @@ export function groupFiles(paths) {
   }
   const groups = [base, client, server, ui].filter((g) => g.length);
   while (groups.length < MAX_GROUPS) {
-    const biggest = groups.reduce((a, b) => (b.length > a.length ? b : a));
-    if (biggest.length < 4) break;
-    const half = Math.ceil(biggest.length / 2);
-    groups.splice(groups.indexOf(biggest), 1, biggest.slice(0, half), biggest.slice(half));
+    const heaviest = groups.filter((g) => g.length > 1).sort((a, b) => total(b) - total(a))[0];
+    if (!heaviest || total(heaviest) < MIN_SPLIT_WEIGHT) break;
+    const halves = [[], []];
+    for (const p of [...heaviest].sort((a, b) => weight(b) - weight(a))) halves[total(halves[0]) <= total(halves[1]) ? 0 : 1].push(p);
+    groups.splice(groups.indexOf(heaviest), 1, ...halves.map((h) => heaviest.filter((p) => h.includes(p))));
   }
   return groups;
 }

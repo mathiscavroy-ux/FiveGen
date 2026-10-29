@@ -194,7 +194,11 @@ function checkLocales(files, { normalise }) {
   for (const f of files.filter(isLua)) {
     // keys live inside string literals, so read the text with only comments removed
     const text = stripComments(f.content);
-    for (const m of text.matchAll(re)) used.push({ file: f.path, line: lineOf(text, m.index), key: m[2] ?? m[4] });
+    for (const m of text.matchAll(re)) {
+      // _L('license_' .. category): a key built at run time, only its prefix is written
+      if (/^\s*\.\./.test(text.slice(m.index + m[0].length))) continue;
+      used.push({ file: f.path, line: lineOf(text, m.index), key: m[2] ?? m[4] });
+    }
   }
   if (!used.length) return [];
   const localeFiles = files.filter((f) => /(^|\/)(locales?|lang|languages?)\//i.test(f.path) && /\.(lua|json)$/.test(f.path));

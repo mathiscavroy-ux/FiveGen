@@ -332,7 +332,8 @@ function checkSql(files, spec) {
   const reported = new Set();
   for (const f of lua) {
     for (const call of f.content.matchAll(/MySQL\.\w+(?:\.await)?\s*\(\s*(['"`])([\s\S]*?)\1/g)) {
-      for (const t of call[2].matchAll(/\b(?:FROM|INTO|UPDATE|JOIN)\s+`?(\w+)`?/gi)) {
+      // (not "ON DUPLICATE KEY UPDATE col = …", which names a column)
+      for (const t of call[2].matchAll(/\b(?:FROM|INTO|(?<!KEY\s+)UPDATE|JOIN)\s+`?(\w+)`?/gi)) {
         const table = t[1].toLowerCase();
         if (KNOWN_TABLES.has(table) || created.has(table) || reported.has(table)) continue;
         reported.add(table);
