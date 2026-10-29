@@ -1,4 +1,5 @@
 import path from "node:path";
+import crypto from "node:crypto";
 import express from "express";
 import { ZipArchive } from "archiver";
 import { config, ROOT } from "./config.js";
@@ -85,12 +86,8 @@ function openStream(res) {
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  const controller = new AbortController();
   const ping = setInterval(() => res.write(": ping\n\n"), 15000);
-  res.on("close", () => {
-    clearInterval(ping);
-    if (!res.writableEnded) controller.abort();
-  });
+  res.on("close", () => clearInterval(ping));
   const send = (event, data) => {
     if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
@@ -98,7 +95,40 @@ function openStream(res) {
     clearInterval(ping);
     if (!res.writableEnded) res.end();
   };
-  return { send, close, signal: controller.signal };
+  return { send, close };
+}
+
+// ---------- background generations ----------
+// A generation belongs to the account, not to the browser tab: closing the tab,
+// reloading or losing the connection no longer stops it. Every event is kept so a
+// studio that comes back can replay the run and follow the rest live. Only the
+// "Arrêter" button (POST /api/jobs/cancel) stops it.
+const jobs = new Map(); // userId -> job
+const JOB_KEEP_MS = 10 * 60 * 1000; // a finished run stays replayable this long
+
+function createJob({ userId, projectId, kind }) {
+  const job = { userId, projectId, kind, startedAt: Date.now(), events: [], viewers: new Set(), done: false, controller: new AbortController() };
+  job.emit = (event, data) => {
+    job.events.push([event, data]);
+    for (const v of job.viewers) v.send(event, data);
+  };
+  jobs.set(userId, job);
+  return job;
+}
+
+function watchJob(job, res) {
+  const viewer = openStream(res);
+  for (const [event, data] of job.events) viewer.send(event, data);
+  if (job.done) return viewer.close();
+  job.viewers.add(viewer);
+  res.on("close", () => job.viewers.delete(viewer));
+}
+
+function finishJob(job) {
+  job.done = true;
+  for (const v of job.viewers) v.close();
+  job.viewers.clear();
+  setTimeout(() => jobs.get(job.userId) === job && jobs.delete(job.userId), JOB_KEEP_MS).unref();
 }
 
 function mergeNotes(previous, notes, title) {
@@ -237,7 +267,10 @@ function safeProject(userId, id) {
 // Credits are already charged by the caller; refunded when nothing was produced.
 async function streamPipeline(res, { userId, projectId, kind, instruction, userContent, cost }) {
   running.add(userId);
-  const { send, close, signal } = openStream(res);
+  const job = createJob({ userId, projectId, kind });
+  watchJob(job, res);
+  const send = job.emit;
+  const { signal } = job.controller;
   const state = { produced: false, outputTokens: 0 };
   send("project", { id: projectId });
   send("credits", { credits: db.getUser(userId).credits });
@@ -263,9 +296,29 @@ async function streamPipeline(res, { userId, projectId, kind, instruction, userC
   } finally {
     running.delete(userId);
     send("credits", { credits: db.getUser(userId)?.credits ?? 0 });
-    close();
+    finishJob(job);
   }
 }
+
+// The studio asks on load whether a generation is still running, then reattaches.
+app.get("/api/jobs/current", requireUser, (req, res) => {
+  const job = jobs.get(req.user.id);
+  if (!job || job.done) return res.json({ running: false });
+  res.json({ running: true, projectId: job.projectId, kind: job.kind, startedAt: job.startedAt });
+});
+
+app.get("/api/jobs/stream", requireUser, (req, res) => {
+  const job = jobs.get(req.user.id);
+  if (!job) return res.status(404).json({ error: "Aucune génération en cours." });
+  watchJob(job, res);
+});
+
+app.post("/api/jobs/cancel", requireUser, (req, res) => {
+  const job = jobs.get(req.user.id);
+  if (!job || job.done) return res.status(404).json({ error: "Aucune génération en cours." });
+  job.controller.abort();
+  res.json({ ok: true });
+});
 
 // Shared preflight for paid actions: concurrency + credits.
 function charge(req, res, cost) {
@@ -597,6 +650,68 @@ app.post("/api/projects/:id/validate", requireUser, async (req, res) => {
   const validation = await checkProject(req.user.id, req.params.id);
   updateMeta(req.user.id, req.params.id, { validation });
   res.json(validation);
+});
+
+// ---------- NUI preview ----------
+// The interface runs in a sandboxed iframe (no access to the account), loaded through
+// a temporary link instead of the session cookie. Calls to the game (fetch to
+// https://<resource>/<callback>) are answered locally and reported to the studio.
+const previews = new Map(); // token -> { userId, projectId, expires }
+const PREVIEW_MS = 15 * 60 * 1000;
+const PREVIEW_TYPES = { html: "text/html", js: "text/javascript", css: "text/css", json: "application/json", svg: "image/svg+xml", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", ogg: "audio/ogg", mp3: "audio/mpeg", wav: "audio/wav" };
+
+function previewShim(resource) {
+  return `<script>(() => {
+  const RES = ${JSON.stringify(resource)};
+  window.GetParentResourceName = () => RES;
+  const real = window.fetch.bind(window);
+  window.fetch = (url, opts = {}) => {
+    const m = String(url).match(/^https?:\\/\\/([^/]+)\\/(.+)$/);
+    if (m && (m[1] === RES || m[1] === "nui-dev" || !m[1].includes("."))) {
+      let body = opts.body;
+      try { body = JSON.parse(body); } catch {}
+      parent.postMessage({ fivegenNui: { name: m[2], body } }, "*");
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } }));
+    }
+    return real(url, opts);
+  };
+})();</script>`;
+}
+
+app.post("/api/projects/:id/preview", requireUser, (req, res) => {
+  const project = getProject(req.user.id, req.params.id);
+  const manifest = project.files.find((f) => f.path === "fxmanifest.lua")?.content ?? "";
+  const page = manifest.replace(/--[^\n]*/g, "").match(/\bui_page\s*\(?\s*['"]([^'"]+)['"]/)?.[1];
+  if (!page || !project.files.some((f) => f.path === page.replace(/^\.\//, ""))) return res.status(400).json({ error: "Cette ressource n'a pas d'interface NUI." });
+  const now = Date.now();
+  for (const [t, p] of previews) if (p.expires < now) previews.delete(t);
+  const token = crypto.randomBytes(18).toString("base64url");
+  previews.set(token, { userId: req.user.id, projectId: project.id, expires: now + PREVIEW_MS });
+  res.json({ url: `/preview/${token}/${page.replace(/^\.\//, "")}` });
+});
+
+app.get("/preview/:token/*path", (req, res) => {
+  const p = previews.get(req.params.token);
+  if (!p || p.expires < Date.now()) return res.status(404).send("Aperçu expiré : rouvre-le depuis le studio.");
+  const file = [].concat(req.params.path).join("/");
+  let project;
+  try {
+    project = getProject(p.userId, p.projectId);
+  } catch {
+    return res.status(404).end();
+  }
+  const f = project.files.find((x) => x.path === file);
+  if (!f) return res.status(404).end();
+  const ext = file.split(".").pop().toLowerCase();
+  res.set({
+    "Content-Type": `${PREVIEW_TYPES[ext] ?? "text/plain"}; charset=utf-8`,
+    "Content-Security-Policy": "default-src 'self' 'unsafe-inline' data: blob: https:; connect-src 'none'; frame-ancestors 'self'",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+  });
+  if (ext !== "html") return res.send(f.content);
+  const shim = previewShim(project.name);
+  res.send(/<head[^>]*>/i.test(f.content) ? f.content.replace(/<head[^>]*>/i, (m) => m + shim) : shim + f.content);
 });
 
 app.get("/api/projects/:id/zip", requireUser, (req, res) => {

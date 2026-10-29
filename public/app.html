@@ -171,6 +171,7 @@
             <button id="btnCancel" class="btn danger hidden"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Arrêter</button>
             <button id="btnValidate" class="btn ghost" title="Relancer la validation"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Vérifier</button>
             <button id="btnFix" class="btn ghost" title="Corriger automatiquement les problèmes détectés"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Corriger</button>
+            <button id="btnPreview" class="btn ghost hidden" title="Voir l'interface du script dans le navigateur"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Aperçu</button>
             <button id="btnDeploy" class="btn ghost" title="Installer et démarrer la ressource sur ton serveur FiveM"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>Déployer</button>
             <a id="btnZip" class="btn primary" href="#" download><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>Télécharger le ZIP</a>
             <button id="btnDelete" class="btn ghost icon" title="Supprimer ce projet"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
@@ -237,7 +238,7 @@
               </details>
             </div>
             <div class="tab-panel hidden" data-panel="problems"><div id="runtimeBox" class="runtime-box hidden"></div><ul id="problemList" class="problems"></ul></div>
-            <div class="tab-panel hidden" data-panel="notes"><div id="notes" class="markdown"></div></div>
+            <div class="tab-panel hidden" data-panel="notes"><div id="installCheck" class="install-check"></div><div id="notes" class="markdown"></div></div>
           </div>
 
           <form id="refineForm" class="refine">
@@ -278,6 +279,22 @@
         <button type="submit" class="btn primary">Valider le code</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- NUI preview: the interface runs isolated (sandbox, temporary link), messages sent by buttons -->
+  <dialog id="previewDialog" class="dialog preview-dialog">
+    <div class="dlg-head"><h2>Aperçu de l'interface</h2><button type="button" class="btn ghost small" id="pvClose">Fermer</button></div>
+    <p class="muted pv-sub">L'interface tourne comme dans FiveM, avec des données vides. Envoie-lui les messages du script pour l'ouvrir ou la mettre à jour ; ses appels vers le jeu s'affichent à droite.</p>
+    <div class="pv-body">
+      <div class="pv-screen"><iframe id="pvFrame" title="Aperçu de l'interface" sandbox="allow-scripts"></iframe></div>
+      <aside class="pv-side">
+        <b>Messages du script</b>
+        <div id="pvActions" class="pv-actions"></div>
+        <label class="pv-data"><span>Données envoyées (JSON)</span><textarea id="pvData" rows="4" spellcheck="false">{}</textarea></label>
+        <b>Appels de l'interface vers le jeu</b>
+        <ul id="pvLog" class="pv-log"><li class="muted">Aucun pour l'instant.</li></ul>
+      </aside>
+    </div>
   </dialog>
 
   <!-- Deploy to a FiveM server -->

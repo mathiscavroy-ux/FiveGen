@@ -102,7 +102,8 @@ function renderMarkdown(md) {
 // ---------- SSE over POST ----------
 
 async function streamPost(url, body, handlers, signal) {
-  const res = await fetch(url, { method: "POST", headers: HEADERS, body: JSON.stringify(body ?? {}), signal });
+  // body === null: GET (reattach to a running generation)
+  const res = await fetch(url, body === null ? { headers: HEADERS, signal } : { method: "POST", headers: HEADERS, body: JSON.stringify(body ?? {}), signal });
   if (res.status === 401) {
     location.href = "/login";
     return;
@@ -991,6 +992,124 @@ function renderStatus() {
   }
 }
 
+// Install checklist built from the resource itself (SQL files, dependencies, aces),
+// ticked boxes remembered per project in this browser.
+function installSteps(p) {
+  const files = p.files ?? [];
+  const name = p.name ?? p.spec?.name ?? "ressource";
+  const manifest = files.find((f) => f.path === "fxmanifest.lua")?.content ?? "";
+  const deps = new Set();
+  for (const block of manifest.replace(/--[^\n]*/g, "").match(/\bdependenc(?:ies|y)\s*(\{[\s\S]*?\}|(['"])[^'"\n]*\2)/g) ?? []) {
+    for (const m of block.matchAll(/(['"])([^'"\n/]+)\1/g)) deps.add(m[2]);
+  }
+  for (const m of manifest.matchAll(/['"]@([\w-]+)\//g)) deps.add(m[1]);
+  const sql = files.filter((f) => f.path.endsWith(".sql")).map((f) => f.path);
+  const text = `${p.notes ?? ""}\n${files.find((f) => /readme/i.test(f.path))?.content ?? ""}`;
+  const steps = [{ id: "copy", label: `Copier le dossier « ${name} » dans le dossier resources du serveur`, hint: "ou le bouton « Déployer » pour l'envoyer sur ton serveur en un clic" }];
+  for (const s of sql) steps.push({ id: `sql:${s}`, label: `Importer ${s} dans ta base de données`, hint: "HeidiSQL, phpMyAdmin ou la console MySQL" });
+  if (deps.size) steps.push({ id: "deps", label: `Vérifier que ces ressources sont installées et démarrées : ${[...deps].join(", ")}` });
+  if (/add_ace|add_principal/.test(text)) steps.push({ id: "ace", label: "Ajouter les lignes add_ace / add_principal indiquées plus bas dans server.cfg" });
+  steps.push({ id: "ensure", label: `Ajouter « ensure ${name} » dans server.cfg, après ses dépendances` });
+  steps.push({ id: "start", label: `Redémarrer le serveur (ou « refresh » puis « ensure ${name} » dans la console)` });
+  steps.push({ id: "test", label: "Tester en jeu, puis « Corriger » si une erreur apparaît (elle remonte ici avec le bridge)" });
+  return steps;
+}
+
+// ---------- NUI preview ----------
+
+const hasNui = (p) => /\bui_page\b/.test(p?.files?.find((f) => f.path === "fxmanifest.lua")?.content ?? "");
+
+// Every SendNUIMessage action/type of the client scripts, offered as buttons.
+function nuiActions(p) {
+  const out = new Set();
+  for (const f of p.files.filter((x) => x.path.endsWith(".lua"))) {
+    for (const m of f.content.matchAll(/SendNUIMessage\s*\(\s*\{[\s\S]{0,200}?\b(?:action|type|event)\s*=\s*['"]([\w:.-]+)['"]/g)) out.add(m[1]);
+  }
+  return [...out];
+}
+
+async function openPreview() {
+  const p = state.current;
+  try {
+    const { url } = await api(`/api/projects/${p.id}/preview`, { method: "POST" });
+    const actions = nuiActions(p);
+    $("#pvActions").innerHTML = actions.length
+      ? actions.map((a) => `<button type="button" class="btn small" data-pv-action="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join("")
+      : '<span class="muted">Aucun message trouvé dans le script.</span>';
+    $("#pvLog").innerHTML = '<li class="muted">Aucun pour l\'instant.</li>';
+    $("#pvFrame").src = url;
+    $("#previewDialog").showModal();
+    // opens the interface by itself when the script has an "open"-like message
+    const opener = actions.find((a) => /^(open|show|display|toggle)/i.test(a));
+    if (opener) $("#pvFrame").onload = () => setTimeout(() => sendPreview(opener), 250);
+  } catch (err) {
+    toast(err.message, "err");
+  }
+}
+
+function sendPreview(action) {
+  let data = {};
+  try {
+    data = JSON.parse($("#pvData").value || "{}");
+  } catch {
+    return toast("Les données ne sont pas du JSON valide.", "err");
+  }
+  $("#pvFrame").contentWindow?.postMessage({ action, type: action, data, ...data }, "*");
+}
+
+function bindPreview() {
+  $("#btnPreview").onclick = openPreview;
+  $("#pvClose").onclick = () => {
+    $("#previewDialog").close();
+    $("#pvFrame").src = "about:blank";
+  };
+  $("#pvActions").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pv-action]");
+    if (b) sendPreview(b.dataset.pvAction);
+  });
+  window.addEventListener("message", (e) => {
+    if (e.source !== $("#pvFrame").contentWindow || !e.data?.fivegenNui) return;
+    const { name, body } = e.data.fivegenNui;
+    const log = $("#pvLog");
+    log.querySelector(".muted")?.remove();
+    const li = document.createElement("li");
+    li.innerHTML = `<b>${escapeHtml(name)}</b> <code>${escapeHtml(JSON.stringify(body ?? {}).slice(0, 160))}</code>`;
+    log.prepend(li);
+  });
+}
+
+function renderInstallCheck() {
+  const p = state.current;
+  const box = $("#installCheck");
+  if (!p?.files?.length) return (box.innerHTML = "");
+  const key = `fivegen.check.${p.id}`;
+  let done = {};
+  try {
+    done = JSON.parse(localStorage.getItem(key)) ?? {};
+  } catch {
+    // private mode: the boxes simply aren't remembered
+  }
+  const steps = installSteps(p);
+  const count = steps.filter((s) => done[s.id]).length;
+  box.innerHTML = `
+    <div class="ic-head"><b>Installation pas à pas</b><span>${count} / ${steps.length}</span><div class="ic-bar"><i style="width:${(count / steps.length) * 100}%"></i></div></div>
+    <ul>${steps
+      .map((s) => `<li class="${done[s.id] ? "on" : ""}"><label><input type="checkbox" data-step="${escapeHtml(s.id)}" ${done[s.id] ? "checked" : ""}/><span><span class="ic-label">${escapeHtml(s.label)}</span>${s.hint ? `<small>${escapeHtml(s.hint)}</small>` : ""}</span></label></li>`)
+      .join("")}</ul>
+    ${count === steps.length ? '<p class="ic-done">Tout est prêt : bon jeu !</p>' : ""}`;
+  box.onchange = (e) => {
+    const id = e.target.dataset.step;
+    if (!id) return;
+    done[id] = e.target.checked;
+    try {
+      localStorage.setItem(key, JSON.stringify(done));
+    } catch {
+      // not saved, still shown
+    }
+    renderInstallCheck();
+  };
+}
+
 function renderProject({ keepEditor = false } = {}) {
   const p = state.current;
   if (!p) return;
@@ -1003,6 +1122,8 @@ function renderProject({ keepEditor = false } = {}) {
   renderTree();
   renderProblems(p.validation);
   $("#notes").innerHTML = renderMarkdown(p.notes);
+  renderInstallCheck();
+  $("#btnPreview").classList.toggle("hidden", !hasNui(p));
   renderRefineCost();
   state.versions = null;
   refreshInsights();
@@ -1723,7 +1844,9 @@ function createLiveWriter(el, { keep = 30000, interval = 100 } = {}) {
   };
 }
 
-async function runStream(url, body, { fresh = false } = {}) {
+// attach: { kind } follows a generation already running on the server (after a
+// reload, a closed tab or a lost connection) instead of starting one.
+async function runStream(url, body, { fresh = false, attach = null } = {}) {
   state.abort = new AbortController();
   setBusy(true);
   selectTab("live");
@@ -1731,21 +1854,26 @@ async function runStream(url, body, { fresh = false } = {}) {
 
   const live = createLiveWriter($("#liveText"));
   const appendLive = (t) => live.write(t);
-  const kind = url.endsWith("/refine") ? "refine" : url.endsWith("/fix") ? "fix" : "generate";
+  const kind = attach?.kind ?? (url.endsWith("/refine") ? "refine" : url.endsWith("/fix") ? "fix" : "generate");
   actStart(kind);
   pipeStart(
     kind,
-    kind === "generate"
-      ? `${label(state.options.frameworks, body.framework)} · ${label(state.options.types, body.type)} · ${body.description.length} caractères de description`
-      : kind === "refine"
-        ? `« ${body.instruction} »`
-        : `${state.current?.validation?.errors?.length || state.current?.validation?.warnings?.length || 0} problème(s) envoyés au moteur avec le code concerné`,
+    attach
+      ? "Reprise du suivi : la génération a continué sur le serveur pendant ton absence."
+      : kind === "generate"
+        ? `${label(state.options.frameworks, body.framework)} · ${label(state.options.types, body.type)} · ${body.description.length} caractères de description`
+        : kind === "refine"
+          ? `« ${body.instruction} »`
+          : `${state.current?.validation?.errors?.length || state.current?.validation?.warnings?.length || 0} problème(s) envoyés au moteur avec le code concerné`,
   );
+  if (attach?.startedAt) state.run.startedAt = attach.startedAt;
+  runTitle.start(kind);
+  let reattach = null;
 
   try {
     await streamPost(
-      url,
-      body,
+      attach ? "/api/jobs/stream" : url,
+      attach ? null : body,
       {
         project: ({ id }) => {
           if (!fresh) return;
@@ -1806,6 +1934,7 @@ async function runStream(url, body, { fresh = false } = {}) {
           toast(v?.ok ? "Script prêt !" : "Script généré, mais des erreurs restent (onglet Problèmes).", v?.ok ? "ok" : "err");
           pipeEnd(true);
           actEnd(true);
+          runTitle.end(true, project.name);
         },
         failure: ({ message, project }) => {
           if (project) state.current = project;
@@ -1813,16 +1942,26 @@ async function runStream(url, body, { fresh = false } = {}) {
           toast(message, "err");
           pipeEnd(false, message);
           actEnd(false, message);
+          runTitle.end(false, message);
         },
       },
       state.abort.signal,
     );
   } catch (e) {
+    // The connection dropped but the generation goes on server side: follow it again.
+    if (e.name !== "AbortError" && e.code !== "NO_CREDITS") {
+      const job = await api("/api/jobs/current").catch(() => null);
+      if (job?.running) reattach = job;
+    }
+    if (reattach) toast("Connexion perdue un instant : la génération continue, reprise du suivi…");
     const msg = e.name === "AbortError" ? "Génération arrêtée." : e.message;
-    $("#phaseLine").textContent = msg;
-    pipeEnd(false, msg);
-    actEnd(false, msg);
-    toast(msg, e.name === "AbortError" ? "" : "err");
+    if (!reattach) {
+      $("#phaseLine").textContent = msg;
+      pipeEnd(false, msg);
+      actEnd(false, msg);
+      runTitle.end(false, msg);
+      toast(msg, e.name === "AbortError" ? "" : "err");
+    }
     if (e.code === "NO_CREDITS") openRedeem();
     if (fresh && !state.current?.id) showView("new");
     if (state.current?.id) {
@@ -1841,7 +1980,81 @@ async function runStream(url, body, { fresh = false } = {}) {
     refreshProjects();
     api("/api/me").then((me) => setCredits(me.credits)).catch(() => {});
   }
+  if (reattach) {
+    await new Promise((r) => setTimeout(r, 1500));
+    return resumeJob(reattach);
+  }
 }
+
+// Picks up a generation that kept running on the server (reload, closed tab).
+async function resumeJob(job) {
+  if (!job?.running || state.busy) return false;
+  if (state.current?.id !== job.projectId) await openProject(job.projectId);
+  if (state.current?.id !== job.projectId) return false;
+  runStream(null, null, { attach: job });
+  return true;
+}
+
+// Tab title, browser notification and a short sound: a generation takes minutes,
+// the client often switches tab meanwhile.
+const runTitle = (() => {
+  const base = document.title;
+  let timer = null;
+  let kindLabel = "";
+  let startedAt = 0;
+  const restore = () => {
+    if (!timer) document.title = base;
+  };
+  document.addEventListener("visibilitychange", () => !document.hidden && restore());
+  window.addEventListener("focus", restore);
+  const chime = (ok) => {
+    try {
+      const ctx = new AudioContext();
+      const notes = ok ? [660, 880] : [440, 330];
+      notes.forEach((f, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.frequency.value = f;
+        o.type = "sine";
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.16);
+        g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + i * 0.16 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.16 + 0.22);
+        o.connect(g).connect(ctx.destination);
+        o.start(ctx.currentTime + i * 0.16);
+        o.stop(ctx.currentTime + i * 0.16 + 0.25);
+      });
+      setTimeout(() => ctx.close(), 1000);
+    } catch {
+      // no audio available: the title and the notification are enough
+    }
+  };
+  return {
+    start(kind) {
+      kindLabel = { generate: "Génération", refine: "Modification", fix: "Correction" }[kind] ?? "Génération";
+      startedAt = state.run?.startedAt ?? Date.now();
+      clearInterval(timer);
+      const tick = () => (document.title = `⏳ ${fmtDuration(Date.now() - (state.run?.startedAt ?? startedAt))} · ${kindLabel} — FiveGen`);
+      tick();
+      timer = setInterval(tick, 1000);
+      // asked once, on a click of the user (the browser requires it)
+      if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+    },
+    end(ok, detail) {
+      clearInterval(timer);
+      timer = null;
+      document.title = ok ? "✅ Script prêt — FiveGen" : "⚠️ Génération interrompue — FiveGen";
+      if (!document.hidden) return setTimeout(restore, 4000);
+      chime(ok);
+      if ("Notification" in window && Notification.permission === "granted") {
+        const n = new Notification(ok ? "Ton script est prêt" : "Génération interrompue", { body: ok ? `${detail ?? "Ta ressource"} : vérifiée et prête à télécharger.` : String(detail ?? ""), tag: "fivegen-run" });
+        n.onclick = () => {
+          window.focus();
+          n.close();
+        };
+      }
+    },
+  };
+})();
 
 async function onGenerate(e) {
   e.preventDefault();
@@ -2183,7 +2396,9 @@ function bind() {
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     location.href = "/";
   };
-  $("#btnCancel").onclick = () => state.abort?.abort();
+  bindPreview();
+  // closing the tab no longer stops a generation: only this button does
+  $("#btnCancel").onclick = () => api("/api/jobs/cancel", { method: "POST" }).catch((err) => toast(err.message, "err"));
   $("#btnValidate").onclick = onValidate;
   $("#btnFix").onclick = onFix;
   $("#btnDelete").onclick = onDelete;
@@ -2217,6 +2432,9 @@ async function boot() {
   renderPacks();
   handlePaymentReturn();
   await refreshProjects();
+  // a generation still running on the server (reload, tab closed during the run)
+  const job = await api("/api/jobs/current").catch(() => null);
+  if (job?.running && (await resumeJob(job))) return toast("Ta génération a continué pendant ton absence : reprise du suivi.");
   const m = location.hash.match(/^#\/p\/([\w-]+)/);
   if (m) openProject(m[1]);
   else showView("new");

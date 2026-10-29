@@ -913,6 +913,38 @@ table.diff tr.gap td { color: var(--muted); background: var(--panel); text-align
 .composer-steps b { display: block; font-size: 13.5px; }
 .composer-steps small { display: block; font-size: 12px; color: var(--muted); }
 
+/* NUI preview */
+.preview-dialog { width: min(1180px, 96vw); max-width: none; }
+.pv-sub { margin: 0 0 12px; font-size: 12.5px; }
+.pv-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; }
+.pv-screen { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: radial-gradient(ellipse at 30% 20%, #3b4a5e 0%, transparent 55%), radial-gradient(ellipse at 80% 90%, #2a3a2a 0%, transparent 50%), linear-gradient(160deg, #1d2633, #0e1218); }
+.pv-screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+.pv-side { display: grid; align-content: start; gap: 8px; font-size: 12.5px; min-width: 0; }
+.pv-side > b { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+.pv-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-data { display: grid; gap: 4px; }
+.pv-data span { color: var(--muted); font-size: 11.5px; }
+.pv-data textarea { font: 12px var(--mono); background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; resize: vertical; }
+.pv-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 220px; overflow: auto; }
+.pv-log li { padding: 5px 8px; border-radius: 7px; background: var(--panel-2); overflow-wrap: anywhere; }
+.pv-log code { font-size: 11px; }
+@media (max-width: 900px) { .pv-body { grid-template-columns: 1fr; } }
+
+/* install checklist (Installation tab) */
+.install-check:empty { display: none; }
+.install-check { margin-bottom: 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
+.ic-head { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; margin-bottom: 10px; }
+.ic-head b { font-size: 13.5px; }
+.ic-head span { font: 12px var(--mono); color: var(--muted); }
+.ic-bar { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.ic-bar i { display: block; height: 100%; border-radius: 999px; background: var(--ok); transition: width .3s ease; }
+.install-check ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.install-check label { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; cursor: pointer; color: var(--text-2); }
+.install-check input { margin-top: 3px; accent-color: var(--ok); flex: none; }
+.install-check small { display: block; font-size: 11.5px; color: var(--muted); }
+.install-check li.on .ic-label { color: var(--muted); text-decoration: line-through; }
+.ic-done { margin: 10px 0 0; font-size: 12.5px; color: var(--ok-text); }
+
 /* live analysis of the request while typing */
 .live-analysis { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); animation: laIn .25s ease; }
 .la-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; }
