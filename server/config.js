@@ -48,9 +48,11 @@ export const config = {
   // Business rules
   // ADMIN_EMAIL accepts several addresses separated by commas.
   adminEmails: (env.ADMIN_EMAIL || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
-  freeCredits: int(env.FREE_CREDITS, 2),
+  // One free script at sign-up (a generation costs COST_GENERATE credits).
+  freeCredits: int(env.FREE_CREDITS, 3),
   cost: {
-    generate: int(env.COST_GENERATE, 1),
+    // A full script uses about 0.5 to 1.3 USD of engine quota (size dependent): 3 credits.
+    generate: int(env.COST_GENERATE, 3),
     refine: int(env.COST_REFINE, 1),
     fix: int(env.COST_FIX, 0),
   },
@@ -100,9 +102,9 @@ export const config = {
 // Credit packs sold on the site. Prices in cents. Override with CREDIT_PACKS (JSON array).
 function loadPacks(raw) {
   const defaults = [
-    { id: "starter", name: "Starter", credits: 10, price: 499 },
-    { id: "pro", name: "Pro", credits: 30, price: 1299, featured: true },
-    { id: "studio", name: "Studio", credits: 100, price: 3499 },
+    { id: "starter", name: "Starter", credits: 15, price: 749 },
+    { id: "pro", name: "Pro", credits: 45, price: 1999, featured: true },
+    { id: "studio", name: "Studio", credits: 150, price: 5999 },
   ];
   if (!raw) return defaults;
   try {

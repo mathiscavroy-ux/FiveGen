@@ -31,7 +31,7 @@ const session = (over = {}) => ({
   id: "cs_test_1",
   object: "checkout.session",
   payment_status: "paid",
-  amount_total: 1299,
+  amount_total: 1999,
   currency: "eur",
   metadata: { userId: String(userId), packId: "pro" },
   ...over,
@@ -45,31 +45,31 @@ test("payments are enabled once both Stripe keys are set", () => {
 
 test("a paid session credits the buyer exactly once", () => {
   const { payload, header } = signedEvent(session());
-  assert.match(payments.handleWebhook(payload, header), /\+30 crédits/);
-  assert.equal(db.getUser(userId).credits, 30);
+  assert.match(payments.handleWebhook(payload, header), /\+45 crédits/);
+  assert.equal(db.getUser(userId).credits, 45);
   // Stripe retries: the same session must not be credited twice.
   assert.equal(payments.handleWebhook(payload, header), "déjà traité");
-  assert.equal(db.getUser(userId).credits, 30);
-  assert.equal(db.listPayments()[0].amount, 1299);
+  assert.equal(db.getUser(userId).credits, 45);
+  assert.equal(db.listPayments()[0].amount, 1999);
 });
 
 test("credits come from the server pack, not from session metadata", () => {
   const { payload, header } = signedEvent(session({ id: "cs_test_2", metadata: { userId: String(userId), packId: "starter", credits: "9999" } }));
   payments.handleWebhook(payload, header);
-  assert.equal(db.getUser(userId).credits, 40);
+  assert.equal(db.getUser(userId).credits, 60);
 });
 
 test("an unpaid session adds nothing", () => {
   const { payload, header } = signedEvent(session({ id: "cs_test_3", payment_status: "unpaid" }));
   assert.equal(payments.handleWebhook(payload, header), "en attente de paiement");
-  assert.equal(db.getUser(userId).credits, 40);
+  assert.equal(db.getUser(userId).credits, 60);
 });
 
 test("a forged signature is rejected", () => {
   const { payload } = signedEvent(session({ id: "cs_test_4" }));
   const forged = signer.webhooks.generateTestHeaderString({ payload, secret: "whsec_wrong" });
   assert.throws(() => payments.handleWebhook(payload, forged));
-  assert.equal(db.getUser(userId).credits, 40);
+  assert.equal(db.getUser(userId).credits, 60);
 });
 
 test("an unknown pack is refused", () => {

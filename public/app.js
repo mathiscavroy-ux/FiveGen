@@ -204,7 +204,7 @@ function renderPacks() {
     card.innerHTML = `${p.featured ? '<span class="tagline">Le plus choisi</span>' : ""}
       <b>${escapeHtml(p.name)}</b>
       <span class="amount">${formatPrice(p.price, info.currency)}</span>
-      <span class="unit">${plural(p.credits, "crédit")} · ${formatPrice(Math.round(p.price / p.credits), info.currency)} le script</span>`;
+      <span class="unit">${plural(p.credits, "crédit")} · ${formatPrice(Math.round((p.price / p.credits) * (state.me?.costs?.generate ?? 1)), info.currency)} le script</span>`;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `btn ${p.featured ? "primary" : ""}`;

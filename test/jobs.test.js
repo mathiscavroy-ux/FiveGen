@@ -25,7 +25,7 @@ before(async () => {
   base = `http://127.0.0.1:${port}`;
   proc = spawn(process.execPath, ["server/index.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", FORGE_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-jobs-")), FORGE_MOCK: "1", SMTP_HOST: "", FREE_CREDITS: "5", FREE_CREDITS_PER_IP: "5", PUBLIC_URL: "" },
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", FORGE_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-jobs-")), FORGE_MOCK: "1", SMTP_HOST: "", FREE_CREDITS: "10", FREE_CREDITS_PER_IP: "5", PUBLIC_URL: "" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.on("data", (d) => (logs += d));

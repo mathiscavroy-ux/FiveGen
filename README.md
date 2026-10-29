@@ -14,7 +14,7 @@ Le moteur de génération (Gemini Flash par défaut) tourne uniquement sur ton s
 | `/admin` | Ton tableau de bord : statistiques, état du moteur, création de codes, clients, ajustement de crédits, erreurs |
 | `/a-propos`, `/cgv` | Mentions légales et conditions générales (avec la mention « moteur de génération automatique ») |
 
-Modèle économique : **1 crédit = 1 génération**, avec 3 modifications offertes par script (`FREE_REFINES`), puis 1 crédit par modification (`COST_REFINE`). Les corrections sont gratuites (`COST_FIX=0`) et le crédit est rendu si rien n'est produit. Tu génères des codes dans `/admin` (ex : 10 codes de 30 crédits) et tu les vends sur Tebex, Stripe Payment Links, Sellix ou ta boutique Discord. Le client saisit son code dans le studio.
+Modèle économique : **une génération = 3 crédits** (`COST_GENERATE`), avec 3 modifications offertes par script (`FREE_REFINES`), puis 1 crédit par modification (`COST_REFINE`). Les corrections sont gratuites (`COST_FIX=0`) et les crédits sont rendus si rien n'est produit. Un script complet consomme environ 0,5 à 1,3 $ de quota moteur selon sa taille (suivi dans `/admin`) ; les packs par défaut vendent le crédit 0,40 à 0,50 €, soit 1,20 à 1,50 € le script. Tu génères des codes dans `/admin` (ex : 10 codes de 30 crédits) et tu les vends sur Tebex, Stripe Payment Links, Sellix ou ta boutique Discord. Le client saisit son code dans le studio.
 
 ## Essayer en local
 
