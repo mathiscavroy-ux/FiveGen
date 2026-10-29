@@ -1,6 +1,7 @@
 import vm from "node:vm";
 import luaparse from "luaparse";
 import { checkApiCalls } from "./apicheck.js";
+import { checkConsistency } from "./consistency.js";
 
 // CfxLua accepts a few extensions a stock Lua parser rejects. The prompt asks the
 // model to avoid them; this normalisation keeps the syntax check from failing on
@@ -298,7 +299,7 @@ export function validateProject(files, spec = {}) {
     if (p) problems.push(p);
     if (f.truncated) problems.push({ file: f.path, message: "Fichier tronqué (la génération s'est arrêtée au milieu)", level: "error" });
   }
-  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkApi(files, spec));
+  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkApi(files, spec), ...checkConsistency(files, { codeOnly, normalise: normaliseCfxLua }));
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };

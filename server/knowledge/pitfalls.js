@@ -72,6 +72,11 @@ oxmysql :
 - Toujours des paramètres ? ; jamais de concaténation de valeurs dans la requête.
 - Ne jamais appeler MySQL au chargement du fichier sans MySQL.ready ou un thread.
 
+Cohérence entre fichiers (vérifiée automatiquement, toute incohérence est une erreur) :
+- Chaque Config.X lu dans le code existe dans config.lua (y compris les sous-clés : Config.Locations.garage) ; ajouter la clé plutôt que de compter sur nil.
+- Chaque clé de traduction utilisée (_L('cle'), locale('cle'), Lang:t('a.b'), TranslateCap('cle')) existe dans CHAQUE fichier de langue livré.
+- Chaque SendNUIMessage({ action = 'x' }) est traité dans le JavaScript (case 'x' / data.action === 'x'), et chaque fetch(\`https://\${GetParentResourceName()}/y\`) correspond à un RegisterNUICallback('y', …) côté Lua.
+
 Erreurs relevées dans des ressources générées (à ne plus reproduire) :
 - ESX n'a PAS de job.isboss (c'est QBCore). Patron ESX = xPlayer.job.grade_name == 'boss' (esx_society : Config.BossGrades[grade_name]). Pour promouvoir : grade cible strictement inférieur au grade de celui qui promeut, et ESX.DoesJobExist(job, grade) avant xPlayer.setJob ; jamais de grade maximum codé en dur.
 - Une table d'état qui contient des tables (activePlayers[src] = {missions = 0}) ne vaut jamais true : tester activePlayers[src] ~= nil, y compris dans les exports (return activePlayers[tonumber(src)] ~= nil).
