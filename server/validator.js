@@ -328,18 +328,38 @@ function checkSql(files, spec) {
       level: "error",
     });
   }
-  const created = new Set([...sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(\w+)`?/gi)].map((m) => m[1].toLowerCase()));
+  const tablesIn = (text) => new Set([...text.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(\w+)`?/gi)].map((m) => m[1].toLowerCase()));
+  const created = tablesIn(sql);
+  // tables the resource creates by itself when it starts (clients often skip the SQL import)
+  const luaText = lua.map((f) => f.content).join("\n");
+  const createdAtStart = tablesIn(luaText);
   const reported = new Set();
   for (const f of lua) {
     for (const call of f.content.matchAll(/MySQL\.\w+(?:\.await)?\s*\(\s*(['"`])([\s\S]*?)\1/g)) {
       // (not "ON DUPLICATE KEY UPDATE col = …", which names a column)
       for (const t of call[2].matchAll(/\b(?:FROM|INTO|(?<!KEY\s+)UPDATE|JOIN)\s+`?(\w+)`?/gi)) {
         const table = t[1].toLowerCase();
-        if (KNOWN_TABLES.has(table) || created.has(table) || reported.has(table)) continue;
-        reported.add(table);
-        problems.push({ file: "sql/install.sql", message: `La table "${t[1]}" est utilisée dans ${f.path} mais aucun fichier .sql ne la crée (CREATE TABLE IF NOT EXISTS)`, level: "error" });
+        if (KNOWN_TABLES.has(table) || reported.has(table)) continue;
+        if (!created.has(table)) {
+          reported.add(table);
+          problems.push({ file: "sql/install.sql", message: `La table "${t[1]}" est utilisée dans ${f.path} mais aucun fichier .sql ne la crée (CREATE TABLE IF NOT EXISTS)`, level: "error" });
+        } else if (!createdAtStart.has(table)) {
+          reported.add(table);
+          problems.push({
+            file: f.path,
+            message: `La table "${t[1]}" n'est créée que dans le fichier SQL : si le client ne l'importe pas, le script plante (« Table doesn't exist »). Crée-la aussi au démarrage côté serveur : MySQL.ready(function() MySQL.query.await([[CREATE TABLE IF NOT EXISTS ...]]) end), même schéma que sql/install.sql.`,
+            level: "error",
+          });
+        }
       }
     }
+  }
+  if (spec?.framework === "esx" && spec?.type === "job" && /job_grades/i.test(sql) && !/INSERT\s+IGNORE\s+INTO\s+`?job_grades/i.test(luaText)) {
+    problems.push({
+      file: "sql/install.sql",
+      message: "Le job ESX n'existe que dans le fichier SQL : ajoute au démarrage serveur (MySQL.ready) les INSERT IGNORE INTO jobs / job_grades puis ESX.RefreshJobs(), pour que le job marche même sans import manuel.",
+      level: "error",
+    });
   }
   return problems;
 }

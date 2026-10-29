@@ -59,10 +59,16 @@ test("an ESX job without SQL, or a custom table never created, is an error", () 
   assert.match(messages(esxJob), /Job ESX sans SQL/);
   assert.match(messages(esxJob), /police_records/);
   assert.doesNotMatch(messages(esxJob), /"users"/);
-  const withSql = validateProject(
-    [...files, { path: "sql/install.sql", content: "INSERT IGNORE INTO job_grades VALUES (1);\nCREATE TABLE IF NOT EXISTS `police_records` (id INT);" }],
-    { framework: "esx", type: "job" },
-  );
+  const sqlFile = { path: "sql/install.sql", content: "INSERT IGNORE INTO job_grades VALUES (1);\nCREATE TABLE IF NOT EXISTS `police_records` (id INT);" };
+  // the SQL file alone is not enough: clients often skip the import
+  const sqlOnly = messages(validateProject([...files, sqlFile], { framework: "esx", type: "job" }));
+  assert.match(sqlOnly, /"police_records" n'est créée que dans le fichier SQL/);
+  assert.match(sqlOnly, /Le job ESX n'existe que dans le fichier SQL/);
+  const atStart = {
+    path: "server/db.lua",
+    content: "MySQL.ready(function()\n  MySQL.query.await([[CREATE TABLE IF NOT EXISTS `police_records` (id INT)]])\n  MySQL.query.await([[INSERT IGNORE INTO job_grades VALUES (1)]])\n  ESX.RefreshJobs()\nend)",
+  };
+  const withSql = validateProject([...files, sqlFile, atStart], { framework: "esx", type: "job" });
   assert.doesNotMatch(messages(withSql), /SQL|police_records/);
   assert.doesNotMatch(messages(validateProject(files, { framework: "qbcore", type: "job" })), /Job ESX/);
 });
