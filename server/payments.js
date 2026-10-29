@@ -29,6 +29,8 @@ export async function createCheckout({ user, packId, baseUrl }) {
         price_data: {
           currency: config.stripe.currency,
           unit_amount: pack.price,
+          // the price shown on the site is what the buyer pays: VAT included, never added on top
+          tax_behavior: "inclusive",
           product_data: { name: `FiveGen — Pack ${pack.name} (${pack.credits} crédits)`, tax_code: config.stripe.taxCode },
         },
       },

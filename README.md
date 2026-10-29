@@ -59,7 +59,7 @@ Les clients achètent un pack de crédits sur le site (fenêtre « Recharger mes
 5. Teste un achat avec la carte de test Stripe `4242 4242 4242 4242` (date future, n'importe quel code). Les crédits arrivent en quelques secondes et le paiement apparaît dans `/admin`.
 6. Pour encaisser pour de vrai : active ton compte Stripe (identité, IBAN), puis remplace les deux valeurs par celles du mode **Live** (`sk_live_...` et le secret d'un webhook créé en mode Live).
 
-Packs et prix : variable `CREDIT_PACKS` (voir `.env.example`), sinon Starter 10 crédits / 4,99 €, Pro 30 / 12,99 €, Studio 100 / 34,99 €. Les prix de l'accueil se mettent à jour automatiquement.
+Packs et prix TTC : variable `CREDIT_PACKS` (voir `.env.example`), sinon Starter 15 crédits / 8,99 €, Pro 45 / 23,99 €, Studio 150 / 71,99 €. La TVA est comprise dans le prix (`tax_behavior: inclusive`) : le client paie exactement le prix affiché. Les prix de l'accueil se mettent à jour automatiquement.
 
 Sécurité : les crédits ne sont ajoutés que par le webhook signé par Stripe (jamais depuis le navigateur), une seule fois par paiement, et le nombre de crédits vient toujours de la configuration du serveur. Le client coche une case de renonciation au délai de rétractation avant de payer (contenu numérique utilisé immédiatement).
 

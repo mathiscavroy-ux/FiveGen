@@ -103,12 +103,13 @@ export const config = {
   },
 };
 
-// Credit packs sold on the site. Prices in cents. Override with CREDIT_PACKS (JSON array).
+// Credit packs sold on the site. Prices in cents, VAT included (what the buyer pays).
+// Override with CREDIT_PACKS (JSON array).
 function loadPacks(raw) {
   const defaults = [
-    { id: "starter", name: "Starter", credits: 15, price: 749 },
-    { id: "pro", name: "Pro", credits: 45, price: 1999, featured: true },
-    { id: "studio", name: "Studio", credits: 150, price: 5999 },
+    { id: "starter", name: "Starter", credits: 15, price: 899 },
+    { id: "pro", name: "Pro", credits: 45, price: 2399, featured: true },
+    { id: "studio", name: "Studio", credits: 150, price: 7199 },
   ];
   if (!raw) return defaults;
   try {

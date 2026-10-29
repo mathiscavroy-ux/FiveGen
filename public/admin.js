@@ -23,6 +23,7 @@ const span = (sec) => {
 };
 const windowName = (sec) => (sec < 172800 ? `${Math.round(sec / 3600)} heures` : `${Math.round(sec / 86400)} jours`);
 const USD_EUR = 0.92; // indicative rate, only for the margin estimate
+const VAT = 0.2; // pack prices include VAT (French rate): the margin is counted without it
 
 const PURPOSES = { generate: "Génération", plan: "Plan", review: "Relecture", autofix: "Correction auto", fix: "Correction", refine: "Modification", rewrite: "Réécriture", brief: "Questions" };
 const KINDS = { generate: "Génération", refine: "Modification", fix: "Correction" };
@@ -181,7 +182,7 @@ async function loadOverview() {
     kpi("Chiffre d'affaires · 30 j", money(s.revenue30d), `${money(s.revenueTotal)} au total`),
     kpi("Coût du moteur · 30 j", usd(u.month.cost), `${int(u.month.calls)} appels`, true),
     kpi("Coût moyen d'un script", u.scriptCost === null ? "—" : usd(u.scriptCost), "génération + relecture + corrections"),
-    kpi("Marge brute · 30 j", money(s.revenue30d - costEurCents), "estimation, 1 $ ≈ 0,92 €"),
+    kpi("Marge brute · 30 j", money(s.revenue30d / (1 + VAT) - costEurCents), "estimation hors TVA 20 %, 1 $ ≈ 0,92 €"),
     kpi("Crédits consommés", int(s.creditsSpent), `${int(s.codesUnused)} codes disponibles`),
   ].join("");
   renderCostChart(u.daily);
