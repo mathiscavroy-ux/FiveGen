@@ -4,7 +4,8 @@ import { ZipArchive } from "archiver";
 import { config, ROOT } from "./config.js";
 import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage, buildReviewMessage } from "./prompts.js";
 import { applyEdits } from "./patch.js";
-import { runEngine, runBrief, engineStatus, EngineError } from "./engine.js";
+import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from "./engine.js";
+import { providerUsage, modelPricing } from "./provider.js";
 import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
 import { validateProjectFull } from "./validator.js";
@@ -120,7 +121,7 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
     const paths = [...new Set(failures.map((f) => f.path))];
     send("status", `${failures.length} remplacement(s) sans emplacement trouvé : réécriture de ${paths.join(", ")}.`);
     try {
-      const redo = await runEngine({ userContent: buildRewriteMessage(spec, getFiles(userId, projectId), failures), onEvent: send, signal });
+      const redo = await runEngine({ userContent: buildRewriteMessage(spec, getFiles(userId, projectId), failures), onEvent: send, signal, meta: { userId, projectId, purpose: "rewrite" } });
       writeFiles(userId, projectId, redo.files, []);
       state.outputTokens += redo.outputTokens ?? 0;
       touched.push(...redo.files.map((f) => f.path));
@@ -144,7 +145,7 @@ function checkProject(userId, projectId) {
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
   send("phase", { phase: kind, label: LABELS[kind] });
-  const result = await runEngine({ userContent, onEvent: send, signal });
+  const result = await runEngine({ userContent, onEvent: send, signal, meta: { userId, projectId, purpose: kind } });
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }
@@ -175,6 +176,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
         userContent: buildReviewMessage(project.spec, getFiles(userId, projectId), validation.warnings),
         onEvent: send,
         signal,
+        meta: { userId, projectId, purpose: "review" },
       });
       state.outputTokens += review.outputTokens ?? 0;
       if (review.files.length || review.edits.length || review.deletes.length) {
@@ -200,6 +202,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
         userContent: buildFixMessage(project.spec, getFiles(userId, projectId), validation.errors),
         onEvent: send,
         signal,
+        meta: { userId, projectId, purpose: "autofix" },
       });
     } catch (err) {
       // The script is already saved: an engine hiccup here must not turn it into a failure.
@@ -220,6 +223,8 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
 }
 
 const running = new Set(); // one generation at a time per account
+
+onEngineUsage((call) => db.logEngineCall(call));
 
 function safeProject(userId, id) {
   try {
@@ -478,6 +483,7 @@ app.post("/api/brief", requireUser, briefLimiter, async (req, res) => {
         framework: CATALOG.frameworks.some((x) => x.id === server.framework) ? server.framework : null,
         dependencies: (Array.isArray(server.dependencies) ? server.dependencies : []).filter((d) => CATALOG.dependencies.some((x) => x.id === d)),
       },
+      meta: { userId: req.user.id, purpose: "brief" },
     });
     res.json(brief);
   } catch (err) {
@@ -609,6 +615,31 @@ mountDeploy(app);
 
 app.get("/api/admin/overview", requireUser, requireAdmin, async (_req, res) => {
   res.json({ stats: db.stats(), engine: await engineStatus(), costs: config.cost, freeCredits: config.freeCredits });
+});
+
+// Engine account quota (polled by the panel) and what FiveGen spent, with the margin.
+app.get("/api/admin/usage", requireUser, requireAdmin, async (req, res) => {
+  const [provider, pricing] = await Promise.all([providerUsage({ force: req.query.refresh === "1" }), modelPricing()]);
+  const price = pricing.get(config.mock ? "mock" : config.engine.model) ?? null;
+  res.json({
+    provider,
+    summary: db.usageSummary(),
+    engine: {
+      model: config.mock ? "démo" : config.engine.model,
+      fallbackModels: config.engine.fallbackModels,
+      price,
+      reviewPass: config.reviewPass,
+      autoFixRounds: config.autoFixRounds,
+      smokeTest: process.env.SMOKE_TEST !== "0",
+      maxTokens: config.engine.maxTokens,
+    },
+    revenue30d: db.stats().revenue30d,
+  });
+});
+
+app.get("/api/admin/generations", requireUser, requireAdmin, (req, res) => {
+  const status = ["ok", "error", "cancelled"].includes(req.query.status) ? req.query.status : undefined;
+  res.json(db.listGenerations({ status, limit: 200 }));
 });
 
 app.get("/api/admin/users", requireUser, requireAdmin, (_req, res) => res.json(db.listUsers()));

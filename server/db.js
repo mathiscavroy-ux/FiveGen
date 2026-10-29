@@ -296,6 +296,100 @@ export function logGeneration({ userId, projectId, kind, cost, status, error, ou
   ).run(userId, projectId, kind, cost, status, error ?? null, outputTokens ?? null, now());
 }
 
+// Every call to the engine with its token counts and cost (USD), for the admin panel.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS engine_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    project_id TEXT,
+    purpose TEXT NOT NULL,
+    model TEXT,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    duration_ms INTEGER,
+    ok INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_engine_calls_date ON engine_calls(created_at);
+`);
+
+export function logEngineCall({ userId, projectId, purpose, model, inputTokens, cachedTokens, outputTokens, costUsd, durationMs, ok }) {
+  db.prepare(
+    `INSERT INTO engine_calls (user_id, project_id, purpose, model, input_tokens, cached_tokens, output_tokens, cost_usd, duration_ms, ok, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(userId ?? null, projectId ?? null, purpose, model ?? null, inputTokens ?? 0, cachedTokens ?? 0, outputTokens ?? 0, costUsd ?? 0, durationMs ?? null, ok ? 1 : 0, now());
+}
+
+const ISO = "%Y-%m-%dT%H:%M:%fZ"; // same text format as now(), so dates compare as strings
+
+export function usageSummary() {
+  const since = (days) => new Date(Date.now() - days * 86400000).toISOString();
+  const totals = (from) =>
+    db
+      .prepare(
+        `SELECT COUNT(*) AS calls, COALESCE(SUM(input_tokens), 0) AS input, COALESCE(SUM(cached_tokens), 0) AS cached,
+                COALESCE(SUM(output_tokens), 0) AS output, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(1 - ok), 0) AS failed
+         FROM engine_calls WHERE created_at > ?`,
+      )
+      .get(from);
+  const month = since(30);
+  // Cost of one delivered script: its generation plus the review, fixes and rewrites
+  // made on the same project in the hour before it was logged as finished.
+  const scripts = db
+    .prepare(
+      `SELECT (SELECT COALESCE(SUM(c.cost_usd), 0) FROM engine_calls c
+               WHERE c.project_id = g.project_id AND c.purpose IN ('generate', 'review', 'autofix', 'rewrite')
+                 AND c.created_at BETWEEN strftime('${ISO}', g.created_at, '-1 hour') AND strftime('${ISO}', g.created_at, '+1 minute')) AS cost
+       FROM generations g WHERE g.kind = 'generate' AND g.status = 'ok' AND g.created_at > ?`,
+    )
+    .all(month)
+    .filter((s) => s.cost > 0);
+  const group = (column) =>
+    db
+      .prepare(
+        `SELECT ${column} AS name, COUNT(*) AS calls, SUM(input_tokens) AS input, SUM(output_tokens) AS output, SUM(cost_usd) AS cost
+         FROM engine_calls WHERE created_at > ? GROUP BY ${column} ORDER BY cost DESC`,
+      )
+      .all(month);
+  return {
+    today: totals(since(1)),
+    week: totals(since(7)),
+    month: totals(month),
+    scriptCost: scripts.length ? scripts.reduce((n, s) => n + s.cost, 0) / scripts.length : null,
+    byPurpose: group("purpose"),
+    byModel: group("model"),
+    daily: db
+      .prepare(
+        `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS calls, SUM(cost_usd) AS cost, SUM(input_tokens + output_tokens) AS tokens
+         FROM engine_calls WHERE created_at > ? GROUP BY day ORDER BY day`,
+      )
+      .all(since(14)),
+    topUsers: db
+      .prepare(
+        `SELECT u.id, u.email, COUNT(*) AS calls, SUM(c.cost_usd) AS cost
+         FROM engine_calls c JOIN users u ON u.id = c.user_id WHERE c.created_at > ? GROUP BY u.id ORDER BY cost DESC LIMIT 8`,
+      )
+      .all(month),
+    recent: db
+      .prepare(
+        `SELECT c.created_at, u.email, c.project_id, c.purpose, c.model, c.input_tokens, c.cached_tokens, c.output_tokens, c.cost_usd, c.duration_ms, c.ok
+         FROM engine_calls c LEFT JOIN users u ON u.id = c.user_id ORDER BY c.id DESC LIMIT 40`,
+      )
+      .all(),
+  };
+}
+
+export function listGenerations({ status, limit = 100 } = {}) {
+  return db
+    .prepare(
+      `SELECT g.id, g.created_at, g.user_id, u.email, g.project_id, g.kind, g.cost, g.status, g.error, g.output_tokens
+       FROM generations g LEFT JOIN users u ON u.id = g.user_id ${status ? "WHERE g.status = ?" : ""} ORDER BY g.id DESC LIMIT ?`,
+    )
+    .all(...(status ? [status, limit] : [limit]));
+}
+
 export function stats() {
   const day = new Date(Date.now() - 86400000).toISOString();
   const one = (sql, ...p) => Object.values(db.prepare(sql).get(...p))[0] ?? 0;

@@ -1,0 +1,133 @@
+/* FiveGen admin panel: sidebar layout, cards, KPIs, quota meters, cost chart. */
+body.adm { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; font-size: 14px; }
+
+/* ---------- sidebar ---------- */
+.adm-side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; padding: 18px 14px; background: var(--bg-2); border-right: 1px solid var(--line); }
+.adm-brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; padding: 0 6px; }
+.adm-brand:hover { color: var(--text); }
+.adm-brand .logo { width: 32px; height: 32px; border-radius: 9px; background: var(--grad); color: var(--on-accent); display: grid; place-items: center; font-weight: 800; }
+.adm-brand small { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); line-height: 1.2; }
+.adm-nav { display: grid; gap: 2px; }
+.adm-nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; color: var(--text-2); font-weight: 500; font-size: 13.5px; }
+.adm-nav a svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.adm-nav a:hover { background: rgb(var(--fg) / 0.04); color: var(--text); }
+.adm-nav a.on { background: var(--accent-soft); color: var(--accent-text); }
+.adm-side-foot { margin-top: auto; display: grid; gap: 12px; }
+.side-quota { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 12px; display: grid; gap: 8px; cursor: pointer; }
+.side-quota b { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+
+/* ---------- main ---------- */
+.adm-main { min-width: 0; padding: 0 28px 40px; }
+.adm-top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 16px 0; margin-bottom: 8px; background: rgb(var(--bg-rgb) / .9); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.adm-top h1 { margin: 0; font-size: 20px; letter-spacing: -.3px; }
+.adm-refreshed { margin-left: auto; font-size: 12px; }
+.adm-burger { display: none; background: none; border: 0; color: var(--text); padding: 4px; cursor: pointer; }
+.adm-burger svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.page { display: grid; gap: 18px; padding-top: 10px; }
+.page .status { margin: 0; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; }
+.card > p { margin: 0 0 12px; font-size: 13px; }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.card-head h2 { margin: 0; font-size: 14.5px; }
+.card-head > :nth-child(2) { margin-left: auto; }
+.small-link { font-size: 12.5px; }
+.card .data { border: 0; border-radius: 0; background: transparent; }
+.card .table-wrap { margin: 0 -18px -16px; border-top: 1px solid var(--line); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.table-wrap { overflow-x: auto; }
+.table-wrap .data { min-width: 640px; }
+.grid-2 .table-wrap .data { min-width: 0; }
+.grid-2 .data td, .grid-2 .data th { padding: 9px 14px; }
+.grid-2 .data td:first-child { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.toolbar .input { max-width: 380px; }
+.empty { color: var(--muted); font-size: 13px; padding: 18px 0; text-align: center; }
+
+/* ---------- KPIs ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; display: grid; gap: 3px; }
+.kpi span { font-size: 12px; color: var(--muted); }
+.kpi b { font-size: 22px; font-weight: 700; letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
+.kpi em { font-style: normal; font-size: 11.5px; color: var(--text-2); }
+.kpi.accent { border-color: rgb(255 106 26 / .35); background: linear-gradient(135deg, var(--accent-soft), transparent 60%), var(--surface); }
+
+/* ---------- quota meters ---------- */
+.quota-list { display: grid; gap: 16px; }
+.quota-list.big { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+.meter-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.meter-head b { font-size: 13.5px; }
+.meter-head .state { margin-left: auto; font-size: 11.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+.meter-head .state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.state.good { color: var(--ok-text); }
+.state.warn { color: var(--warn-text); }
+.state.crit { color: var(--err-text); }
+.meter { position: relative; height: 10px; border-radius: 999px; background: var(--surface-3); overflow: hidden; margin: 8px 0 6px; }
+.big .meter { height: 14px; }
+.meter i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--grad); transition: width .6s cubic-bezier(.2, .8, .2, 1); }
+.meter.warn i { background: var(--warn); }
+.meter.crit i { background: var(--err); }
+.meter-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.meter-foot strong { color: var(--text); font-weight: 600; }
+.big .meter-value { font-size: 26px; font-weight: 700; letter-spacing: -.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.big .meter-value small { font-size: 13px; color: var(--muted); font-weight: 500; }
+.quota-extra { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+.quota-extra b { color: var(--text); font-weight: 600; }
+.live-dot { font-size: 11.5px; color: var(--ok-text); display: inline-flex; align-items: center; gap: 6px; }
+.live-dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: admPulse 1.6s ease infinite; }
+.live-dot.off { color: var(--muted); }
+.live-dot.off::before { background: var(--faint); animation: none; }
+
+/* ---------- cost chart ---------- */
+.chart { position: relative; height: 190px; }
+.chart svg { width: 100%; height: 100%; overflow: visible; }
+.chart .grid line { stroke: var(--line); }
+.chart .grid text, .chart .axis text { fill: var(--muted); font-size: 10.5px; font-family: var(--font); }
+.chart .bar { fill: var(--accent); }
+.chart .col:hover .bar, .chart .col.on .bar { fill: var(--accent-2); }
+.chart .hit { fill: transparent; cursor: default; }
+.chart-tip { position: fixed; z-index: 80; pointer-events: none; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 9px; padding: 8px 10px; font-size: 12px; box-shadow: var(--shadow); min-width: 140px; }
+.chart-tip b { display: block; font-size: 12px; margin-bottom: 3px; }
+.chart-tip div { display: flex; justify-content: space-between; gap: 14px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+/* ---------- breakdown bars ---------- */
+.bars { display: grid; gap: 11px; }
+.bars .b-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 72px; align-items: center; gap: 10px; font-size: 12.5px; }
+.bars .b-label { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bars .b-track { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.bars .b-track i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.bars .b-val { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.bars .b-sub { grid-column: 2 / 4; margin-top: -7px; font-size: 11px; color: var(--muted); }
+
+/* ---------- settings list ---------- */
+.settings { display: grid; grid-template-columns: auto 1fr; gap: 9px 18px; margin: 0; font-size: 13px; }
+.settings dt { color: var(--muted); }
+.settings dd { margin: 0; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+.settings dd code { font-size: 12px; }
+
+/* ---------- segmented filter ---------- */
+.seg { display: inline-flex; padding: 3px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.seg button { border: 0; background: none; color: var(--text-2); font: 500 13px var(--font); padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+.seg button.on { background: var(--accent-soft); color: var(--accent-text); }
+
+.btn.danger { color: var(--err-text); }
+td .ok-txt { color: var(--ok-text); }
+td .err-txt { color: var(--err-text); }
+
+@keyframes admPulse { 50% { opacity: .35; } }
+
+@media (max-width: 1100px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) {
+  body.adm { grid-template-columns: minmax(0, 1fr); }
+  .adm-side { position: fixed; inset: 0 auto 0 0; width: 260px; z-index: 40; transform: translateX(-100%); transition: transform .2s; }
+  body.adm.menu-open .adm-side { transform: none; box-shadow: var(--shadow); }
+  .adm-burger { display: block; }
+  .adm-main { padding: 0 16px 32px; }
+  .adm-refreshed { display: none; }
+  .adm-top .btn { margin-left: auto; }
+  .bars .b-row { grid-template-columns: 96px minmax(0, 1fr) 64px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot::before { animation: none; }
+  .meter i { transition: none; }
+}

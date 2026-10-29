@@ -164,7 +164,8 @@ export async function runMock({ userContent, onEvent, signal }) {
     rawText: parser.fullText,
     stopReason: "end_turn",
     model: "mock",
-    usage: { input_tokens: 0, output_tokens: 0 },
+    // rough figures (instructions ≈ 27k tokens) so the admin panel has something to show
+    usage: { prompt_tokens: 27000 + Math.round(userContent.length / 3.5), completion_tokens: Math.round(text.length / 3.5) },
   };
 }
 

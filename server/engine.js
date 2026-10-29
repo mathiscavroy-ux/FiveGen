@@ -3,6 +3,20 @@
 import { config } from "./config.js";
 import { runOpenAICompat, completeOpenAICompat, testOpenAICompat, ProviderError } from "./openai-compat.js";
 import { BRIEF_SYSTEM, buildBriefMessage, extractJson, sanitizeBrief } from "./brief.js";
+import { costOf } from "./provider.js";
+
+// Every engine call is reported here with its tokens and cost (index.js stores it).
+let usageListener = null;
+export const onEngineUsage = (fn) => (usageListener = fn);
+
+async function report(meta, { model, usage, started, ok }) {
+  if (!usageListener || !meta) return;
+  try {
+    usageListener({ ...meta, model, durationMs: Date.now() - started, ok, ...(await costOf(model, usage)) });
+  } catch (err) {
+    console.warn("[fivegen] suivi de consommation :", err.message);
+  }
+}
 
 const upstream = {
   id: "engine",
@@ -68,7 +82,8 @@ function wait(ms, signal) {
   });
 }
 
-export async function runEngine({ userContent, onEvent, signal }) {
+// meta: { userId, projectId, purpose } for the usage log.
+export async function runEngine({ userContent, onEvent, signal, meta }) {
   let emitted = false;
   // Reasoning text never leaves the server: the studio only gets a throttled counter
   // so it can show that the engine is thinking.
@@ -95,10 +110,12 @@ export async function runEngine({ userContent, onEvent, signal }) {
     const attempt = attempts[i];
     const model = attempt?.provider.model;
     if (attempt?.retry) await wait(1500 * attempt.retry, signal);
+    const started = Date.now();
     try {
       const r = mockRun
         ? await mockRun({ userContent, onEvent: forward, signal })
         : await runOpenAICompat({ provider: attempt.provider, userContent, onEvent: forward, signal });
+      await report(meta, { model: r.model ?? model, usage: r.usage, started, ok: true });
       return {
         files: r.files,
         deletes: r.deletes,
@@ -109,6 +126,7 @@ export async function runEngine({ userContent, onEvent, signal }) {
       };
     } catch (err) {
       lastError = err;
+      await report(meta, { model, usage: null, started, ok: false });
       // Only switch model while nothing reached the client, otherwise the stream would repeat itself.
       if (emitted || signal?.aborted) break;
       if (!isOverload(err)) {
@@ -126,7 +144,7 @@ export async function runEngine({ userContent, onEvent, signal }) {
 }
 
 // Questions step. Cheap and short, so a broken reply is simply retried on the next model.
-export async function runBrief({ description, server, signal }) {
+export async function runBrief({ description, server, signal, meta }) {
   if (mockBrief) return sanitizeBrief(mockBrief(description));
   const user = buildBriefMessage(description, server);
   // BRIEF_MODEL: a faster model for the questions, which need no heavy reasoning.
@@ -138,14 +156,17 @@ export async function runBrief({ description, server, signal }) {
   for (const provider of providers) {
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt) await wait(800, signal);
+      const callStarted = Date.now();
       try {
         // Gateways cache identical requests: a retry must differ, or it gets the same broken reply.
-        const text = await completeOpenAICompat({ provider, system: BRIEF_SYSTEM, user: attempt ? `${user}\n<!-- essai ${attempt + 1} -->` : user, maxTokens: 4000, signal });
+        const { text, usage, model } = await completeOpenAICompat({ provider, system: BRIEF_SYSTEM, user: attempt ? `${user}\n<!-- essai ${attempt + 1} -->` : user, maxTokens: 4000, signal });
+        await report(meta, { model, usage, started: callStarted, ok: true });
         const brief = sanitizeBrief(extractJson(text));
         console.log(`[fivegen] questions prêtes en ${((Date.now() - started) / 1000).toFixed(1)} s (${provider.model})`);
         return brief;
       } catch (err) {
         lastError = err;
+        if (err instanceof ProviderError) await report(meta, { model: provider.model, usage: null, started: callStarted, ok: false });
         if (signal?.aborted) throw toPublic(err);
         if (err instanceof ProviderError && !isOverload(err)) {
           if (provider !== fallback && worthFallback(err)) break; // next provider (ends on the fallback)

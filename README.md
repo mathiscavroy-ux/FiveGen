@@ -121,6 +121,13 @@ Pour régénérer le catalogue après une mise à jour d'ESX ou des ressources o
 npm run api-catalog -- --natives <dossier des natives> --resources <serveur>/resources --scheduler <serveur>/citizen/scripting/lua --qb <qb-core> --qbx <qbx_core>
 ```
 
+## Panneau d'administration
+
+`/admin` (compte `ADMIN_EMAIL`) : vue d'ensemble, moteur & quota, clients, générations, paiements, codes.
+
+- **Quota du moteur en direct** : fenêtres de dépense (5 h, 7 jours), tokens gratuits et portefeuille, lus sur `GET {ENGINE_BASE_URL}/usage` et rafraîchis toutes les 30 s. La clé reste côté serveur.
+- **Coût réel de chaque appel** : tokens d'entrée, de cache et de sortie, prix lus sur `GET {ENGINE_BASE_URL}/models` (table `engine_calls`). Le panneau en tire le coût par jour, par étape (génération, relecture, corrections…), par modèle et par client, le coût moyen d'un script et une marge estimée.
+
 ## Test d'exécution et relecture
 
 Chaque génération passe, avant livraison :

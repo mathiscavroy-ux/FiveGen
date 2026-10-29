@@ -72,6 +72,8 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal }
       { role: "user", content: userContent },
     ],
   };
+  // token counts in the last chunk, used to price the call (admin panel)
+  if (provider.id !== "gemini") body.stream_options = { include_usage: true };
   if (provider.id === "gemini" && provider.effort) {
     body.reasoning_effort = provider.effort === "low" ? "low" : provider.effort === "medium" ? "medium" : "high";
   }
@@ -186,7 +188,7 @@ async function streamCompletion(provider, body, onEvent, signal, onActivity) {
   };
 }
 
-// Short non-streamed exchange (questions step): returns the reply text.
+// Short non-streamed exchange (questions step): returns { text, usage, model }.
 export async function completeOpenAICompat({ provider, system, user, maxTokens = 2000, timeoutMs = 45000, signal }) {
   assertUsable(provider);
   const body = {
@@ -214,7 +216,7 @@ export async function completeOpenAICompat({ provider, system, user, maxTokens =
     if (json.error) throw new ProviderError(`${provider.label} : ${extractError(JSON.stringify(json))}`, Number(json.error.code) || undefined);
     const choice = json.choices?.[0];
     if (choice?.finish_reason === "content_filter") throw new ProviderError(`${provider.label} a bloqué la réponse (filtre de contenu).`);
-    return String(choice?.message?.content ?? "");
+    return { text: String(choice?.message?.content ?? ""), usage: json.usage ?? null, model: json.model ?? provider.model };
   } catch (err) {
     if (err.name === "AbortError" && !signal?.aborted) throw new ProviderError(`${provider.label} ne répond plus depuis ${Math.round(timeoutMs / 1000)} s`, 504);
     throw err;
