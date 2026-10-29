@@ -24,20 +24,53 @@ export const outbox = [];
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-function layout(title, intro, button, link, outro) {
-  return `<!doctype html><html lang="fr"><body style="margin:0;background:#0b0d12;font-family:Arial,sans-serif;color:#eceef3">
-<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
-<table width="100%" style="max-width:520px;background:#11141b;border:1px solid #23262f;border-radius:12px" cellpadding="0" cellspacing="0"><tr><td style="padding:28px">
-<div style="font-weight:700;font-size:18px;color:#ff7a1a;margin-bottom:18px">FiveGen</div>
-<h1 style="font-size:20px;margin:0 0 12px">${esc(title)}</h1>
-<p style="line-height:1.55;color:#b4b9c6;margin:0 0 22px">${esc(intro)}</p>
-<a href="${esc(link)}" style="display:inline-block;background:#ff6a1a;color:#141414;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:8px">${esc(button)}</a>
-<p style="line-height:1.5;color:#7e8496;font-size:13px;margin:22px 0 0">${esc(outro)}<br>Lien : <span style="word-break:break-all">${esc(link)}</span></p>
-</td></tr></table></td></tr></table></body></html>`;
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const GRAD = "background-color:#ff6a1a;background-image:linear-gradient(135deg,#ff9a4d 0%,#ff6a1a 45%,#ff3d2e 100%)";
+
+// Same look as the site (dark surfaces, orange gradient). Tables and inline styles only:
+// mail clients drop <style> blocks, flexbox and the <body> background (hence bgcolor).
+function layout({ preheader, badge, title, intro, button, link, outro }) {
+  const site = config.publicUrl || new URL(link).origin;
+  const support = config.supportUrl
+    ? ` &nbsp;·&nbsp; <a href="${esc(config.supportUrl)}" style="color:#7e8496;text-decoration:underline">Support</a>`
+    : "";
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"><title>${esc(title)}</title></head>
+<body style="margin:0;padding:0;background:#08090c">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#08090c" style="background:#08090c"><tr><td align="center" style="padding:40px 16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
+<tr><td style="padding:0 4px 22px">
+  <a href="${esc(site)}" style="text-decoration:none"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <td width="36" height="36" align="center" valign="middle" style="${GRAD};border-radius:10px;color:#160b04;font:800 17px ${FONT}">F</td>
+    <td style="padding-left:11px;color:#ffffff;font:700 19px ${FONT};letter-spacing:-0.2px">FiveGen</td>
+  </tr></table></a>
+</td></tr>
+<tr><td bgcolor="#111319" style="background:#111319;border:1px solid #1e222c;border-radius:16px;overflow:hidden">
+  <div style="height:4px;line-height:4px;font-size:0;${GRAD}">&nbsp;</div>
+  <div style="padding:36px 36px 32px;font-family:${FONT}">
+    ${badge ? `<div style="display:inline-block;background:#2a1608;border:1px solid #4a2410;color:#ffb37a;font:600 12px ${FONT};padding:5px 11px;border-radius:999px;margin:0 0 16px">${esc(badge)}</div>` : ""}
+    <h1 style="margin:0 0 12px;color:#ffffff;font:700 24px/1.25 ${FONT};letter-spacing:-0.3px">${esc(title)}</h1>
+    <p style="margin:0 0 28px;color:#b4b9c6;font:15px/1.65 ${FONT}">${esc(intro)}</p>
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="${GRAD};border-radius:10px">
+      <a href="${esc(link)}" style="display:inline-block;padding:14px 28px;color:#160b04;font:700 15px ${FONT};text-decoration:none;border-radius:10px">${esc(button)} &rarr;</a>
+    </td></tr></table>
+    <div style="margin:28px 0 0;padding:14px 16px;background:#0c0e13;border:1px solid #1e222c;border-radius:10px">
+      <div style="color:#7e8496;font:12px/1.5 ${FONT};margin:0 0 6px">Le bouton ne marche pas ? Copie ce lien dans ton navigateur :</div>
+      <a href="${esc(link)}" style="color:#ffb37a;font:12px/1.5 Consolas,Menlo,monospace;word-break:break-all;text-decoration:none">${esc(link)}</a>
+    </div>
+    <p style="margin:24px 0 0;color:#7e8496;font:13px/1.6 ${FONT}">${esc(outro)}</p>
+  </div>
+</td></tr>
+<tr><td align="center" style="padding:26px 12px 0;color:#4a5063;font:12px/1.7 ${FONT}">
+  FiveGen · Scripts FiveM QBCore, Qbox et ESX prêts en quelques minutes<br>
+  <a href="${esc(site)}" style="color:#7e8496;text-decoration:underline">${esc(site.replace(/^https?:\/\//, ""))}</a>${support}<br>
+  E-mail automatique, merci de ne pas y répondre.
+</td></tr>
+</table></td></tr></table></body></html>`;
 }
 
 async function send({ to, subject, text, html }) {
-  outbox.push({ to, subject, text });
+  outbox.push({ to, subject, text, html });
   if (outbox.length > 50) outbox.shift();
   if (!transport) {
     console.log(`[fivegen] e-mail (SMTP non configuré) à ${to} : ${subject}\n${text}`);
@@ -53,7 +86,14 @@ export function sendPasswordReset(to, link) {
     to,
     subject: "Réinitialiser ton mot de passe FiveGen",
     text: `${intro}\n\n${link}\n\n${outro}`,
-    html: layout("Nouveau mot de passe", intro, "Choisir un nouveau mot de passe", link, outro),
+    html: layout({
+      preheader: "Ton lien pour choisir un nouveau mot de passe, valable 1 heure.",
+      title: "Nouveau mot de passe",
+      intro,
+      button: "Choisir un nouveau mot de passe",
+      link,
+      outro,
+    }),
   });
 }
 
@@ -66,6 +106,14 @@ export function sendVerification(to, link, freeCredits) {
     to,
     subject: "Confirme ton adresse e-mail FiveGen",
     text: `${intro}\n\n${link}\n\n${outro}`,
-    html: layout("Bienvenue sur FiveGen", intro, "Confirmer mon adresse", link, outro),
+    html: layout({
+      preheader: freeCredits ? `Confirme ton adresse et reçois tes ${freeCredits} crédits offerts.` : "Confirme ton adresse e-mail.",
+      badge: freeCredits ? `🎁 ${freeCredits} crédits offerts` : "",
+      title: "Bienvenue sur FiveGen",
+      intro,
+      button: "Confirmer mon adresse",
+      link,
+      outro,
+    }),
   });
 }
