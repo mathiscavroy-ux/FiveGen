@@ -1,5 +1,6 @@
 import vm from "node:vm";
 import luaparse from "luaparse";
+import { checkApiCalls } from "./apicheck.js";
 
 // CfxLua accepts a few extensions a stock Lua parser rejects. The prompt asks the
 // model to avoid them; this normalisation keeps the syntax check from failing on
@@ -178,6 +179,8 @@ const SERVER_ONLY = [
 function codeOnly(src) {
   return src
     .replace(/--\[(=*)\[[\s\S]*?\]\1\]/g, (m) => m.replace(/[^\n]/g, " "))
+    // long strings ([[ SQL ]], [=[ … ]=]) keep their delimiters, their content is blanked
+    .replace(/\[(=*)\[([\s\S]*?)\]\1\]/g, (m, eq, body) => `[${eq}[${body.replace(/[^\n]/g, " ")}]${eq}]`)
     .replace(/--[^\n]*/g, (m) => " ".repeat(m.length))
     .replace(/(['"])(?:\\.|(?!\1)[^\\\n])*\1/g, (m) => m[0] + " ".repeat(m.length - 2) + m[0]);
 }
@@ -255,6 +258,16 @@ function checkSql(files, spec) {
   return problems;
 }
 
+// Every native and framework function called must exist (see apicheck.js). Files already
+// reported by checkSides for the same call are not reported twice.
+function checkApi(files, spec) {
+  const manifest = files.find((f) => f.path === "fxmanifest.lua")?.content ?? "";
+  const sides = fileSides(manifest, files.map((f) => f.path));
+  const usesEsx = spec?.framework === "esx" || /es_extended/.test(manifest);
+  const already = new Set(checkSides(files).map((p) => `${p.file}:${p.line}`));
+  return checkApiCalls(files, { sideOf: (p) => sides.get(p), codeOnly, usesEsx }).filter((p) => !already.has(`${p.file}:${p.line}`));
+}
+
 // QBCore field names used on ESX objects: valid Lua, silently always nil at runtime.
 function checkEsxApi(files, spec) {
   const manifest = files.find((f) => f.path === "fxmanifest.lua")?.content ?? "";
@@ -285,7 +298,7 @@ export function validateProject(files, spec = {}) {
     if (p) problems.push(p);
     if (f.truncated) problems.push({ file: f.path, message: "Fichier tronqué (la génération s'est arrêtée au milieu)", level: "error" });
   }
-  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec));
+  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkApi(files, spec));
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };
