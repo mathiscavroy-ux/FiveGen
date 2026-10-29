@@ -76,6 +76,8 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal }
   if (provider.id !== "gemini") body.stream_options = { include_usage: true };
   if (provider.id === "gemini" && provider.effort) {
     body.reasoning_effort = provider.effort === "low" ? "low" : provider.effort === "medium" ? "medium" : "high";
+  } else if (provider.effort) {
+    body.reasoning_effort = provider.effort; // only set when the model lists this level
   }
 
   // A stream that stays silent too long is abandoned (504, retryable), otherwise
@@ -200,6 +202,7 @@ export async function completeOpenAICompat({ provider, system, user, maxTokens =
     ],
   };
   if (provider.id === "gemini") body.reasoning_effort = "low";
+  else if (provider.effort) body.reasoning_effort = provider.effort;
   const ctrl = new AbortController();
   const forwardAbort = () => ctrl.abort();
   signal?.addEventListener("abort", forwardAbort, { once: true });

@@ -3,7 +3,7 @@
 import { config } from "./config.js";
 import { runOpenAICompat, completeOpenAICompat, testOpenAICompat, ProviderError } from "./openai-compat.js";
 import { BRIEF_SYSTEM, buildBriefMessage, extractJson, sanitizeBrief } from "./brief.js";
-import { costOf } from "./provider.js";
+import { costOf, reasoningEffort } from "./provider.js";
 
 // Every engine call is reported here with its tokens and cost (index.js stores it).
 let usageListener = null;
@@ -82,6 +82,13 @@ function wait(ms, signal) {
   });
 }
 
+// A new resource reasons more than a targeted edit (fix, change, review, rewrite).
+async function withEffort(provider, purpose) {
+  if (provider.id === "gemini") return provider; // keeps its own mapping in openai-compat
+  const wanted = purpose === "generate" ? config.engine.effort : config.engine.effortEdits;
+  return { ...provider, effort: await reasoningEffort(provider.model, wanted) };
+}
+
 // meta: { userId, projectId, purpose } for the usage log.
 export async function runEngine({ userContent, onEvent, signal, meta }) {
   let emitted = false;
@@ -114,7 +121,7 @@ export async function runEngine({ userContent, onEvent, signal, meta }) {
     try {
       const r = mockRun
         ? await mockRun({ userContent, onEvent: forward, signal })
-        : await runOpenAICompat({ provider: attempt.provider, userContent, onEvent: forward, signal });
+        : await runOpenAICompat({ provider: await withEffort(attempt.provider, meta?.purpose), userContent, onEvent: forward, signal });
       await report(meta, { model: r.model ?? model, usage: r.usage, started, ok: true });
       return {
         files: r.files,
@@ -159,7 +166,7 @@ export async function runBrief({ description, server, signal, meta }) {
       const callStarted = Date.now();
       try {
         // Gateways cache identical requests: a retry must differ, or it gets the same broken reply.
-        const { text, usage, model } = await completeOpenAICompat({ provider, system: BRIEF_SYSTEM, user: attempt ? `${user}\n<!-- essai ${attempt + 1} -->` : user, maxTokens: 4000, signal });
+        const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "brief"), system: BRIEF_SYSTEM, user: attempt ? `${user}\n<!-- essai ${attempt + 1} -->` : user, maxTokens: 4000, signal });
         await report(meta, { model, usage, started: callStarted, ok: true });
         const brief = sanitizeBrief(extractJson(text));
         console.log(`[fivegen] questions prêtes en ${((Date.now() - started) / 1000).toFixed(1)} s (${provider.model})`);

@@ -104,7 +104,7 @@ OneSync / réseau :
 
 # NUI (interfaces HTML)
 
-- fxmanifest : ui_page 'html/index.html' et files {'html/index.html', 'html/style.css', 'html/script.js', 'html/img/*.png'}.
+- fxmanifest : ui_page 'html/index.html' et files {'html/index.html', 'html/style.css', 'html/script.js'} ; n'ajouter 'html/img/*.png' (ou tout autre fichier) que si ces fichiers sont réellement fournis dans la ressource, sinon le manifest pointe vers des fichiers absents.
 - Lua → NUI : SendNUIMessage({action='open', data=tbl}). NUI → Lua : RegisterNUICallback('nom', function(data, cb) ... cb({ok=true}) end) — toujours appeler cb, une seule fois.
 - Focus : SetNuiFocus(true, true) à l'ouverture (souris + clavier) ; SetNuiFocus(false, false) à la fermeture ; SetNuiFocusKeepInput(true) seulement si le joueur doit continuer à bouger. HUD sans focus.
 - JS : window.addEventListener('message', (e) => { const { action, data } = e.data || {}; switch (action) { ... } }) ; post : fetch(\`https://\${GetParentResourceName()}/close\`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: JSON.stringify(payload) }).then(r => r.json()) ; fermeture sur Échap (keyup 'Escape') qui appelle le callback 'close'. Repli pour test navigateur : const RES = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'nui-dev'.

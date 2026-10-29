@@ -206,7 +206,10 @@ local ESXobj = { PlayerData = nil, Players = {}, Jobs = {}, Items = {}, Game = {
 for _, path in ipairs(ESX_FUNCTIONS) do
   local node, last = ESXobj, nil
   for part in path:gmatch("[^.]+") do
-    if last then node[last] = node[last] or {} node = node[last] end
+    if last then
+      if type(node[last]) ~= "table" then node[last] = {} end -- a path through a value (PlayerData.coords)
+      node = node[last]
+    end
     last = part
   end
   if last and node[last] == nil then node[last] = function(...) return returnsFor(last) end end

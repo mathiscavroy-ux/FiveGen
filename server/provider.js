@@ -75,7 +75,14 @@ export async function modelPricing() {
     try {
       const list = await getJson("/models");
       for (const m of list.data ?? []) {
-        if (m.pricing) value.set(m.id, { input: num(m.pricing.input), output: num(m.pricing.output), cacheRead: num(m.pricing.cache_read), cacheWrite: num(m.pricing.cache_write), name: m.display_name ?? m.id });
+        value.set(m.id, {
+          input: num(m.pricing?.input),
+          output: num(m.pricing?.output),
+          cacheRead: num(m.pricing?.cache_read),
+          cacheWrite: num(m.pricing?.cache_write),
+          name: m.display_name ?? m.id,
+          efforts: m.reasoning_efforts?.levels ?? [],
+        });
       }
     } catch (err) {
       console.warn("[fivegen] tarifs du moteur indisponibles :", err.message);
@@ -83,6 +90,17 @@ export async function modelPricing() {
   }
   pricingCache = { at: Date.now(), value };
   return value;
+}
+
+/**
+ * Reasoning level to send for a model, or null when the model does not take one.
+ * Without an explicit level some upstreams hold the whole answer until the end:
+ * the client then waits minutes in front of a frozen screen.
+ */
+export async function reasoningEffort(model, wanted) {
+  if (!wanted) return null;
+  const levels = (await modelPricing()).get(model)?.efforts ?? [];
+  return levels.includes(wanted) ? wanted : null;
 }
 
 /** Tokens of one call ({prompt_tokens, completion_tokens, prompt_tokens_details}) priced in USD. */

@@ -47,7 +47,9 @@ Données :
 - Carburant : Entity(veh).state.fuel = 100.0 (ox_fuel) ou SetVehicleFuelLevel.
 - Callbacks : lib.callback.register / lib.callback.await. Cibles : ox_target. Menus : lib.registerContext.
 
-# ESX Legacy (es_extended 1.11 à 1.13)
+# ESX Legacy (es_extended 1.11 à 1.16)
+
+ESX 1.16 (dernière version) : es_extended dépend de la ressource esx_lib (globale xLib, proche d'ox_lib), démarrée avant es_extended. Les fonctions ESX.Game.*, ESX.Streaming.*, ESX.Table.*, ESX.Math.*, ESX.OneSync.*, ESX.Scaleform.* et ESX.SetTimeout restent disponibles (redirigées vers esx_lib) : écrire le code avec ESX.*, qui marche de la 1.11 à la 1.16, et ne pas utiliser xLib directement sauf demande. Nouveau en 1.16 : ESX.RefreshJob(nom), xPlayer.refreshJob(), ESX.Point, ESX.UI.Menu.IsOpen(...), raycast client ESX.Game.GetRaycastResult / ESX.Game.StopRaycasting (ESX.Game.RaycastScreen n'existe plus). Pas de « job2 » (getJob2, setJob2, ESX.GetJobs2 viennent de packs modifiés, pas d'ESX officiel) : n'en utiliser que si le client le demande.
 
 Objet : shared_script '@es_extended/imports.lua' (recommandé : fournit la globale ESX côté client et serveur, et tient ESX.PlayerData à jour côté client) ; sinon local ESX = exports['es_extended']:getSharedObject(). Dépendance 'es_extended'. Ne jamais attendre ESX avec l'ancien TriggerEvent('esx:getSharedObject') (supprimé).
 

@@ -34,7 +34,11 @@ export const config = {
       .map((m) => m.trim())
       .filter(Boolean),
     maxTokens: int(env.ENGINE_MAX_TOKENS, 65536),
-    effort: env.ENGINE_EFFORT || "high",
+    // Reasoning level for a new resource and for edits (changes, fixes, review). Measured
+    // on a full resource: low 231 s / 1 error, medium 517 s and truncated (thinking ate the
+    // output budget), no level 360-420 s with nothing streamed. Sent only to models that list it.
+    effort: env.ENGINE_EFFORT || "low",
+    effortEdits: env.ENGINE_EFFORT_EDITS || "low",
     // A generation silent for this long is abandoned (then retried or refunded).
     stallSeconds: int(env.ENGINE_STALL_SECONDS, 90),
     // Optional faster model for the questions step (same provider as ENGINE_MODEL).

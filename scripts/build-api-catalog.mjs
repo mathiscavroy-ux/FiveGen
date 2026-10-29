@@ -72,19 +72,48 @@ const runtime = uniq([
 ]);
 
 // ---------- ESX Legacy ----------
-const esxDir = findResource("es_extended");
+// --esx <es_extended> reads a newer ESX than the one installed in --resources.
+const esxDir = args.esx ?? findResource("es_extended");
 const esxFn = (files) => grab(files, /^\s*function ESX\.([A-Za-z0-9_.]+)\s*\(([^)]*)\)/gm, (m) => sig(`ESX.${m[1]}`, m[2]));
 const esxAssigned = (files) => grab(files, /^\s*ESX\.([A-Za-z0-9_.]+)\s*=\s*function\s*\(([^)]*)\)/gm, (m) => sig(`ESX.${m[1]}`, m[2]));
 // ESX.GetPlayers = G : functions published under a second name
-const esxAlias = (files) => grab(files, /^\s*ESX\.([A-Za-z0-9_]+)\s*=\s*[A-Za-z_][\w.]*\s*$/gm, (m) => sig(`ESX.${m[1]}`, "..."));
-const esxAll = (files) => uniq([...esxFn(files), ...esxAssigned(files), ...esxAlias(files)]);
+// (1.16+ compat.lua: ESX.Game.SpawnVehicle = xLib.game.spawnVehicle)
+const esxAlias = (files) => grab(files, /^\s*ESX\.([A-Za-z0-9_.]+)\s*=\s*[A-Za-z_][\w.]*\s*$/gm, (m) => sig(`ESX.${m[1]}`, "..."));
+// ESX.Streaming = { RequestModel = xLib.streaming.requestModel, Utils = { ... } }
+function esxTables(files) {
+  const out = [];
+  for (const f of files) {
+    const src = read(f);
+    for (const m of src.matchAll(/^ESX\.([A-Za-z0-9_.]+)\s*=\s*\{/gm)) {
+      const stack = [`ESX.${m[1]}`];
+      let i = m.index + m[0].length;
+      while (i < src.length && stack.length) {
+        const rest = src.slice(i);
+        const open = rest.match(/^\s*([A-Za-z_]\w*)\s*=\s*\{/);
+        const entry = rest.match(/^\s*([A-Za-z_]\w*)\s*=\s*([^,{}\n]+),?/);
+        const close = rest.match(/^\s*\},?/);
+        // only references to functions (xLib.streaming.requestModel), not data (coords = vector3(...))
+        const isRef = (v) => /^[A-Za-z_][\w.]*\s*$/.test(v) || /^function\b/.test(v);
+        if (open) (stack.push(`${stack.at(-1)}.${open[1]}`), (i += open[0].length));
+        else if (entry) (isRef(entry[2]) && out.push(sig(`${stack.at(-1)}.${entry[1]}`, "...")), (i += entry[0].length));
+        else if (close) (stack.pop(), (i += close[0].length));
+        else i += 1;
+      }
+    }
+  }
+  return out;
+}
+const esxAll = (files) => uniq([...esxFn(files), ...esxAssigned(files), ...esxAlias(files), ...esxTables(files)]);
 const esx = {
   version: version(esxDir),
   server: esxAll(lua(path.join(esxDir, "server"))),
   client: esxAll(lua(path.join(esxDir, "client"))),
   // imports.lua (shared_script '@es_extended/imports.lua') adds helpers such as ESX.Player
   shared: esxAll([...lua(path.join(esxDir, "shared")), path.join(esxDir, "imports.lua")]),
-  player: grab([path.join(esxDir, "server", "classes", "player.lua")], /function self\.([a-zA-Z0-9_]+)\s*\(([^)]*)\)/g, (m) => sig(`xPlayer.${m[1]}`, m[2])),
+  // 1.16+ splits the player class into server/classes/player/*.lua
+  player: uniq(
+    grab([path.join(esxDir, "server", "classes", "player.lua"), ...lua(path.join(esxDir, "server", "classes", "player"))], /function self\.([a-zA-Z0-9_]+)\s*\(([^)]*)\)/g, (m) => sig(`xPlayer.${m[1]}`, m[2])),
+  ),
 };
 
 // ---------- QBCore ----------
