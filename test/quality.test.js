@@ -8,6 +8,18 @@ const manifest = {
 };
 const all = (r) => [...r.errors, ...r.warnings];
 
+test("keys built at run time and ON DUPLICATE KEY UPDATE are not reported as missing", () => {
+  const files = [
+    { path: "fxmanifest.lua", content: "fx_version 'cerulean'\ngame 'gta5'\nshared_scripts { 'config.lua', 'locales/fr.lua' }\nserver_scripts { '@oxmysql/lib/MySQL.lua', 'server.lua' }\n" },
+    { path: "config.lua", content: "Config = {}" },
+    { path: "locales/fr.lua", content: "Locales['fr'] = { license_B = 'Permis B', exam_passed = 'Réussi : %s' }" },
+    { path: "server.lua", content: "print(_L('exam_passed', _L('license_' .. 'B')))\nMySQL.insert('INSERT INTO fg_licenses (identifier, suspended) VALUES (?, 0) ON DUPLICATE KEY UPDATE suspended = 0', { 'x' })" },
+    { path: "sql/install.sql", content: "CREATE TABLE IF NOT EXISTS fg_licenses (identifier VARCHAR(60) PRIMARY KEY, suspended TINYINT(1) NOT NULL DEFAULT 0);" },
+  ];
+  const out = all(validateProject(files, {})).map((p) => p.message).join("\n");
+  assert.doesNotMatch(out, /license_|« suspended »|"suspended"/);
+});
+
 test("a rental NPC placed in a tattoo parlour or at the PDM is an error, unless the script is about it", () => {
   const files = [
     manifest,
