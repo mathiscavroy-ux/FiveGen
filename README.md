@@ -106,6 +106,21 @@ Restaurer : arrête le site, remplace `data/fivegen.db` et `data/users/` par le 
 - Pour changer de moteur sans toucher au code : `ENGINE_BASE_URL`, `ENGINE_API_KEY` et `ENGINE_MODEL` acceptent n'importe quel service compatible OpenAI (Mistral, OpenRouter, Groq…).
 - **Moteur de secours** : `FALLBACK_BASE_URL`, `FALLBACK_API_KEY`, `FALLBACK_MODEL` désignent un deuxième fournisseur. Il prend le relais quand le principal est saturé après ses essais, ou refuse la requête (clé invalide, facturation coupée). `/admin` indique si le secours est configuré et s'il est en service.
 
+## Référence d'API vérifiée (anti-invention)
+
+`server/knowledge/api/catalog.json` liste toutes les fonctions qui existent vraiment, lues dans le code source officiel :
+- les natives FiveM, client et serveur ;
+- les fonctions du runtime Lua ;
+- ESX Legacy, QBCore, Qbox, ox_lib, ox_inventory, ox_target et oxmysql.
+
+Le moteur la reçoit dans ses instructions. Le vérificateur refuse tout appel absent du catalogue, ou utilisé du mauvais côté (client ou serveur), avec une suggestion (« Voulais-tu dire GetPlayerFromId ? »). La correction automatique remplace alors l'appel.
+
+Pour régénérer le catalogue après une mise à jour d'ESX ou des ressources ox, télécharge `natives.json` et `natives_cfx.json` (runtime.fivem.net/doc) ainsi que les sources de qb-core et qbx_core. Lance ensuite :
+
+```bash
+npm run api-catalog -- --natives <dossier des natives> --resources <serveur>/resources --scheduler <serveur>/citizen/scripting/lua --qb <qb-core> --qbx <qbx_core>
+```
+
 ## Référencement
 
 - `/scripts` et une page par famille de script (`/scripts/job-police-esx-qbcore`, `/scripts/hud-fivem`…), rendues côté serveur avec titre, description, balises de partage et données structurées. Le bouton « Générer ce script » ouvre le studio avec l'idée pré-remplie.
