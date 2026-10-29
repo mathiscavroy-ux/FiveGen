@@ -7,6 +7,7 @@ import { RECIPES } from "./knowledge/recipes.js";
 import { PITFALLS } from "./knowledge/pitfalls.js";
 import { SCRIPTS } from "./knowledge/scripts.js";
 import { API_REFERENCE } from "./knowledge/api-reference.js";
+import { LOCATIONS } from "./knowledge/locations.js";
 
 export const CATALOG = {
   frameworks: [
@@ -59,7 +60,7 @@ export const CATALOG = {
 };
 
 // Byte-identical across requests so the upstream cache can reuse it.
-export const SYSTEM_PROMPT = [CORE, FRAMEWORKS, LIBS, SCRIPTS, PITFALLS, API_REFERENCE].filter(Boolean).join("\n\n");
+export const SYSTEM_PROMPT = [CORE, FRAMEWORKS, LIBS, SCRIPTS, PITFALLS, LOCATIONS, API_REFERENCE].filter(Boolean).join("\n\n");
 
 const label = (list, id) => list.find((x) => x.id === id)?.label ?? id;
 

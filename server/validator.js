@@ -3,6 +3,7 @@ import luaparse from "luaparse";
 import { checkApiCalls } from "./apicheck.js";
 import { checkConsistency } from "./consistency.js";
 import { smokeTest } from "./smoketest.js";
+import { checkPlacement } from "./knowledge/locations.js";
 
 // CfxLua accepts a few extensions a stock Lua parser rejects. The prompt asks the
 // model to avoid them; this normalisation keeps the syntax check from failing on
@@ -174,6 +175,51 @@ function checkHtmlRefs(files) {
   return problems;
 }
 
+// Interface mistakes that make a NUI menu glitch in FiveM's browser. Built UIs
+// (dist/, minified bundles) are someone else's code and skipped.
+function checkNuiQuality(files) {
+  const problems = [];
+  const ui = files.filter((f) => /\.(js|html|css)$/.test(f.path) && !/(^|\/)(dist|build|node_modules)\//.test(f.path) && !/\.min\.(js|css)$/.test(f.path) && f.content.length < 200000);
+  const stripJs = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:\\])\/\/[^\n]*/g, "$1");
+  const lineOf = (src, index) => src.slice(0, index).split("\n").length;
+  const scripts = ui.filter((f) => f.path.endsWith(".js")).map((f) => ({ ...f, code: stripJs(f.content) }));
+  const inlineScripts = ui.filter((f) => f.path.endsWith(".html")).map((f) => ({ ...f, code: stripJs([...f.content.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).join("\n")) }));
+  const allJs = [...scripts, ...inlineScripts];
+
+  const listeners = allJs.flatMap((f) => [...f.code.matchAll(/addEventListener\(\s*['"]message['"]/g)].map((m) => ({ file: f.path, line: f.path.endsWith(".js") ? lineOf(f.code, m.index) : null })));
+  if (listeners.length > 1) {
+    problems.push({
+      file: listeners[1].file,
+      line: listeners[1].line,
+      message: `${listeners.length} écouteurs window 'message' dans l'interface : chaque message est traité plusieurs fois (menu qui s'ouvre en double, clics comptés deux fois). Un seul écouteur au niveau du fichier, avec un switch sur action.`,
+      level: "error",
+    });
+  }
+  for (const f of allJs) {
+    for (const m of f.code.matchAll(/(^|[^.\w$])(alert|confirm|prompt)\s*\(/g)) {
+      problems.push({ file: f.path, line: f.path.endsWith(".js") ? lineOf(f.code, m.index) : null, message: `${m[2]}() ne fonctionne pas dans l'interface FiveM : remplace-le par une fenêtre de confirmation en HTML.`, level: "error" });
+    }
+  }
+  const preventsSubmit = allJs.some((f) => /preventDefault\s*\(/.test(f.code));
+  for (const f of ui.filter((x) => x.path.endsWith(".html"))) {
+    const form = f.content.search(/<form\b/i);
+    if (form >= 0 && !preventsSubmit) {
+      problems.push({ file: f.path, line: lineOf(f.content, form), message: "Un <form> sans e.preventDefault() recharge la page NUI à la validation (le menu disparaît ou revient à zéro) : bloque le submit ou utilise des <button type=\"button\">.", level: "error" });
+    }
+  }
+  for (const f of ui.filter((x) => x.path.endsWith(".css"))) {
+    for (const m of f.content.matchAll(/([^{}]*:hover[^{]*)\{([^}]*)\}/g)) {
+      if (!/(^|[;\s])transform\s*:/.test(m[2])) continue;
+      problems.push({ file: f.path, line: lineOf(f.content, m.index + m[0].indexOf(":hover")), message: `${m[1].trim()} déplace l'élément au survol (transform) : dans une liste, il bouge sous la souris et clignote. Change plutôt la bordure, le fond ou l'ombre.`, level: "warning" });
+    }
+    const blur =f.content.search(/backdrop-filter\s*:\s*blur/i);
+    if (blur >= 0) {
+      problems.push({ file: f.path, line: lineOf(f.content, blur), message: "backdrop-filter: blur scintille et fait chuter les FPS dans le navigateur de FiveM : utilise un fond semi-opaque (rgba) à la place.", level: "warning" });
+    }
+  }
+  return problems;
+}
+
 // Events the resource triggers on its own server side but never registers:
 // almost always a typo between client and server.
 function checkEvents(files) {
@@ -327,6 +373,9 @@ function checkEsxApi(files, spec) {
   return problems;
 }
 
+// What the request is about: a coordinate in a tattoo parlour is fine for a tattoo script.
+const specContext = (spec) => [spec.name, spec.type, spec.description, spec.understood, ...(spec.answers ?? []).map((a) => `${a.question} ${a.answer}`)].filter(Boolean).join(" ");
+
 export function validateProject(files, spec = {}) {
   const problems = [];
   for (const f of files) {
@@ -337,7 +386,7 @@ export function validateProject(files, spec = {}) {
     if (p) problems.push(p);
     if (f.truncated) problems.push({ file: f.path, message: "Fichier tronqué (la génération s'est arrêtée au milieu)", level: "error" });
   }
-  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkApi(files, spec), ...checkConsistency(files, { codeOnly, normalise: normaliseCfxLua }));
+  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkNuiQuality(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkApi(files, spec), ...checkConsistency(files, { codeOnly, normalise: normaliseCfxLua }), ...checkPlacement(files, specContext(spec)));
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };

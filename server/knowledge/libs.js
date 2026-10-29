@@ -113,4 +113,19 @@ OneSync / réseau :
 - Vanilla HTML/CSS/JS sans build (sauf demande), pas de dépendance CDN obligatoire (polices système ; Font Awesome / Google Fonts seulement en option dégradable). Unités vh/vw ou rem pour s'adapter à 1080p / 1440p / 4K ; tester 16:9 et 21:9.
 - Design soigné : palette cohérente, coins arrondis, ombres douces, transitions CSS 150-250 ms, états hover/active, icônes SVG inline, typographie lisible ; HUD minimal et non intrusif positionné par rapport à la minimap.
 - Performance NUI : pas de setInterval rapide ; mises à jour envoyées par Lua seulement quand la valeur change, au maximum toutes les 100-250 ms pour un HUD.
-- Images d'items : nui://ox_inventory/web/images/nom.png ou nui://qb-inventory/html/images/nom.png si l'inventaire est présent.`;
+- Images d'items : nui://ox_inventory/web/images/nom.png ou nui://qb-inventory/html/images/nom.png si l'inventaire est présent.
+
+Menu NUI sans glitch (le navigateur de FiveM est un vieux Chromium, sans les finitions d'un vrai navigateur) :
+- Un seul window.addEventListener('message', …) au niveau du fichier, jamais dans une fonction appelée à chaque ouverture (sinon chaque ouverture ajoute un écouteur : actions en double, clics comptés deux fois).
+- Chaque ouverture vide puis reconstruit la liste (container.replaceChildren() ou innerHTML = '' avant d'ajouter) : jamais d'éléments ajoutés à la suite de ceux de l'ouverture précédente.
+- Aucun <form> qui se soumet : un submit recharge la page NUI (le menu disparaît ou revient à zéro). Boutons en <button type="button">, ou e.preventDefault() sur le submit.
+- Pas de alert(), confirm() ni prompt() (bloquants ou ignorés dans FiveM) : une petite fenêtre de confirmation en HTML.
+- Pas de backdrop-filter: blur sur une grande surface ni d'animation de box-shadow/filter en boucle : ça scintille et fait chuter les FPS. Fond semi-opaque (rgba) à la place.
+- Afficher / cacher : classe .hidden (display:none) ou opacity + visibility avec transition ; jamais de transition sur display, jamais de setTimeout qui rouvre ce qui vient d'être fermé.
+- html, body : background transparent, margin 0, overflow hidden, user-select none ; conteneur en position fixed avec inset ou centré, pas de 100vw (barre de défilement horizontale).
+- Images locales listées dans files {} (ou nui://), avec une image de remplacement si elle ne charge pas (onerror) ; pas de liens vers des images d'autres sites qui peuvent disparaître.
+- Côté Lua : une variable isOpen ; ouvrir seulement si fermé (pas de double ouverture via ox_target + touche) ; SendNUIMessage({action='open', …}) puis SetNuiFocus(true, true) ; le callback 'close' remet isOpen = false et SetNuiFocus(false, false) puis cb('ok'). Jamais de SetNuiFocus dans une boucle ni de DisableControlAction en boucle pendant que la NUI a le focus.
+- Fermer aussi le menu si le joueur meurt, s'éloigne du PNJ ou si la ressource s'arrête.
+- Survol : pas de transform (translateY, scale) sur une carte ou une ligne d'une liste qui défile : l'élément bouge sous la souris et clignote. Changer seulement border-color, background-color ou box-shadow. Transitions sur des propriétés précises (transition: border-color 150ms, background-color 150ms), jamais transition: all ni « transition: 200ms ease » sans propriété.
+- Boutons d'action (acheter, louer, valider) désactivés (disabled) dès le clic et réactivés à la réponse du callback : pas de double achat sur un double clic.
+- Valeurs qui changent souvent (minuteur, jauge) : Lua envoie un message seulement quand la valeur affichée change (au plus 1 fois par seconde pour un minuteur), et le JS met à jour le texte existant sans reconstruire le HTML.`;
