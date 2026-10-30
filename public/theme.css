@@ -153,6 +153,24 @@
   --border-strong: var(--line-strong);
 }
 
+/* ---------- motion: page changes and scrolling ----------
+   Pages cross-fade into each other (View Transitions, browsers that support it), anchor
+   links scroll smoothly below the sticky bar. With "reduce motion" set, only fades remain
+   (nothing slides or scrolls by itself). */
+html { scroll-padding-top: 84px; }
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation: fg-page-out 0.16s ease-in both; }
+::view-transition-new(root) { animation: fg-fade 0.26s ease both; }
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+  ::view-transition-new(root) { animation: fg-page-in 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+}
+@keyframes fg-page-out { to { opacity: 0; } }
+@keyframes fg-page-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes fg-rise { from { opacity: 0; transform: translateY(14px); } }
+@keyframes fg-fade { from { opacity: 0; } }
+@keyframes fg-pop { from { opacity: 0; transform: translateY(6px) scale(0.985); } }
+
 /* only while switching, so other transitions on the page are left alone */
 html.theme-switching, html.theme-switching * {
   transition: background-color .25s ease, border-color .25s ease, color .2s ease, fill .2s ease !important;

@@ -366,9 +366,12 @@ table.data .input { height: 34px; }
   .auth-page { grid-template-columns: 1fr; }
   .auth-aside { display: none; }
 }
+/* reduced motion: nothing slides, blinks or spins; content still fades in */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-  .mock-code .line { opacity: 1; }
+  .caret, .l-caret, .step.live .dot::after { animation: none !important; }
+  .mock-code .line { opacity: 1; animation: none !important; }
+  .reveal { translate: none; transition: opacity 0.45s ease var(--d, 0ms), border-color 0.2s; }
+  .btn:hover, .item:hover, .tile:hover, .price:hover { transform: none !important; }
 }
 
 /* admin: client status and detail */

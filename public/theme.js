@@ -84,6 +84,22 @@
 
   window.FiveGenTheme = { list: THEMES, get: () => current, set, choose };
 
+  // Instant page changes: a site link hovered for a moment is prepared in the background
+  // (Speculation Rules, ignored by browsers without them). Never the API, downloads or new tabs.
+  if (HTMLScriptElement.supports?.("speculationrules")) {
+    const rules = document.createElement("script");
+    rules.type = "speculationrules";
+    rules.textContent = JSON.stringify({
+      prerender: [
+        {
+          where: { and: [{ href_matches: "/*" }, { not: { href_matches: "/api/*" } }, { not: { href_matches: "/preview/*" } }, { not: { selector_matches: "[download], [target=_blank]" } }] },
+          eagerness: "moderate",
+        },
+      ],
+    });
+    document.head.append(rules);
+  }
+
   const ICON = `<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
 
   document.addEventListener("DOMContentLoaded", () => {

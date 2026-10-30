@@ -1094,3 +1094,19 @@ body.settings-page { display: block; height: auto; min-height: 100%; overflow: a
 .pack .amount small { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 @media (max-width: 640px) { .import-box { flex-wrap: wrap; } .import-box .btn { width: 100%; justify-content: center; } }
 .st-badge.discord { color: #fff; background: #5865f2; }
+
+/* ---------- smoother navigation in the studio and settings ---------- */
+/* fades (kept with "reduce motion"); opacity only on the workspace: a moving editor would misplace CodeMirror's cursor */
+.view:not(.hidden), .pane-analysis:not(.hidden), .pane-versions:not(.hidden), .workspace:not(.hidden), .tab-panel:not(.hidden) { animation: fg-fade 0.22s ease both; }
+dialog[open], dialog[open]::backdrop { animation: fg-fade 0.2s ease both; }
+@media (prefers-reduced-motion: no-preference) {
+  dialog[open] { animation: fg-pop 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .menu:not(.hidden) { animation: fg-pop 0.16s ease both; transform-origin: top right; }
+  .project-list li { transition: background-color 0.15s, border-color 0.15s, transform 0.15s; }
+  .project-list li:hover { transform: translateX(2px); }
+  .st-main > .st-section { animation: fg-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .st-main > .st-section:nth-child(2) { animation-delay: 0.05s; }
+  .st-main > .st-section:nth-child(3) { animation-delay: 0.1s; }
+  .st-main > .st-section:nth-child(n + 4) { animation-delay: 0.15s; }
+  .st-nav a { transition: background-color 0.2s, color 0.2s; }
+}

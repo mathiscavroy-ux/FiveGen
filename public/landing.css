@@ -130,3 +130,34 @@ section.block { padding: 96px 0; }
 section.block .mock-tree .sub { font-size: inherit; color: inherit; margin: 0; }
 .l-mobile-only { display: none; }
 @media (max-width: 860px) { .l-nav.open .l-mobile-only { display: block; color: var(--accent-2); font-weight: 600; } }
+
+/* ---------- dynamic scrolling ---------- */
+.scroll-progress { position: fixed; inset: 0 0 auto; height: 2px; z-index: 60; background: var(--grad); transform: scaleX(0); transform-origin: 0 50%; pointer-events: none; }
+.l-nav-links a.current { color: var(--text); background: var(--surface-2); }
+.l-preview { will-change: transform; }
+.to-top {
+  position: fixed; right: 20px; bottom: 20px; z-index: 40; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  border: 1px solid var(--line-strong); background: rgb(var(--bg-rgb) / 0.85); backdrop-filter: blur(10px); color: var(--text-2); cursor: pointer;
+  opacity: 0; translate: 0 10px; pointer-events: none; transition: opacity 0.25s, translate 0.25s, color 0.15s, border-color 0.15s;
+}
+.to-top.show { opacity: 1; translate: none; pointer-events: auto; }
+.to-top:hover { color: var(--text); border-color: var(--accent); }
+.to-top svg { width: 18px; height: 18px; }
+@media (prefers-reduced-motion: no-preference) {
+  /* hero: the text, then the preview cards, come in one after the other */
+  .l-hero-copy > * { animation: fg-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .l-hero-copy > :nth-child(2) { animation-delay: 0.08s; }
+  .l-hero-copy > :nth-child(3) { animation-delay: 0.16s; }
+  .l-hero-copy > :nth-child(4) { animation-delay: 0.24s; }
+  .l-hero-copy > :nth-child(5) { animation-delay: 0.32s; }
+  .l-preview > * { animation: fg-pop 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .l-preview > :nth-child(1) { animation-delay: 0.25s; }
+  .l-preview > :nth-child(2) { animation-delay: 0.4s; }
+  .l-preview > :nth-child(3) { animation-delay: 0.55s; }
+  .l-preview > :nth-child(4) { animation-delay: 0.75s; }
+  .l-stack { animation: fg-fade 0.8s ease 0.5s both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .l-hero-copy > *, .l-preview > *, .l-stack { animation: fg-fade 0.6s ease both; }
+  .to-top { translate: none; }
+}
