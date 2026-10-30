@@ -1,7 +1,9 @@
 // Map knowledge: the engine cannot see the GTA map, so invented coordinates land in
 // walls, in the sea or inside an existing shop. This file gives verified public spots
-// (from ox_inventory, esx_garage and es_extended configs) and the interiors already
-// used by vanilla businesses, which the validator also checks generated scripts against.
+// (from ox_inventory, esx_garage and es_extended configs), working points inside the
+// usual job buildings (duty, stash, counters: qb-policejob, qb-ambulancejob,
+// qb-mechanicjob and ox_inventory default configs) and the interiors already used by
+// vanilla businesses, which the validator also checks generated scripts against.
 
 // Interiors and zones already taken by a vanilla business.
 // [label, x, y, z, radius m, keywords that make it legitimate, strict]. Strict places
@@ -74,6 +76,22 @@ Règles :
 - Un véhicule apparaît sur une place de parking ou une route, jamais sur le même point que le PNJ : au moins 4 m d'écart, avec un heading (vector4) aligné sur la place.
 - PNJ : vector4 avec heading tourné vers le joueur ; CreatePed(..., coords.z - 1.0, ...) ; FreezeEntityPosition, SetEntityInvincible, SetBlockingOfNonTemporaryEvents.
 - Chaque coordonnée du config.lua porte un commentaire avec le nom du lieu (-- Parking de Legion Square). Le README liste les emplacements et explique comment les changer.
+- Si le client donne des coordonnées (dans sa demande ou ses réponses), utilise-les telles quelles, sans les arrondir ni les « corriger ».
+- Un point de travail (prise de service, vestiaire, coffre, armurerie, patron, caisse) se met À L'INTÉRIEUR du bâtiment, sur le point vérifié ci-dessous : dans le bureau, derrière le comptoir, dans l'atelier. Jamais devant l'entrée, sur le trottoir ni devant une porte de garage (les véhicules y passent et le PNJ bloque l'accès).
+- Une zone ox_target / qb-target de comptoir se pose exactement sur le point du comptoir (taille ~0.6 × 0.5 m) ; un PNJ de service se pose sur le point de prise de service, tourné vers l'intérieur de la pièce.
+- Pour un lieu sans point vérifié, ne devine pas l'intérieur : mets le point dans Config avec un commentaire « à placer : /coords en jeu » et explique dans le README comment le changer.
+
+Points intérieurs vérifiés (configs par défaut de qb-policejob, qb-ambulancejob, qb-mechanicjob et ox_inventory, valables sur la carte de base et la plupart des MLO) :
+- Commissariat de Mission Row : prise de service vector3(440.08, -974.92, 30.69) ; coffre vector3(453.08, -980.12, 30.89) ; armurerie (comptoir) vector3(453.21, -980.03, 30.68) ; salle des preuves vector3(442.17, -996.07, 30.69) ; sortie des véhicules (garage souterrain) vector4(448.16, -1017.41, 28.56, 90.65) ; fourrière vector3(436.68, -1007.42, 27.32) ; héliport sur le toit vector4(449.17, -981.33, 43.69, 87.23).
+- Hôpital Pillbox : accueil / enregistrement des patients vector3(308.19, -595.35, 43.29) ; prise de service vector3(311.18, -599.25, 43.29) ; coffre vector3(309.78, -596.6, 43.29) ; armoire à pharmacie vector3(306.37, -601.51, 43.28) ; sortie des ambulances vector4(294.58, -574.76, 43.18, 35.79) ; héliport sur le toit vector4(351.58, -587.45, 74.16, 160.5) ; lits vector4(353.1, -584.6, 43.11, 152.08), vector4(356.79, -585.86, 43.11, 152.08), vector4(354.12, -593.12, 43.1, 336.32).
+- Benny's Motorworks (Strawberry) : prise de service vector3(-202.92, -1313.74, 31.70) ; coffre vector3(-199.58, -1314.65, 31.08) ; atelier de peinture vector3(-202.42, -1322.16, 31.29) ; blip vector3(-211.73, -1325.28, 30.89).
+- Los Santos Customs (Burton) : prise de service vector3(-348.18, -134.55, 39.59) ; coffre vector3(-346.02, -130.68, 39.02) ; peinture vector3(-324.11, -147.11, 39.10) ; garage vector3(-369.30, -104.75, 38.38), sortie véhicule vector4(-369.65, -107.8, 38.65, 70.52).
+- Los Santos Customs (Harmony) : prise de service vector3(1185.86, 2638.70, 38.93) ; coffre vector3(1175.11, 2635.38, 37.78) ; sortie véhicule vector4(1188.18, 2657.56, 37.79, 316.74).
+- Los Santos Customs (aéroport) : prise de service vector3(-1149.17, -1998.27, 13.91) ; coffre vector3(-1146.40, -2002.05, 13.19) ; sortie véhicule vector4(-1137.42, -1993.26, 13.14, 226.07).
+- Beeker's Garage (Paleto Bay) : prise de service vector3(101.74, 6620.04, 32.95) ; coffre vector3(107.00, 6629.88, 31.81) ; sortie véhicule vector4(110.91, 6609.32, 31.81, 315.11).
+- Caisses des supérettes 24/7 (comptoir intérieur) : Strawberry vector3(25.06, -1347.32, 29.5) ; Chumash vector3(-3039.18, 585.13, 7.91) ; Banham Canyon vector3(-3242.2, 1000.58, 12.83) ; Paleto Bay vector3(1728.39, 6414.95, 35.04) ; Grapeseed vector3(1698.37, 4923.43, 42.06) ; Sandy Shores vector3(1960.54, 3740.28, 32.34) ; Route 68 vector3(548.5, 2671.25, 42.16) ; Senora vector3(2678.29, 3279.94, 55.24) ; Tataviam vector3(2557.19, 381.4, 108.62) ; Vinewood vector3(373.13, 326.29, 103.57).
+- Comptoirs Ammu-Nation : Little Seoul vector3(-660.92, -934.10, 21.94) ; Cypress Flats vector3(808.86, -2158.50, 29.73) ; Sandy Shores vector3(1693.57, 3761.60, 34.82) ; Paleto Bay vector3(-330.29, 6085.54, 31.57) ; Hawick vector3(252.85, -51.62, 70.0) ; Pillbox Hill vector3(23.68, -1106.46, 29.91) ; Tataviam vector3(2566.59, 293.13, 108.85) ; Route 68 vector3(-1117.61, 2700.26, 18.67) ; La Mesa vector3(841.05, -1034.76, 28.31).
+- Comptoirs des magasins d'alcool (Robs Liquor) : Mirror Park vector3(1134.9, -982.34, 46.41) ; Vespucci Canals vector3(-1222.33, -907.82, 12.43) ; Morningwood vector3(-1486.67, -378.46, 40.26) ; Chumash vector3(-2967.0, 390.9, 15.14) ; Route 68 vector3(1165.95, 2710.20, 38.26) ; Sandy Shores vector3(1393.0, 3605.95, 35.11).
 
 Points publics vérifiés (extérieurs, accessibles) :
 - Parking de Legion Square (San Andreas Avenue) : PNJ / accueil vector4(216.4, -786.6, 30.8, 160.0), sortie véhicule vector4(218.9, -779.7, 30.8, 338.8). Idéal location, garage, concession temporaire.
