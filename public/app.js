@@ -2285,7 +2285,9 @@ async function loadServers() {
 // What the engine knows about the server, or what is missing for it to know.
 function serverRead(s) {
   if (s.inventory) return `<span>Lu par le moteur : ${plural(s.inventory.resources, "ressource")}, ${plural(s.inventory.jobs, "job")}, ${plural(s.inventory.items, "item")}, ${plural(s.inventory.tables, "table")}</span>`;
-  return s.lastSeenAt ? "<span>Pas encore lu par le moteur : installe le bridge 1.6 ou plus récent.</span>" : "";
+  if (!s.lastSeenAt) return "";
+  const canRead = s.bridgeVersion?.localeCompare("1.6.0", undefined, { numeric: true }) >= 0;
+  return `<span>${canRead ? "Lecture du serveur en cours, environ 1 minute après le démarrage du bridge." : "Pas encore lu par le moteur : installe le bridge 1.6 ou plus récent."}</span>`;
 }
 
 function showSetup({ token, baseUrl, server }) {

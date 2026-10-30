@@ -30,7 +30,7 @@ const http = require("http");
 const https = require("https");
 const { execFile } = require("child_process");
 
-const VERSION = "1.6.0";
+const VERSION = "1.6.1";
 const TOKEN = GetConvar("fivegen_token", "");
 const BASE = GetConvar("fivegen_url", "https://flazehdr.alwaysdata.net").replace(/\/+$/, "");
 const FOLDER = GetConvar("fivegen_folder", "[fivegen]");
@@ -38,6 +38,7 @@ const POLL_MS = 5000;
 const AUTO_SQL = GetConvar("fivegen_sql", "1") !== "0";
 const INVENTORY = GetConvar("fivegen_inventory", "1") !== "0";
 const INVENTORY_MS = 10 * 60000;
+const INVENTORY_RETRY_MS = 60000;
 
 const log = (msg) => console.log(`^3[FiveGen]^7 ${msg}`);
 const fail = (msg) => console.log(`^1[FiveGen]^7 ${msg}`);
@@ -263,7 +264,16 @@ async function sendInventory() {
   const body = JSON.stringify(inventory);
   if (body === sentInventory) return;
   const res = await request("POST", "/api/bridge/inventory", { inventory });
-  if (res.status === 200) sentInventory = body;
+  if (res.status !== 200) throw new Error(`le site répond ${res.status}`);
+  sentInventory = body;
+  log(`Serveur lu par FiveGen : ${inventory.resources.length} ressources, ${inventory.jobs.length} jobs, ${inventory.items.length} items, ${inventory.tables.length} tables.`);
+}
+
+function readAndSend() {
+  sendInventory().catch((err) => {
+    nextInventory = Date.now() + INVENTORY_RETRY_MS;
+    fail(`Lecture du serveur impossible (${err.message}). Nouvel essai dans 1 minute.`);
+  });
 }
 
 // ESX keeps jobs and items in memory from server start. After the SQL added some, jobs
@@ -353,7 +363,7 @@ async function loop() {
         if (warned) log(`Reconnecté (serveur « ${res.json.server} »).`);
         warned = "";
         await flushErrors();
-        sendInventory().catch(() => {}); // never holds up a deployment
+        readAndSend(); // never holds up a deployment
         if (res.json.deployment) {
           await deploy(res.json.deployment);
           wait = 500; // something else may be queued

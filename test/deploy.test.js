@@ -193,6 +193,35 @@ test("the real bridge reads the server and the account sees it, names only", asy
   assert.equal(deploy.serverInventory(userId).server, "Inventaire");
 });
 
+test("a failed read of the server is logged, then retried a minute later", async () => {
+  const { server: s, token } = deploy.createServer(userId, "Relecture");
+  const resources = fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-res-"));
+  const logs = [];
+  let skew = 0;
+  let broken = true;
+  startBridge(token, resources, {
+    extra: {
+      Date: class extends Date {
+        static now = () => Date.now() + skew;
+      },
+      console: { log: (line) => logs.push(line) },
+      clearTimeout,
+      GetNumResources: () => {
+        if (broken) throw new Error("native absente");
+        return 0;
+      },
+      GetResourceState: () => "missing",
+    },
+  });
+  skew = 60_000;
+  await waitFor(() => logs.some((l) => l.includes("Lecture du serveur impossible (native absente)")));
+  assert.equal(deploy.listServers(userId).find((x) => x.id === s.id).inventory, null);
+  broken = false;
+  skew = 130_000;
+  await waitFor(() => logs.some((l) => l.includes("Serveur lu par FiveGen : 0 ressources")));
+  assert.deepEqual(deploy.listServers(userId).find((x) => x.id === s.id).inventory, { resources: 0, jobs: 0, items: 0, tables: 0 });
+});
+
 test("a project uses the server it was deployed to, the account its latest one", async () => {
   const owner = db.createUser("two-servers@test.local", "x", 0, false).id;
   const a = deploy.createServer(owner, "A");
