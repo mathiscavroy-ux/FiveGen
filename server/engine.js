@@ -39,6 +39,9 @@ const fallback = fb.baseUrl && fb.model
   ? { id: fb.baseUrl.includes("generativelanguage.googleapis.com") ? "gemini" : "fallback", label: "FiveGen Engine (secours)", baseUrl: fb.baseUrl, apiKey: fb.apiKey, model: fb.model, maxTokens: fb.maxTokens, needsKey: true, stallMs: upstream.stallMs }
   : null;
 const primaryModels = () => [config.engine.model, ...config.engine.fallbackModels.filter((m) => m !== config.engine.model)];
+// The second provider may be a paid model: free accounts never reach it (their run fails
+// and is refunded instead, rather than spending paid quota).
+const backupFor = (profile) => (profile?.id === "free" ? null : fallback);
 // Content refusals are the same everywhere: switching provider would not help.
 const worthFallback = (err) => fallback && err instanceof ProviderError && !/filtre de contenu/.test(err.message);
 
@@ -121,7 +124,7 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
   // Each model gets a few spaced attempts: overload errors from the upstream are usually momentary.
   const retries = (provider) => Array.from({ length: RETRIES_PER_MODEL }, (_, i) => ({ provider, retry: i }));
   const attempts = mockRun ? [null] : modelsFor(profile, preferred).flatMap((model) => retries({ ...upstream, model }));
-  if (fallback && !mockRun) attempts.push(...retries(fallback));
+  if (backupFor(profile) && !mockRun) attempts.push(...retries(fallback));
   let lastError;
   for (let i = 0; i < attempts.length; i++) {
     const attempt = attempts[i];
@@ -147,6 +150,15 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
       // Only switch model while nothing reached the client, otherwise the stream would repeat itself.
       if (emitted || signal?.aborted) break;
       if (!isOverload(err)) {
+        // This model refused for itself (not allowed for the account, unknown): the next model.
+        if (err instanceof ProviderError && [403, 404].includes(err.status)) {
+          const other = attempts.findIndex((a, j) => j > i && a?.provider !== fallback && a?.provider.model !== model);
+          if (other > 0) {
+            console.warn(`[fivegen] ${model} refusé (${err.status}), modèle suivant`);
+            i = other - 1;
+            continue;
+          }
+        }
         // A configuration error on the main provider: go straight to the fallback.
         const next = attempts.findIndex((a, j) => j > i && a?.provider === fallback);
         if (attempt?.provider === fallback || next < 0 || !worthFallback(err)) break;
@@ -169,7 +181,7 @@ export async function runBrief({ description, server, signal, meta, profile }) {
   const user = buildBriefMessage(description, server);
   // A faster model for the questions, which need no heavy reasoning (BRIEF_MODEL, or the profile's).
   const providers = [...new Set(modelsFor(profile, profile ? profile.brief || undefined : config.engine.briefModel || undefined))].map((model) => ({ ...upstream, model }));
-  if (fallback) providers.push(fallback);
+  if (backupFor(profile)) providers.push(fallback);
   let lastError;
   const started = Date.now();
   for (const provider of providers) {
@@ -209,7 +221,7 @@ export async function runPlan({ userContent, signal, meta, profile }) {
     return mock.mockPlan(userContent);
   }
   const providers = modelsFor(profile).map((model) => ({ ...upstream, model }));
-  if (fallback) providers.push(fallback);
+  if (backupFor(profile)) providers.push(fallback);
   let lastError;
   for (const provider of providers) {
     const started = Date.now();

@@ -137,9 +137,9 @@ function loadOffers(raw, name, defaults) {
   }
 }
 
-// What each kind of account runs on. Free accounts use the provider's free models (no
-// paid quota; a very cheap paid model last, for when the free ones are saturated);
-// subscribers get the main model. Every generation still costs credits.
+// What each kind of account runs on. Free accounts use the provider's free models only
+// (no paid quota, never the backup engine); subscribers get the main model. Every
+// generation still costs credits.
 const models = (v, d) => (v ?? d).split(",").map((m) => m.trim()).filter(Boolean);
 const premium = {
   id: "premium",
@@ -161,7 +161,7 @@ config.tiers = {
     id: "free",
     label: "Gratuit",
     engineName: env.FREE_ENGINE_NAME || "Qwen3.8 Max",
-    models: models(env.FREE_MODELS, "qwen/qwen3.8-max:free,qwen/qwen3-coder-plus:free,mistralai/devstral-medium,deepseek/deepseek-v4-flash-0731"),
+    models: models(env.FREE_MODELS, "qwen/qwen3.8-max:free,qwen/qwen3-coder-plus:free,mistralai/devstral-medium,qwen/qwen3.7-max:free,mistralai/mistral-large-2512"),
     light: (env.FREE_LIGHT_MODEL ?? "qwen/qwen3.7-flash:free").trim(),
     review: (env.FREE_REVIEW_MODEL ?? "qwen/qwen3.8-max:free").trim(),
     brief: (env.FREE_BRIEF_MODEL ?? "qwen/qwen3.7-flash:free").trim(),

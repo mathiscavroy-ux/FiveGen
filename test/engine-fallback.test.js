@@ -60,3 +60,11 @@ test("generation and questions switch to the fallback provider", async () => {
   assert.ok(calls.some((u) => u.startsWith("/primary")));
   assert.ok(calls.some((u) => u.startsWith("/backup")));
 });
+
+test("a free account never reaches the backup provider: its run fails instead", async () => {
+  const { runEngine } = await import("../server/engine.js");
+  calls.length = 0;
+  const free = { id: "free", models: ["free-model"], effort: "", effortEdits: "" };
+  await assert.rejects(runEngine({ userContent: "x", onEvent: () => {}, profile: free }));
+  assert.ok(calls.length > 0 && calls.every((u) => u.startsWith("/primary")), "only the main provider is called");
+});

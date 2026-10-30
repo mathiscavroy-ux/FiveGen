@@ -306,6 +306,7 @@ async function streamPipeline(res, { userId, projectId, kind, instruction, userC
   const { signal } = job.controller;
   // engine profile of the account (free models, or Opus for subscribers), read once per run
   const state = { produced: false, outputTokens: 0, profile: tierOf(db.getUser(userId)) };
+  console.log(`[fivegen] ${LABELS[kind]} pour l'utilisateur ${userId} · offre ${state.profile.label} · modèle ${state.profile.models[0]}`);
   send("project", { id: projectId });
   send("credits", { credits: db.getUser(userId).credits });
   try {

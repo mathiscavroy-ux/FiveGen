@@ -216,7 +216,12 @@ export async function completeOpenAICompat({ provider, system, user, maxTokens =
     });
     if (!res.ok) throw new ProviderError(httpMessage(provider, res.status, await res.text()), res.status);
     const json = await res.json();
-    if (json.error) throw new ProviderError(`${provider.label} : ${extractError(JSON.stringify(json))}`, Number(json.error.code) || undefined);
+    if (json.error) {
+      // same reading as the stream: "service_unavailable" and the like are worth a retry
+      const message = extractError(JSON.stringify(json));
+      const declared = Number(json.error.status ?? json.error.code);
+      throw new ProviderError(`${provider.label} : ${message}`, Number.isInteger(declared) && declared >= 400 ? declared : /unavailable|overload|capacity|retry|rate.?limit|timeout/i.test(message) ? 503 : undefined);
+    }
     const choice = json.choices?.[0];
     if (choice?.finish_reason === "content_filter") throw new ProviderError(`${provider.label} a bloqué la réponse (filtre de contenu).`);
     return { text: String(choice?.message?.content ?? ""), usage: json.usage ?? null, model: json.model ?? provider.model };
