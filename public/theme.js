@@ -47,29 +47,42 @@
     if (!find(current).mode) apply(current);
   });
 
-  // Applies and remembers a theme in this browser (also used for the account's saved theme).
-  function set(id, { animate = true } = {}) {
-    if (!find(id)) return;
+  // Applies and remembers a theme in this browser. Each mode remembers its theme so the
+  // sun / moon button comes back to it; a deliberate choice (settings, account) resets the
+  // other mode to the matching theme, so old picks never come back by surprise.
+  function set(id, { animate = true, toggled = false } = {}) {
+    const theme = find(id);
+    if (!theme) return;
     if (animate) root.classList.add("theme-switching");
     apply(id);
     try {
       localStorage.setItem(KEY, id);
-      // remembered per mode, so the sun / moon button comes back to this theme
-      if (find(id).mode) localStorage.setItem(`${KEY}.${find(id).mode}`, id);
+      if (theme.mode) {
+        localStorage.setItem(`${KEY}.${theme.mode}`, id);
+        if (!toggled) {
+          const other = theme.mode === "dark" ? "light" : "dark";
+          const pair = find(PAIRS[id]);
+          localStorage.setItem(`${KEY}.${other}`, pair?.mode === other ? pair.id : other);
+        }
+      }
     } catch {
       // private browsing: the choice lasts for this page only
     }
     if (animate) setTimeout(() => root.classList.remove("theme-switching"), 300);
   }
 
-  // A choice made by the visitor: pages with an account save it there too.
-  function choose(id) {
-    set(id);
+  let chosenHere = false;
+
+  // A choice made by the visitor, saved on the account when signed in.
+  function choose(id, { toggled = false } = {}) {
+    chosenHere = true;
+    set(id, { toggled });
     window.dispatchEvent(new CustomEvent("fivegen:theme-chosen", { detail: current }));
+    fetch("/api/me/prefs", { method: "PUT", headers: { "Content-Type": "application/json", "X-FiveGen": "1" }, body: JSON.stringify({ theme: current }) }).catch(() => {});
   }
 
-  // Switches mode without losing the theme: back to the last theme used in the other
-  // mode, otherwise the matching one (Minuit <-> Océan...).
+  // Switches mode without losing the theme: back to the theme of the other mode,
+  // otherwise the matching one (Minuit <-> Océan...).
   function toggle() {
     const next = root.dataset.theme === "light" ? "dark" : "light";
     let target = null;
@@ -79,10 +92,30 @@
       // private browsing: use the pair
     }
     const pair = find(PAIRS[current]);
-    choose(target || (pair?.mode === next ? pair.id : next));
+    choose(find(target)?.mode === next ? target : pair?.mode === next ? pair.id : next, { toggled: true });
   }
 
   window.FiveGenTheme = { list: THEMES, get: () => current, set, choose };
+
+  // Signed in: the theme saved on the account wins (the same on every page and device),
+  // unless the visitor already picked one on this page.
+  fetch("/api/me")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((me) => {
+      const theme = me?.prefs?.theme;
+      if (theme && theme !== current && !chosenHere) set(theme, { animate: false });
+    })
+    .catch(() => {});
+
+  // A page shown again from the back/forward cache, prepared in advance (speculation
+  // rules) or another tab: take the theme saved in the meantime.
+  const resync = () => {
+    const theme = saved() || "system";
+    if (theme !== current) apply(theme);
+  };
+  window.addEventListener("pageshow", (e) => e.persisted && resync());
+  document.addEventListener("prerenderingchange", resync);
+  window.addEventListener("storage", (e) => e.key === KEY && resync());
 
   // Instant page changes: a site link hovered for a moment is prepared in the background
   // (Speculation Rules, ignored by browsers without them). Never the API, downloads or new tabs.

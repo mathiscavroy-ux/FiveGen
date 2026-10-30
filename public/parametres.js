@@ -1,5 +1,5 @@
 // Account settings page: profile, security, theme, studio defaults, purchases, deletion.
-import { $, $$, api, toast, escapeHtml, plural, formatPrice, syncTheme } from "./common.js";
+import { $, $$, api, toast, escapeHtml, plural, formatPrice } from "./common.js";
 
 let me = null;
 let packs = null;
@@ -319,7 +319,6 @@ async function boot() {
     if (e.message !== "Session expirée") toast(`Serveur injoignable : ${e.message}`, "err");
     return;
   }
-  syncTheme(me);
   renderProfile();
   renderThemes();
   renderDefaults(options);

@@ -36,14 +36,3 @@ export const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
 
 export const formatPrice = (cents, currency) =>
   (cents / 100).toLocaleString("fr-FR", { style: "currency", currency: currency.toUpperCase() });
-
-// The theme follows the account across devices: the saved one is applied on load, and a
-// new choice (settings page or the sun / moon button) is saved.
-export function syncTheme(me) {
-  const theme = window.FiveGenTheme;
-  if (!theme) return;
-  if (me.prefs?.theme && me.prefs.theme !== theme.get()) theme.set(me.prefs.theme, { animate: false });
-  window.addEventListener("fivegen:theme-chosen", (e) => {
-    api("/api/me/prefs", { method: "PUT", body: { theme: e.detail } }).catch(() => toast("Thème appliqué ici, mais pas enregistré sur ton compte.", "err"));
-  });
-}
