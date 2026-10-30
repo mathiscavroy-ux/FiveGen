@@ -15,6 +15,8 @@
     { id: "sakura", name: "Sakura", mode: "light", swatch: ["#fdf6f8", "#ffffff", "#db2777"] },
     { id: "ocean", name: "Océan", mode: "light", swatch: ["#f3f7f9", "#ffffff", "#0e7490"] },
   ];
+  // Sun / moon target when no theme of the other mode was picked yet in this browser.
+  const PAIRS = { dark: "light", light: "dark", oled: "light", midnight: "ocean", ocean: "midnight", neon: "sakura", sakura: "neon", forest: "light" };
   const root = document.documentElement;
   const media = window.matchMedia("(prefers-color-scheme: light)");
   const find = (id) => THEMES.find((t) => t.id === id);
@@ -52,6 +54,8 @@
     apply(id);
     try {
       localStorage.setItem(KEY, id);
+      // remembered per mode, so the sun / moon button comes back to this theme
+      if (find(id).mode) localStorage.setItem(`${KEY}.${find(id).mode}`, id);
     } catch {
       // private browsing: the choice lasts for this page only
     }
@@ -64,6 +68,20 @@
     window.dispatchEvent(new CustomEvent("fivegen:theme-chosen", { detail: current }));
   }
 
+  // Switches mode without losing the theme: back to the last theme used in the other
+  // mode, otherwise the matching one (Minuit <-> Océan...).
+  function toggle() {
+    const next = root.dataset.theme === "light" ? "dark" : "light";
+    let target = null;
+    try {
+      target = find(localStorage.getItem(`${KEY}.${next}`))?.id;
+    } catch {
+      // private browsing: use the pair
+    }
+    const pair = find(PAIRS[current]);
+    choose(target || (pair?.mode === next ? pair.id : next));
+  }
+
   window.FiveGenTheme = { list: THEMES, get: () => current, set, choose };
 
   const ICON = `<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
@@ -73,7 +91,7 @@
       if (!btn.innerHTML.trim()) btn.innerHTML = ICON;
       btn.setAttribute("aria-label", "Changer de thème (clair / sombre)");
       btn.title = "Thème clair / sombre";
-      btn.addEventListener("click", () => choose(root.dataset.theme === "light" ? "dark" : "light"));
+      btn.addEventListener("click", toggle);
     }
   });
 })();
