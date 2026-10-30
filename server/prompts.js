@@ -232,24 +232,28 @@ ${EDIT_RULES}`;
 
 // Second pass right after a generation: the engine rereads its own resource against a
 // checklist of what static checks cannot see. Warnings from the checks (including the
-// dry run in a fake FiveM) are listed so this pass fixes them too.
-export function buildReviewMessage(spec, files, warnings = []) {
+// dry run in a fake FiveM) are listed so this pass fixes them too. With change
+// ({ instruction, touched }) it rereads a modification instead of a new resource.
+export function buildReviewMessage(spec, files, warnings = [], change = null) {
   const hints = warnings.length
-    ? `\n<avertissements_verification>\n${warnings.map((w) => `- ${w.file}${w.line ? `:${w.line}` : ""} — ${w.message}`).join("\n")}\n</avertissements_verification>\n`
+    ? `\n<avertissements_verification>\n${warnings.map((w) => `- ${w.file}${w.line ? `:${w.line}` : ""} — ${w.message}`).join("\n")}\n</avertissements_verification>\nTraite chacun de ces avertissements : corrige-le, sauf s'il s'agit d'un faux positif évident.\n`
     : "";
-  return `Relis la ressource FiveM que tu viens d'écrire, comme un développeur senior avant livraison.
+  const { shown, others } = change ? fixContext(files, change.touched.map((file) => ({ file }))) : { shown: files, others: [] };
+  const othersBlock = others.length ? `\n<autres_fichiers_existants>\n${others.join("\n")}\n</autres_fichiers_existants>\n` : "";
+  const asked = change ? `\n<modification_demandee>\n${change.instruction}\n</modification_demandee>\n` : "";
+  return `${change ? "Relis la modification que tu viens d'appliquer à cette ressource FiveM" : "Relis la ressource FiveM que tu viens d'écrire"}, comme un développeur senior avant livraison.${change ? " Ne regarde que ce qu'elle touche ou peut casser : le reste du script n'est pas à reprendre." : ""}
 
 <specification>
 ${describeSpec(spec)}
 </specification>
-${briefBlock(spec)}
+${briefBlock(spec)}${asked}
 <fichiers_actuels>
-${filesBlock(files)}
+${filesBlock(shown)}
 </fichiers_actuels>
-${hints}
+${othersBlock}${hints}
 <relecture>
 Vérifie point par point :
-1. Chaque précision du client et chaque fonctionnalité de la spécification est réellement implémentée (pas de TODO, pas de fonction vide, pas de « à compléter »).
+1. ${change ? "La modification demandée est complète et rien d'autre n'a changé" : "Chaque précision du client et chaque fonctionnalité de la spécification est réellement implémentée"} (pas de TODO, pas de fonction vide, pas de « à compléter »).
 2. Sécurité serveur : chaque événement réseau et callback valide ses arguments (type, tonumber, bornes), le job et le grade du joueur, la distance, l'existence de la cible, et applique un cooldown aux actions répétables. Aucun argent, item ou job n'est donné sur la seule parole du client.
 3. Robustesse : xPlayer, résultats SQL, items, entités et retours de lib.inputDialog testés avant usage ; aucune variable locale d'un fichier utilisée dans un autre ; pas de boucle sans Wait.
 4. Nettoyage : entités, blips, zones, NUI (SetNuiFocus false) et états libérés dans onResourceStop et à la déconnexion.

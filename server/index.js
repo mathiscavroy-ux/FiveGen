@@ -14,7 +14,7 @@ import { importResource } from "./importer.js";
 import { mountDiscord, discordEnabled } from "./discord.js";
 import { tierOf } from "./tiers.js";
 import { validateProjectFull } from "./validator.js";
-import { fixRounds, isBetter } from "./autofix.js";
+import { fixRounds, isBetter, newWarnings, reviewsChange } from "./autofix.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory } from "./deploy.js";
 import { inventoryBlock, inventoryCounts } from "./inventory.js";
 import { mountSeo } from "./seo.js";
@@ -197,8 +197,8 @@ function checkProject(userId, projectId) {
   return validateProjectFull(getFiles(userId, projectId), { ...project.spec, inventory: serverInventory(userId, projectId) }, { resource: project.name });
 }
 
-// Generation → save → check → review pass (new resources) → automatic fix rounds
-// (free) while errors remain.
+// Generation → save → check → review pass → automatic fix rounds (free) while errors
+// remain → one more review if the fixes brought new warnings.
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
   const inventory = serverInventory(userId, projectId);
@@ -246,11 +246,12 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   };
   let best = kept(await recheck(), version);
 
-  if (kind === "generate" && config.reviewPass) {
+  const reviewPass = async (warnings) => {
     send("phase", { phase: "review", label: "Relecture" });
     try {
+      const change = kind === "generate" ? null : { instruction, touched };
       const review = await runEngine({
-        userContent: buildReviewMessage(spec, getFiles(userId, projectId), best.validation.warnings),
+        userContent: buildReviewMessage(spec, getFiles(userId, projectId), warnings, change),
         onEvent: send,
         signal,
         meta: { userId, projectId, purpose: "review" },
@@ -260,10 +261,10 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       });
       state.outputTokens += review.outputTokens ?? 0;
       if (review.files.length || review.edits.length || review.deletes.length) {
-        const reviewed = await saveResult({ userId, projectId, result: review, spec, send, signal, state });
+        const files = await saveResult({ userId, projectId, result: review, spec, send, signal, state });
         const reviewVersion = snapshot(userId, projectId, { type: "review", label: "Relecture" });
         updateMeta(userId, projectId, { notes: mergeNotes(getProject(userId, projectId).notes, review.notes, "Relecture") });
-        addHistory(userId, projectId, { type: "review", instruction: "Relecture", files: reviewed, outputTokens: review.outputTokens });
+        addHistory(userId, projectId, { type: "review", instruction: "Relecture", files, outputTokens: review.outputTokens });
         // same score: the review stays, it fixes what the checks cannot see
         const validation = await recheck();
         if (isBetter(best.validation, validation)) await rollback(best, "La relecture a ajouté des erreurs.");
@@ -275,7 +276,13 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       console.error("[fivegen] relecture interrompue :", err.detail ?? err);
       send("status", "Relecture interrompue : le script est livré après la vérification automatique.");
     }
-  }
+  };
+
+  // After a change, the warnings the script already had stay out of it: the client asked for something else.
+  const known = kind === "generate" ? [] : (project.validation?.warnings ?? []);
+  const warnings = newWarnings(best.validation.warnings, known);
+  const reviewed = config.reviewPass && (kind === "generate" || (kind !== "fix" && config.reviewChanges && reviewsChange(touched, warnings)));
+  if (reviewed) await reviewPass(warnings);
 
   const rounds = state.profile.autoFixRounds;
   best = await fixRounds({
@@ -310,6 +317,11 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     rollback: (target, round) => rollback(target, `La correction automatique ${round} n'améliore pas le script.`),
   });
   if (before && isBetter(before.validation, best.validation)) await rollback(before, "La correction laisse le script moins bon qu'avant.");
+  // only what the first review did not see: what it left, it left on purpose
+  if (reviewed && best.validation.ok) {
+    const fresh = newWarnings(best.validation.warnings, [...known, ...warnings]);
+    if (fresh.length) await reviewPass(fresh);
+  }
   send("done", getProject(userId, projectId));
 }
 
@@ -988,6 +1000,7 @@ app.get("/api/admin/usage", requireUser, requireAdmin, async (req, res) => {
       fallbackModels: config.engine.fallbackModels,
       price,
       reviewPass: config.reviewPass,
+      reviewChanges: config.reviewChanges,
       autoFixRounds: config.autoFixRounds,
       smokeTest: process.env.SMOKE_TEST !== "0",
       maxTokens: config.engine.maxTokens,

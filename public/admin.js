@@ -220,6 +220,7 @@ async function loadEngine() {
     ["Prix du cache (lecture)", e.price?.cacheRead != null ? usd(e.price.cacheRead) : "—"],
     ["Modèles de repli", e.fallbackModels.length ? e.fallbackModels.map((m) => `<code>${esc(m)}</code>`).join(" ") : "aucun"],
     ["Relecture après génération", e.reviewPass ? "activée" : "désactivée (REVIEW_PASS=0)"],
+    ["Relecture après modification", e.reviewPass && e.reviewChanges ? "activée" : "désactivée (REVIEW_CHANGES=0)"],
     ["Tours de correction automatique", int(e.autoFixRounds)],
     ["Test d'exécution FiveM simulé", e.smokeTest ? "activé" : "désactivé (SMOKE_TEST=0)"],
     ["Tokens max par réponse", int(e.maxTokens)],

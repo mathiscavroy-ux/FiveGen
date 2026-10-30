@@ -68,6 +68,8 @@ export const config = {
   autoFixRounds: int(env.AUTO_FIX_ROUNDS, 2),
   // Second engine pass that rereads a new resource against a checklist (REVIEW_PASS=0 disables).
   reviewPass: env.REVIEW_PASS !== "0",
+  // The same pass after a modification, on what it touched (REVIEW_CHANGES=0 disables).
+  reviewChanges: env.REVIEW_CHANGES !== "0",
   // New resources: a plan, then groups of files written in parallel (PARALLEL_GENERATION=0: one call).
   parallelGeneration: env.PARALLEL_GENERATION !== "0",
   // Accounts per network address that receive the free credits, over 30 days.

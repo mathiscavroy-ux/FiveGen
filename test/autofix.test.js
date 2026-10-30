@@ -1,7 +1,8 @@
 // The automatic fix rounds keep the best version and never leave a script worse.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fixRounds, isBetter } from "../server/autofix.js";
+import { fixRounds, isBetter, newWarnings, reviewsChange } from "../server/autofix.js";
+import { buildReviewMessage } from "../server/prompts.js";
 
 const problem = (n) => ({ file: `server/f${n}.lua`, message: `Erreur à l'exécution ${n}`, level: "error" });
 const syntax = { file: "server/main.lua", message: "Erreur de syntaxe Lua : ligne 3", level: "error" };
@@ -74,6 +75,47 @@ test("the version kept is the best one, not the last one", async () => {
   const { kept, rolledBack } = await play(start, [version(2, problem(1), problem(2)), version(3, problem(1), problem(2), problem(3), problem(4))]);
   assert.equal(kept.version, 2);
   assert.deepEqual(rolledBack, [{ version: 2, round: 2 }]);
+});
+
+test("a warning is the same one when an edit only moved its line", () => {
+  const old = { file: "server/main.lua", line: 4, message: "Item absent" };
+  const moved = { ...old, line: 9 };
+  const other = { file: "client/main.lua", line: 4, message: "Item absent" };
+  assert.deepEqual(newWarnings([moved, other], [old]), [other]);
+  assert.deepEqual(newWarnings([old], []), [old]);
+});
+
+test("a change is reviewed when it touched code or brought a warning, not for a README", () => {
+  assert.equal(reviewsChange(["server/main.lua"], []), true);
+  assert.equal(reviewsChange(["html/app.js", "README.md"], []), true);
+  assert.equal(reviewsChange(["README.md", "html/style.css"], []), false);
+  assert.equal(reviewsChange(["README.md"], [{ file: "README.md", message: "x" }]), true);
+});
+
+test("a new resource is reviewed whole, a change only on what it touched", () => {
+  const spec = { name: "demo", framework: "esx", type: "job" };
+  const big = "x".repeat(50000);
+  const files = [
+    { path: "fxmanifest.lua", content: "fx_version 'cerulean'" },
+    { path: "server/main.lua", content: "print('touched')" },
+    { path: "client/big.lua", content: big },
+  ];
+  const whole = buildReviewMessage(spec, files);
+  assert.ok(whole.includes(big));
+  assert.doesNotMatch(whole, /modification_demandee/);
+
+  const change = buildReviewMessage(spec, files, [], { instruction: "ajoute un cooldown", touched: ["server/main.lua"] });
+  assert.match(change, /<modification_demandee>\najoute un cooldown\n/);
+  assert.match(change, /print\('touched'\)/);
+  assert.ok(!change.includes(big));
+  assert.match(change, /<autres_fichiers_existants>\nclient\/big\.lua/);
+  assert.match(change, /La modification demandée est complète/);
+});
+
+test("the review is told to treat every warning", () => {
+  const text = buildReviewMessage({ name: "demo", framework: "esx", type: "job" }, [], [{ file: "server/main.lua", line: 3, message: "Item absent" }]);
+  assert.match(text, /server\/main\.lua:3 — Item absent/);
+  assert.match(text, /Traite chacun de ces avertissements/);
 });
 
 test("an engine failure keeps the current version without rolling back", async () => {
