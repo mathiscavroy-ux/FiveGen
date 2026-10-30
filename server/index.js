@@ -14,6 +14,7 @@ import { importResource } from "./importer.js";
 import { mountDiscord, discordEnabled } from "./discord.js";
 import { tierOf } from "./tiers.js";
 import { validateProjectFull } from "./validator.js";
+import { fixRounds, isBetter } from "./autofix.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors } from "./deploy.js";
 import { mountSeo } from "./seo.js";
 import * as db from "./db.js";
@@ -199,6 +200,8 @@ function checkProject(userId, projectId) {
 // (free) while errors remain.
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
+  // a manual fix must not leave the script worse than it found it
+  const before = kind === "fix" ? { validation: await checkProject(userId, projectId), version: listVersions(userId, projectId)[0]?.n, notes: project.notes } : null;
   send("phase", { phase: kind, label: LABELS[kind] });
   // a new resource: plan, then groups of files written at the same time (null: single call)
   const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec: project.spec, send, signal, meta: { userId, projectId }, profile: state.profile }) : null;
@@ -209,7 +212,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   state.outputTokens += result.outputTokens ?? 0;
   state.produced = true;
   const touched = await saveResult({ userId, projectId, result, spec: project.spec, send, signal, state });
-  snapshot(userId, projectId, { type: kind, label: instruction ?? null });
+  const version = snapshot(userId, projectId, { type: kind, label: instruction ?? null });
   updateMeta(userId, projectId, {
     notes: kind === "generate" ? result.notes : mergeNotes(project.notes, result.notes, `${LABELS[kind]} : ${instruction ?? ""}`),
   });
@@ -224,13 +227,22 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     send("validation", result);
     return result;
   };
-  let validation = await recheck();
+  const kept = (validation, version) => ({ validation, version, notes: getProject(userId, projectId).notes });
+  // Back to a version that checked better; the reason shows in the studio.
+  const rollback = async (target, reason) => {
+    restoreVersion(userId, projectId, target.version);
+    updateMeta(userId, projectId, { notes: target.notes });
+    addHistory(userId, projectId, { type: "restore", instruction: `version ${target.version}`, files: [] });
+    send("status", `${reason} Retour à la version ${target.version}.`);
+    await recheck();
+  };
+  let best = kept(await recheck(), version);
 
   if (kind === "generate" && config.reviewPass) {
     send("phase", { phase: "review", label: "Relecture" });
     try {
       const review = await runEngine({
-        userContent: buildReviewMessage(project.spec, getFiles(userId, projectId), validation.warnings),
+        userContent: buildReviewMessage(project.spec, getFiles(userId, projectId), best.validation.warnings),
         onEvent: send,
         signal,
         meta: { userId, projectId, purpose: "review" },
@@ -241,10 +253,13 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       state.outputTokens += review.outputTokens ?? 0;
       if (review.files.length || review.edits.length || review.deletes.length) {
         const reviewed = await saveResult({ userId, projectId, result: review, spec: project.spec, send, signal, state });
-        snapshot(userId, projectId, { type: "review", label: "Relecture" });
+        const reviewVersion = snapshot(userId, projectId, { type: "review", label: "Relecture" });
         updateMeta(userId, projectId, { notes: mergeNotes(getProject(userId, projectId).notes, review.notes, "Relecture") });
         addHistory(userId, projectId, { type: "review", instruction: "Relecture", files: reviewed, outputTokens: review.outputTokens });
-        validation = await recheck();
+        // same score: the review stays, it fixes what the checks cannot see
+        const validation = await recheck();
+        if (isBetter(best.validation, validation)) await rollback(best, "La relecture a ajouté des erreurs.");
+        else best = kept(validation, reviewVersion);
       }
     } catch (err) {
       // Same as the fix rounds: the generated script is saved, the review is a bonus.
@@ -255,32 +270,38 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   }
 
   const rounds = state.profile.autoFixRounds;
-  for (let round = 1; round <= rounds && !validation.ok; round++) {
-    send("phase", { phase: "fix", label: `Correction automatique ${round}/${rounds}` });
-    let fix;
-    try {
-      fix = await runEngine({
-        userContent: buildFixMessage(project.spec, getFiles(userId, projectId), validation.errors),
-        onEvent: send,
-        signal,
-        meta: { userId, projectId, purpose: "autofix" },
-        profile: state.profile,
-      });
-    } catch (err) {
-      // The script is already saved: an engine hiccup here must not turn it into a failure.
-      if (signal.aborted) throw err;
-      console.error(`[fivegen] correction automatique ${round} interrompue :`, err.detail ?? err);
-      send("status", `Correction automatique interrompue : le script est livré tel quel. Clique sur « Corriger » pour relancer${config.cost.fix === 0 ? " (gratuit)" : ""}.`);
-      break;
-    }
-    state.outputTokens += fix.outputTokens ?? 0;
-    const fixed = await saveResult({ userId, projectId, result: fix, spec: project.spec, send, signal, state });
-    snapshot(userId, projectId, { type: "autofix", label: `Correction automatique ${round} · ${validation.errors.length} erreur(s)` });
-    const current = getProject(userId, projectId);
-    updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
-    addHistory(userId, projectId, { type: "autofix", instruction: `${validation.errors.length} erreur(s)`, files: fixed, outputTokens: fix.outputTokens });
-    validation = await recheck();
-  }
+  best = await fixRounds({
+    rounds,
+    best,
+    fixRound: async (round, errors) => {
+      send("phase", { phase: "fix", label: `Correction automatique ${round}/${rounds}` });
+      let fix;
+      try {
+        fix = await runEngine({
+          userContent: buildFixMessage(project.spec, getFiles(userId, projectId), errors),
+          onEvent: send,
+          signal,
+          meta: { userId, projectId, purpose: "autofix" },
+          profile: state.profile,
+        });
+      } catch (err) {
+        // The script is already saved: an engine hiccup here must not turn it into a failure.
+        if (signal.aborted) throw err;
+        console.error(`[fivegen] correction automatique ${round} interrompue :`, err.detail ?? err);
+        send("status", `Correction automatique interrompue : le script est livré tel quel. Clique sur « Corriger » pour relancer${config.cost.fix === 0 ? " (gratuit)" : ""}.`);
+        return null;
+      }
+      state.outputTokens += fix.outputTokens ?? 0;
+      const fixed = await saveResult({ userId, projectId, result: fix, spec: project.spec, send, signal, state });
+      const fixVersion = snapshot(userId, projectId, { type: "autofix", label: `Correction automatique ${round} · ${errors.length} erreur(s)` });
+      const current = getProject(userId, projectId);
+      updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
+      addHistory(userId, projectId, { type: "autofix", instruction: `${errors.length} erreur(s)`, files: fixed, outputTokens: fix.outputTokens });
+      return kept(await recheck(), fixVersion);
+    },
+    rollback: (target, round) => rollback(target, `La correction automatique ${round} n'améliore pas le script.`),
+  });
+  if (before && isBetter(before.validation, best.validation)) await rollback(before, "La correction laisse le script moins bon qu'avant.");
   send("done", getProject(userId, projectId));
 }
 

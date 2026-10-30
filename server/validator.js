@@ -461,6 +461,8 @@ export function validateProject(files, spec = {}) {
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };
 }
 
+export const dryRunBlocked = (errors) => errors.some((e) => e.file?.endsWith(".lua") && /syntaxe|tronqué/i.test(e.message));
+
 /**
  * Static checks plus the dry run in a fake FiveM (smoketest.js). The dry run only
  * happens when every Lua file compiles, otherwise its errors would repeat the syntax ones.
@@ -468,7 +470,7 @@ export function validateProject(files, spec = {}) {
 export async function validateProjectFull(files, spec = {}, { resource } = {}) {
   const result = validateProject(files, spec);
   if (process.env.SMOKE_TEST === "0") return result;
-  if (result.errors.some((e) => e.file?.endsWith(".lua") && /syntaxe|tronqué/i.test(e.message))) return result;
+  if (dryRunBlocked(result.errors)) return result;
   const runtime = await smokeTest(files, { manifestEntries, globToRegex, normalise: normaliseCfxLua }, { resource });
   if (!runtime.length) return result;
   const errors = [...result.errors, ...runtime.filter((p) => p.level === "error")];

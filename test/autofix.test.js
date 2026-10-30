@@ -1,0 +1,83 @@
+// The automatic fix rounds keep the best version and never leave a script worse.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { fixRounds, isBetter } from "../server/autofix.js";
+
+const problem = (n) => ({ file: `server/f${n}.lua`, message: `Erreur à l'exécution ${n}`, level: "error" });
+const syntax = { file: "server/main.lua", message: "Erreur de syntaxe Lua : ligne 3", level: "error" };
+const checked = (...errors) => ({ ok: errors.length === 0, errors, warnings: [] });
+const version = (n, ...errors) => ({ validation: checked(...errors), version: n, notes: `notes ${n}` });
+
+// Plays a list of round results and records what happened.
+async function play(start, results, rounds = 3) {
+  const calls = { errors: [], rolledBack: [] };
+  const left = [...results];
+  const kept = await fixRounds({
+    rounds,
+    best: start,
+    fixRound: async (round, errors) => {
+      calls.errors.push(errors.length);
+      return left.shift() ?? null;
+    },
+    rollback: async (target, round) => calls.rolledBack.push({ version: target.version, round }),
+  });
+  return { kept, ...calls };
+}
+
+test("a clean script beats any script with errors", () => {
+  assert.equal(isBetter(checked(), checked(problem(1))), true);
+  assert.equal(isBetter(checked(problem(1)), checked()), false);
+});
+
+test("fewer errors is better, the same number is not", () => {
+  assert.equal(isBetter(checked(problem(1)), checked(problem(1), problem(2))), true);
+  assert.equal(isBetter(checked(problem(2)), checked(problem(1))), false);
+  assert.equal(isBetter(checked(problem(1), problem(2)), checked(problem(1))), false);
+});
+
+test("fixing a syntax error counts as progress even when it reveals more errors", () => {
+  // the dry run only runs once the Lua compiles
+  assert.equal(isBetter(checked(problem(1), problem(2), problem(3)), checked(syntax)), true);
+  assert.equal(isBetter(checked(syntax), checked(problem(1), problem(2), problem(3))), false);
+});
+
+test("the rounds stop as soon as the script is clean", async () => {
+  const { kept, errors, rolledBack } = await play(version(1, problem(1), problem(2)), [version(2, problem(1)), version(3), version(4, problem(9))]);
+  assert.equal(kept.version, 3);
+  assert.deepEqual(errors, [2, 1]);
+  assert.deepEqual(rolledBack, []);
+});
+
+test("a clean script starts no round", async () => {
+  const { kept, errors } = await play(version(1), [version(2, problem(1))]);
+  assert.equal(kept.version, 1);
+  assert.deepEqual(errors, []);
+});
+
+test("a round that adds errors is undone and ends the loop", async () => {
+  const { kept, errors, rolledBack } = await play(version(1, problem(1)), [version(2, problem(1), problem(2)), version(3)]);
+  assert.equal(kept.version, 1);
+  assert.equal(kept.notes, "notes 1");
+  assert.deepEqual(errors, [1]);
+  assert.deepEqual(rolledBack, [{ version: 1, round: 1 }]);
+});
+
+test("a round that changes nothing ends the loop instead of spending the next ones", async () => {
+  const { kept, errors, rolledBack } = await play(version(1, problem(1), problem(2)), [version(2, problem(1), problem(2)), version(3)]);
+  assert.equal(kept.version, 1);
+  assert.deepEqual(errors, [2]);
+  assert.equal(rolledBack.length, 1);
+});
+
+test("the version kept is the best one, not the last one", async () => {
+  const start = version(1, problem(1), problem(2), problem(3));
+  const { kept, rolledBack } = await play(start, [version(2, problem(1), problem(2)), version(3, problem(1), problem(2), problem(3), problem(4))]);
+  assert.equal(kept.version, 2);
+  assert.deepEqual(rolledBack, [{ version: 2, round: 2 }]);
+});
+
+test("an engine failure keeps the current version without rolling back", async () => {
+  const { kept, rolledBack } = await play(version(1, problem(1)), []);
+  assert.equal(kept.version, 1);
+  assert.deepEqual(rolledBack, []);
+});
