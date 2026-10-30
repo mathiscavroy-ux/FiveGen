@@ -103,3 +103,22 @@ test("warns about unregistered server events and broken NUI refs", () => {
   assert.equal(r.ok, true);
   assert.equal(r.warnings.length, 2);
 });
+
+test("a job copied at login and never refreshed is an error; a hard-coded boss grade a warning", () => {
+  const stale = [
+    manifest("client_script 'client/main.lua'"),
+    { path: "client/main.lua", content: "local PlayerData = {}\nRegisterNetEvent('esx:playerLoaded', function(xPlayer) PlayerData = xPlayer end)\nlocal function isMechanic() return PlayerData.job and PlayerData.job.name == 'mechanic' end\n" },
+  ];
+  const errors = (files) => validateProject(files, { framework: "esx" }).errors.map((e) => e.message).join("\n");
+  assert.match(errors(stale), /jamais mis à jour/);
+  const refreshed = [stale[0], { ...stale[1], content: stale[1].content + "RegisterNetEvent('esx:setJob', function(job) PlayerData.job = job end)\n" }];
+  assert.doesNotMatch(errors(refreshed), /jamais mis à jour/);
+  const live = [stale[0], { path: "client/main.lua", content: "local function isMechanic() return ESX.GetPlayerData().job.name == 'mechanic' end\n" }];
+  assert.doesNotMatch(errors(live), /jamais mis à jour/);
+
+  const warnings = (files) => validateProject(files, { framework: "esx" }).warnings.map((w) => w.message).join("\n");
+  const hardBoss = [manifest("server_script 'server/main.lua'"), { path: "server/main.lua", content: "local xPlayer = ESX.GetPlayerFromId(1)\nif xPlayer.job.grade >= 4 then end\n" }];
+  assert.match(warnings(hardBoss), /Grade comparé à un nombre/);
+  const fromConfig = [hardBoss[0], { path: "server/main.lua", content: "local xPlayer = ESX.GetPlayerFromId(1)\nif xPlayer.job.grade >= Config.MinGrade then end\n" }];
+  assert.doesNotMatch(warnings(fromConfig), /Grade comparé à un nombre/);
+});

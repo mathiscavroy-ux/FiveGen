@@ -402,6 +402,46 @@ function checkEsxApi(files, spec) {
   return problems;
 }
 
+// Job checks that break on a live server: the player's job copied at login and never
+// refreshed (a player promoted with /setjob is refused until reconnecting), and grade
+// thresholds written as numbers in the code (grades differ from one server to another).
+function checkJobAccess(files) {
+  const problems = [];
+  const lua = files.filter((f) => f.path.endsWith(".lua")).map((f) => ({ path: f.path, raw: f.content, code: codeOnly(f.content) }));
+  const lineOf = (code, index) => code.slice(0, index).split("\n").length;
+  const client = lua.filter((f) => /(^|\/)client[^/]*\//i.test(f.path) || /^client/i.test(f.path));
+  const clientCode = client.map((f) => f.code).join("\n");
+  // event names are strings, which codeOnly() blanks out: look for them in the raw text
+  const refreshed = /esx:setJob|QBCore:Client:OnJobUpdate|QBCore:Player:SetPlayerData|bridge:jobUpdate/.test(client.map((f) => f.raw).join("\n"));
+  if (!refreshed) {
+    for (const f of client) {
+      const read = /(?<![.\w])PlayerData\.job\b/.exec(f.code);
+      if (!read || !/(?<![.\w])PlayerData\s*=(?!=)/.test(clientCode)) continue;
+      problems.push({
+        file: f.path,
+        line: lineOf(f.code, read.index),
+        message:
+          "Le job du joueur est copié dans PlayerData au chargement mais jamais mis à jour : après un /setjob ou une promotion, le script voit l'ancien job et refuse les menus (« pas la permission ») jusqu'à la reconnexion. Ajouter RegisterNetEvent('esx:setJob', function(job) PlayerData.job = job end) (QBCore : 'QBCore:Client:OnJobUpdate'), ou relire ESX.GetPlayerData().job au moment du contrôle.",
+        level: "error",
+      });
+      break;
+    }
+  }
+  for (const f of lua) {
+    if (/(^|\/)config\.lua$/i.test(f.path)) continue;
+    const m = /\.grade(?:\.level)?\s*(?:>=|==|>)\s*(\d+)\b/.exec(f.code);
+    if (m && Number(m[1]) >= 1) {
+      problems.push({
+        file: f.path,
+        line: lineOf(f.code, m.index),
+        message: `Grade comparé à un nombre écrit dans le code (${m[0].trim()}) : le nombre de grades change d'un serveur à l'autre. Mettre le seuil dans Config, et pour le patron utiliser grade_name == 'boss' ou le grade le plus haut du job (ESX.GetJobs()), job.isboss sur QBCore.`,
+        level: "warning",
+      });
+    }
+  }
+  return problems;
+}
+
 // What the request is about: a coordinate in a tattoo parlour is fine for a tattoo script.
 const specContext = (spec) => [spec.name, spec.type, spec.description, spec.understood, ...(spec.answers ?? []).map((a) => `${a.question} ${a.answer}`)].filter(Boolean).join(" ");
 
@@ -415,7 +455,7 @@ export function validateProject(files, spec = {}) {
     if (p) problems.push(p);
     if (f.truncated) problems.push({ file: f.path, message: "Fichier tronqué (la génération s'est arrêtée au milieu)", level: "error" });
   }
-  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkNuiQuality(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkApi(files, spec), ...checkConsistency(files, { codeOnly, normalise: normaliseCfxLua }), ...checkPlacement(files, specContext(spec)));
+  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkNuiQuality(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkJobAccess(files), ...checkApi(files, spec), ...checkConsistency(files, { codeOnly, normalise: normaliseCfxLua }), ...checkPlacement(files, specContext(spec)));
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };
