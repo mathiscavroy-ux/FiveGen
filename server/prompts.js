@@ -10,6 +10,8 @@ import { API_REFERENCE } from "./knowledge/api-reference.js";
 import { LOCATIONS } from "./knowledge/locations.js";
 import { inventoryBlock } from "./inventory.js";
 import { spotsBlock } from "./spots.js";
+import { errorsBlock } from "./quality.js";
+import { exampleFor } from "./knowledge/examples.js";
 
 export const CATALOG = {
   frameworks: [
@@ -66,7 +68,7 @@ export const SYSTEM_PROMPT = [CORE, FRAMEWORKS, LIBS, SCRIPTS, PITFALLS, LOCATIO
 
 const label = (list, id) => list.find((x) => x.id === id)?.label ?? id;
 
-// spec.inventory and spec.usedSpots are added for the run by the pipeline, never saved with the project.
+// spec.inventory, spec.usedSpots and spec.pastErrors are added for the run by the pipeline, never saved with the project.
 export function describeSpec(spec) {
   const deps = (spec.dependencies ?? []).map((d) => label(CATALOG.dependencies, d));
   return [
@@ -83,6 +85,19 @@ function recipe(spec) {
   return RECIPES[spec.type] ?? RECIPES.other;
 }
 
+// A short resource that passes every check, for the family of the request.
+function exampleBlock(spec) {
+  const files = exampleFor(spec.type);
+  if (!files) return "";
+  return `
+<exemple_valide>
+Ressource courte qui passe toutes les vérifications. Reprends sa structure et ses garde-fous, pas ses noms, ses valeurs ni ses fonctionnalités, et adapte-la au framework et aux dépendances de la spécification. Ses coordonnées à zéro sont à remplacer par de vrais emplacements.
+
+${filesBlock(files)}
+</exemple_valide>
+`;
+}
+
 export function buildGenerateMessage(spec) {
   return `Crée une ressource FiveM complète.
 
@@ -97,7 +112,7 @@ ${recipe(spec)}
 <demande_du_client>
 ${spec.description}
 </demande_du_client>
-${briefBlock(spec)}
+${briefBlock(spec)}${exampleBlock(spec)}${errorsBlock(spec.pastErrors)}
 Écris tous les fichiers nécessaires au format demandé, puis les notes d'installation.`;
 }
 
@@ -143,7 +158,7 @@ Règles :
 }
 
 // Step 2: one group of files, written alongside the others from the same plan.
-export function buildPartMessage(spec, plan, paths, { notes = false, written = [] } = {}) {
+export function buildPartMessage(spec, plan, paths, { notes = false, written = [], example = true } = {}) {
   const shown = pickWritten(written);
   const done = new Set(shown.map((f) => f.path));
   const others = (plan.files ?? []).filter((f) => !paths.includes(f.path) && !done.has(f.path));
@@ -160,7 +175,7 @@ ${recipe(spec)}
 <demande_du_client>
 ${spec.description}
 </demande_du_client>
-${briefBlock(spec)}
+${briefBlock(spec)}${example ? exampleBlock(spec) : ""}${errorsBlock(spec.pastErrors)}
 <plan_de_la_ressource>
 ${JSON.stringify(plan)}
 </plan_de_la_ressource>

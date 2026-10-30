@@ -4,6 +4,8 @@
 const MAX_FAMILY = 140;
 const MAX_PER_RUN = 30;
 const TOP_ERRORS = 15;
+const RECURRING_RUNS = 3; // below this, one bad script would become a rule for everyone
+const RECURRING_MAX = 8;
 
 // One family per kind of mistake: the same error on two scripts must count as one line.
 export function errorFamily(message) {
@@ -37,6 +39,24 @@ export const finishQuality = (quality, validation) => ({
   errors: validation?.errors?.length ?? 0,
   warnings: validation?.warnings?.length ?? 0,
 });
+
+// The mistakes of the last runs, for the next generations: only families, so nothing from
+// one customer's script reaches another's prompt.
+export const frequentErrors = (runs) =>
+  summarizeQuality(runs)
+    .errors.filter((e) => e.runs >= RECURRING_RUNS)
+    .slice(0, RECURRING_MAX)
+    .map((e) => e.family.replace(/[<>]/g, ""));
+
+export function errorsBlock(families) {
+  if (!families?.length) return "";
+  return `
+<erreurs_frequentes>
+Erreurs que la vérification trouve le plus souvent dans les scripts générés. Évite-les dès l'écriture :
+${families.map((f) => `- ${f}`).join("\n")}
+</erreurs_frequentes>
+`;
+}
 
 const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null);
 

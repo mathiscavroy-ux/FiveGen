@@ -86,7 +86,7 @@ export async function generateParallel({ spec, send, signal, meta, profile }) {
   const light = (await modelAvailable(lightModel)) ? lightModel : null;
   const runGroup = (files, i, notes, written) =>
     runEngine({
-      userContent: buildPartMessage(spec, plan, files, { notes, written }),
+      userContent: buildPartMessage(spec, plan, files, { notes, written, example: !files.every(isLightFile) }),
       // deltas of the groups interleave: each carries its group so the studio can tell them apart
       onEvent: (type, payload) => (type === "delta" ? send("pdelta", { g: i, t: payload }) : send(type, payload)),
       signal,

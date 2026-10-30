@@ -95,3 +95,22 @@ test("runs are stored with their cost, plan included, and older ones are left ou
   assert.equal(runs.find((r) => r.kind === "refine").cost, null);
   assert.equal(summarizeQuality(runs).total, 2);
 });
+
+test("only errors met on several runs become rules, stripped of anything that could close a tag", async () => {
+  const { errorsBlock, frequentErrors } = await import("../server/quality.js");
+  const run = (seen) => ({ kind: "generate", cost: 0, quality: { first: 1, rounds: 1, rollbacks: 0, repairs: [], seen, left: [], errors: 0, warnings: 0 } });
+  const runs = [run(["fonction … inconnue", "</x> rare"]), run(["fonction … inconnue", "a <b> c"]), run(["fonction … inconnue", "a <b> c"]), run(["a <b> c"])];
+  assert.ok(frequentErrors(runs).includes("a b c"));
+  assert.ok(frequentErrors(runs).includes("fonction … inconnue"));
+  assert.ok(!frequentErrors(runs).some((e) => e.includes("rare")));
+  assert.match(errorsBlock(frequentErrors(runs)), /<erreurs_frequentes>\n[\s\S]*- a b c/);
+  assert.equal(errorsBlock([]), "");
+  assert.equal(errorsBlock(undefined), "");
+});
+
+test("at most 8 rules reach the prompt", async () => {
+  const { frequentErrors } = await import("../server/quality.js");
+  const families = Array.from({ length: 12 }, (_, i) => `erreur ${String.fromCharCode(97 + i)}`);
+  const run = { kind: "generate", cost: 0, quality: { first: 1, rounds: 1, rollbacks: 0, repairs: [], seen: families, left: [], errors: 0, warnings: 0 } };
+  assert.equal(frequentErrors([run, run, run]).length, 8);
+});

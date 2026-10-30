@@ -138,6 +138,8 @@ Restaurer : arrête le site, remplace `data/fivegen.db` et `data/users/` par le 
 
 Le moteur la reçoit dans ses instructions. Le vérificateur refuse tout appel absent du catalogue, ou utilisé du mauvais côté (client ou serveur), avec une suggestion (« Voulais-tu dire GetPlayerFromId ? »). La correction automatique remplace alors l'appel.
 
+Les signatures des natives courantes (`server/knowledge/api/signatures.json`) se régénèrent à part : `npm run api-signatures -- --natives <dossier>`, avec les deux mêmes fichiers `natives.json` et `natives_cfx.json`.
+
 Pour régénérer le catalogue après une mise à jour d'ESX ou des ressources ox, télécharge `natives.json` et `natives_cfx.json` (runtime.fivem.net/doc) ainsi que les sources de qb-core et qbx_core. Lance ensuite :
 
 ```bash

@@ -8,6 +8,7 @@ import { applyEdits } from "./patch.js";
 import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from "./engine.js";
 import { providerUsage, modelPricing, modelAvailable } from "./provider.js";
 import { generateParallel } from "./parallel.js";
+import { errorsBlock, frequentErrors } from "./quality.js";
 import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook, createSubscriptionCheckout, setCancelAtPeriodEnd, cancelNow, changePlan } from "./payments.js";
 import { importResource } from "./importer.js";
@@ -214,7 +215,8 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   const project = getProject(userId, projectId);
   const inventory = serverInventory(userId, projectId);
   const spots = usedSpots(userId, projectId);
-  const spec = { ...project.spec, ...(inventory ? { inventory } : {}), usedSpots: spots };
+  const pastErrors = frequentErrors(db.qualityRuns());
+  const spec = { ...project.spec, ...(inventory ? { inventory } : {}), usedSpots: spots, pastErrors };
   // a manual fix must not leave the script worse than it found it
   const before = kind === "fix" ? { validation: await checkProject(userId, projectId), version: listVersions(userId, projectId)[0]?.n, notes: project.notes } : null;
   send("phase", { phase: kind, label: LABELS[kind] });
@@ -225,7 +227,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   }
   // a new resource: plan, then groups of files written at the same time (null: single call)
   const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec, send, signal, meta: { userId, projectId }, profile: state.profile }) : null;
-  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`) + spotsBlock(spots), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
+  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`) + spotsBlock(spots) + errorsBlock(pastErrors), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }

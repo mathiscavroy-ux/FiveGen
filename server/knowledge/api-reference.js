@@ -1,10 +1,24 @@
 // The verified API list (knowledge/api/catalog.json, built from the real sources) as
 // prompt text. The validator rejects any call that is not in it, so the engine is told
 // exactly what exists instead of guessing.
+import fs from "node:fs";
 import { catalog } from "../apicheck.js";
+
+const SIGNATURES_URL = new URL("./api/signatures.json", import.meta.url);
+const signatures = fs.existsSync(SIGNATURES_URL) ? JSON.parse(fs.readFileSync(SIGNATURES_URL, "utf8")) : null;
 
 const list = (items) => items.join(" · ");
 const strip = (items, prefix) => items.map((s) => s.replace(prefix, ""));
+
+function nativeSignatures() {
+  if (!signatures) return "";
+  return `
+
+## Signatures exactes des natives courantes
+Respecte l'ordre et le nombre d'arguments. « → » indique ce que la native renvoie. Les paramètres de sortie ne se passent pas en argument : ils reviennent après la valeur de retour (local ok, z = GetGroundZFor_3dCoord(x, y, z, false)). Une native absente de cette liste reste utilisable si son nom existe.
+${Object.entries(signatures.client).map(([topic, list]) => `${topic} (client) : ${list.join(" · ")}`).join("\n")}
+Serveur : ${signatures.server.join(" · ")}`;
+}
 
 function build() {
   if (!catalog) return "";
@@ -46,7 +60,7 @@ Client : ${list(c.ox_inventory.client)}
 ${list(c.ox_target.client)}
 
 ## oxmysql ${c.oxmysql.version}
-MySQL.<méthode>(requête, paramètres) et MySQL.<méthode>.await(…) : ${list(c.oxmysql.methods)}`;
+MySQL.<méthode>(requête, paramètres) et MySQL.<méthode>.await(…) : ${list(c.oxmysql.methods)}${nativeSignatures()}`;
 }
 
 export const API_REFERENCE = build();
