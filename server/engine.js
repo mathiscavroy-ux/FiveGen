@@ -84,15 +84,23 @@ function wait(ms, signal) {
 }
 
 // A new resource reasons more than a targeted edit (fix, change, review, rewrite).
-async function withEffort(provider, purpose) {
+// profile: the account's engine profile (config.tiers); without one, the main settings.
+async function withEffort(provider, purpose, profile) {
   if (provider.id === "gemini") return provider; // keeps its own mapping in openai-compat
-  const wanted = purpose === "generate" ? config.engine.effort : config.engine.effortEdits;
+  const generate = purpose === "generate";
+  const wanted = profile ? (generate ? profile.effort : profile.effortEdits) : generate ? config.engine.effort : config.engine.effortEdits;
   return { ...provider, effort: await reasoningEffort(provider.model, wanted) };
 }
 
+// Models tried in order: the profile's (free models for free accounts), else the main ones.
+const modelsFor = (profile, preferred) => {
+  const base = profile?.models?.length ? profile.models : primaryModels();
+  return preferred ? [preferred, ...base.filter((m) => m !== preferred)] : base;
+};
+
 // meta: { userId, projectId, purpose } for the usage log.
-// model: optional model tried first (then the usual ones, so a failure still delivers).
-export async function runEngine({ userContent, onEvent, signal, meta, model: preferred }) {
+// model: optional model tried first (then the profile's, so a failure still delivers).
+export async function runEngine({ userContent, onEvent, signal, meta, model: preferred, profile }) {
   let emitted = false;
   // Reasoning text never leaves the server: the studio only gets a throttled counter
   // so it can show that the engine is thinking.
@@ -112,8 +120,7 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
   };
   // Each model gets a few spaced attempts: overload errors from the upstream are usually momentary.
   const retries = (provider) => Array.from({ length: RETRIES_PER_MODEL }, (_, i) => ({ provider, retry: i }));
-  const models = preferred ? [preferred, ...primaryModels().filter((m) => m !== preferred)] : primaryModels();
-  const attempts = mockRun ? [null] : models.flatMap((model) => retries({ ...upstream, model }));
+  const attempts = mockRun ? [null] : modelsFor(profile, preferred).flatMap((model) => retries({ ...upstream, model }));
   if (fallback && !mockRun) attempts.push(...retries(fallback));
   let lastError;
   for (let i = 0; i < attempts.length; i++) {
@@ -124,7 +131,7 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
     try {
       const r = mockRun
         ? await mockRun({ userContent, onEvent: forward, signal })
-        : await runOpenAICompat({ provider: await withEffort(attempt.provider, meta?.purpose), userContent, onEvent: forward, signal });
+        : await runOpenAICompat({ provider: await withEffort(attempt.provider, meta?.purpose, profile), userContent, onEvent: forward, signal });
       await report(meta, { model: r.model ?? model, usage: r.usage, started, ok: true });
       return {
         files: r.files,
@@ -154,15 +161,14 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
 }
 
 // Questions step. Cheap and short, so a broken reply is simply retried on the next model.
-export async function runBrief({ description, server, signal, meta }) {
+export async function runBrief({ description, server, signal, meta, profile }) {
   if (mockBrief) {
     await wait(1800 + Math.random() * 1200, signal); // about as long as the real engine, so the demo shows the analysis
     return sanitizeBrief(mockBrief(description));
   }
   const user = buildBriefMessage(description, server);
-  // BRIEF_MODEL: a faster model for the questions, which need no heavy reasoning.
-  const models = config.engine.briefModel ? [config.engine.briefModel, ...primaryModels()] : primaryModels();
-  const providers = [...new Set(models)].map((model) => ({ ...upstream, model }));
+  // A faster model for the questions, which need no heavy reasoning (BRIEF_MODEL, or the profile's).
+  const providers = [...new Set(modelsFor(profile, profile ? profile.brief || undefined : config.engine.briefModel || undefined))].map((model) => ({ ...upstream, model }));
   if (fallback) providers.push(fallback);
   let lastError;
   const started = Date.now();
@@ -172,7 +178,7 @@ export async function runBrief({ description, server, signal, meta }) {
       const callStarted = Date.now();
       try {
         // Gateways cache identical requests: a retry must differ, or it gets the same broken reply.
-        const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "brief"), system: BRIEF_SYSTEM, user: attempt ? `${user}\n<!-- essai ${attempt + 1} -->` : user, maxTokens: 4000, signal });
+        const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "brief", profile), system: BRIEF_SYSTEM, user: attempt ? `${user}\n<!-- essai ${attempt + 1} -->` : user, maxTokens: 4000, signal });
         await report(meta, { model, usage, started: callStarted, ok: true });
         const brief = sanitizeBrief(extractJson(text));
         console.log(`[fivegen] questions prêtes en ${((Date.now() - started) / 1000).toFixed(1)} s (${provider.model})`);
@@ -195,20 +201,20 @@ export async function runBrief({ description, server, signal, meta }) {
 
 // Plan of a resource for the parallel generation: short JSON, same system prompt as the
 // generation (served from the cache). Throws when no usable plan comes back.
-export async function runPlan({ userContent, signal, meta }) {
+export async function runPlan({ userContent, signal, meta, profile }) {
   if (mock?.mockPlan) {
     await wait(1500, signal).catch((err) => {
       throw toPublic(err);
     });
     return mock.mockPlan(userContent);
   }
-  const providers = primaryModels().map((model) => ({ ...upstream, model }));
+  const providers = modelsFor(profile).map((model) => ({ ...upstream, model }));
   if (fallback) providers.push(fallback);
   let lastError;
   for (const provider of providers) {
     const started = Date.now();
     try {
-      const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "generate"), system: SYSTEM_PROMPT, user: userContent, maxTokens: 16000, timeoutMs: 240000, signal });
+      const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "generate", profile), system: SYSTEM_PROMPT, user: userContent, maxTokens: 16000, timeoutMs: 240000, signal });
       await report(meta && { ...meta, purpose: "plan" }, { model, usage, started, ok: true });
       const s = String(text);
       const plan = JSON.parse(s.slice(s.indexOf("{"), s.lastIndexOf("}") + 1));

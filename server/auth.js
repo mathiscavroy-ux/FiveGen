@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { promisify } from "node:util";
 import { config } from "./config.js";
 import { createSession, userFromSession, deleteSession, deleteOtherSessions, countOtherSessions, setAdmin } from "./db.js";
+import { tierOf } from "./tiers.js";
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = "fg_session";
@@ -115,6 +116,7 @@ export function userPrefs(user) {
 }
 
 export function publicUser(user) {
+  const tier = tierOf(user);
   return {
     email: user.email,
     createdAt: user.created_at,
@@ -133,8 +135,10 @@ export function publicUser(user) {
     credits: user.credits,
     isAdmin: Boolean(user.is_admin),
     emailVerified: Boolean(user.email_verified),
-    costs: config.cost,
-    freeRefines: config.freeRefines,
+    // the plan the account runs on, and what it changes
+    tier: { id: tier.id, label: tier.label, engineName: tier.engineName, maxServers: tier.maxServers },
+    costs: { ...config.cost, ...tier.cost },
+    freeRefines: tier.freeRefines,
     shopUrl: config.shopUrl,
     supportUrl: config.supportUrl,
   };

@@ -86,14 +86,15 @@ export const config = {
   },
   packs: loadOffers(env.CREDIT_PACKS, "CREDIT_PACKS", [
     { id: "starter", name: "Starter", credits: 15, price: 899 },
-    { id: "pro", name: "Pro", credits: 45, price: 2399, featured: true },
+    { id: "pro", name: "Créateur", credits: 45, price: 2399, featured: true },
     { id: "studio", name: "Studio", credits: 150, price: 7199 },
   ]),
-  // Monthly subscriptions: credits added at each paid renewal. Cheaper per credit than packs.
-  plans: loadOffers(env.SUBSCRIPTION_PLANS, "SUBSCRIPTION_PLANS", [
-    { id: "mensuel", name: "Mensuel", credits: 30, price: 1499 },
-    { id: "mensuel-plus", name: "Mensuel+", credits: 80, price: 3499, featured: true },
-  ]),
+  // Monthly subscriptions: the best engine and perks (config.tiers below), no credits;
+  // generations still cost credits. Prices in cents, VAT included.
+  plans: [
+    { id: "premium", name: "Premium", price: int(env.PREMIUM_PRICE, 999) },
+    { id: "pro", name: "Pro", price: int(env.PRO_PRICE, 1999), featured: true },
+  ],
 
   // "Continuer avec Discord" (OAuth2 app from discord.com/developers). Hidden until both are set.
   discord: {
@@ -135,6 +136,56 @@ function loadOffers(raw, name, defaults) {
     return defaults;
   }
 }
+
+// What each kind of account runs on. Free accounts use the provider's free models (no
+// paid quota; a very cheap paid model last, for when the free ones are saturated);
+// subscribers get the main model. Every generation still costs credits.
+const models = (v, d) => (v ?? d).split(",").map((m) => m.trim()).filter(Boolean);
+const premium = {
+  id: "premium",
+  label: "Premium",
+  engineName: env.PREMIUM_ENGINE_NAME || "Opus 5.5",
+  models: [config.engine.model, ...config.engine.fallbackModels.filter((m) => m !== config.engine.model)],
+  light: config.engine.lightModel,
+  review: config.engine.reviewModel,
+  brief: config.engine.briefModel,
+  effort: config.engine.effort,
+  effortEdits: config.engine.effortEdits,
+  autoFixRounds: config.autoFixRounds,
+  freeRefines: int(env.PREMIUM_FREE_REFINES, 5),
+  cost: { convert: config.cost.convert, optimize: config.cost.optimize },
+  maxServers: int(env.PREMIUM_MAX_SERVERS, 5),
+};
+config.tiers = {
+  free: {
+    id: "free",
+    label: "Gratuit",
+    engineName: env.FREE_ENGINE_NAME || "Qwen3.8 Max",
+    models: models(env.FREE_MODELS, "qwen/qwen3.8-max:free,qwen/qwen3-coder-plus:free,mistralai/devstral-medium,deepseek/deepseek-v4-flash-0731"),
+    light: (env.FREE_LIGHT_MODEL ?? "qwen/qwen3.7-flash:free").trim(),
+    review: (env.FREE_REVIEW_MODEL ?? "qwen/qwen3.8-max:free").trim(),
+    brief: (env.FREE_BRIEF_MODEL ?? "qwen/qwen3.7-flash:free").trim(),
+    effort: "",
+    effortEdits: "",
+    autoFixRounds: config.autoFixRounds,
+    freeRefines: config.freeRefines,
+    cost: { convert: config.cost.convert, optimize: config.cost.optimize },
+    maxServers: int(env.FREE_MAX_SERVERS, 2),
+  },
+  premium,
+  pro: {
+    ...premium,
+    id: "pro",
+    label: "Pro",
+    // the main model rereads the resource, edits reason longer, one more fix round
+    review: config.engine.model,
+    effortEdits: env.PRO_EFFORT_EDITS || "medium",
+    autoFixRounds: config.autoFixRounds + 1,
+    freeRefines: int(env.PRO_FREE_REFINES, 10),
+    cost: { convert: Math.max(0, config.cost.convert - 1), optimize: Math.max(0, config.cost.optimize - 1) },
+    maxServers: int(env.PRO_MAX_SERVERS, 10),
+  },
+};
 
 // Browsers drop Secure cookies on plain http, so only require them once the site is served over https.
 config.secureCookies = config.publicUrl.startsWith("https://");

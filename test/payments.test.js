@@ -98,7 +98,7 @@ test("a subscription checkout links the subscription without adding credits", ()
   const result = payments.handleWebhook(
     ...signed("checkout.session.completed", {
       id: "cs_sub_1", object: "checkout.session", mode: "subscription", payment_status: "paid",
-      customer: "cus_1", subscription: "sub_1", metadata: { userId: String(subscriber), planId: "mensuel" },
+      customer: "cus_1", subscription: "sub_1", metadata: { userId: String(subscriber), planId: "premium" },
     }),
   );
   assert.match(result, /abonnement enregistré/);
@@ -111,25 +111,42 @@ test("a subscription checkout links the subscription without adding credits", ()
 
 const invoice = (over = {}) => ({
   id: "in_1", object: "invoice", billing_reason: "subscription_create", amount_paid: 1499, currency: "eur", customer: "cus_1",
-  parent: { type: "subscription_details", subscription_details: { subscription: "sub_1", metadata: { userId: String(db.getUserByEmail("sub@test.local").id), planId: "mensuel" } } },
+  parent: { type: "subscription_details", subscription_details: { subscription: "sub_1", metadata: { userId: String(db.getUserByEmail("sub@test.local").id), planId: "premium" } } },
   lines: { data: [{ period: { end: 1800000000 } }] },
   ...over,
 });
 
-test("each paid subscription invoice adds the plan credits once", () => {
+test("each paid subscription invoice is recorded once, without credits, and keeps the plan active", () => {
   const id = db.getUserByEmail("sub@test.local").id;
   const start = db.getUser(id).credits;
-  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice())), /\+30 crédits/);
+  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice())), /abonnement Premium payé/);
   assert.equal(payments.handleWebhook(...signed("invoice.paid", invoice())), "déjà traité");
-  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_2", billing_reason: "subscription_cycle" }))), /\+30 crédits/);
+  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_2", billing_reason: "subscription_cycle" }))), /abonnement Premium payé/);
   assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_3", billing_reason: "subscription_update" }))), /ignorée/);
-  assert.equal(db.getUser(id).credits, start + 60);
+  assert.equal(db.getUser(id).credits, start);
+  assert.equal(db.getUser(id).sub_plan, "premium");
+  assert.equal(db.listPayments().filter((p) => p.pack_id === "abonnement:premium").length, 2);
   assert.equal(db.getUser(id).sub_period_end, new Date(1800000000 * 1000).toISOString());
+});
+
+test("the engine profile follows the subscription: free models without, Opus with", async () => {
+  const { tierOf } = await import("../server/tiers.js");
+  const { config } = await import("../server/config.js");
+  assert.equal(tierOf({ sub_status: null }).id, "free");
+  assert.ok(tierOf({}).models.every((m) => !/opus|sonnet/.test(m)), "no paid Claude model for free accounts");
+  assert.equal(tierOf({ sub_status: "active", sub_plan: "premium" }).models[0], config.engine.model);
+  assert.equal(tierOf({ sub_status: "active", sub_plan: "pro" }).id, "pro");
+  assert.equal(tierOf({ sub_status: "past_due", sub_plan: "pro" }).id, "pro"); // Stripe still retrying
+  assert.equal(tierOf({ sub_status: "canceled", sub_plan: "pro" }).id, "free");
+  assert.equal(tierOf({ sub_status: "incomplete", sub_plan: "pro" }).id, "free"); // never paid
+  assert.equal(tierOf({ sub_status: "active", sub_plan: "mensuel" }).id, "premium"); // plan id of the old offer
+  assert.equal(tierOf({ is_admin: 1 }).id, "pro");
+  assert.ok(tierOf({ sub_status: "active", sub_plan: "pro" }).freeRefines > tierOf({}).freeRefines);
 });
 
 test("subscription changes from Stripe are mirrored on the account", () => {
   const id = db.getUserByEmail("sub@test.local").id;
-  const sub = { id: "sub_1", object: "subscription", customer: "cus_1", status: "active", cancel_at_period_end: true, metadata: { userId: String(id), planId: "mensuel" }, items: { data: [{ current_period_end: 1800000000 }] } };
+  const sub = { id: "sub_1", object: "subscription", customer: "cus_1", status: "active", cancel_at_period_end: true, metadata: { userId: String(id), planId: "premium" }, items: { data: [{ current_period_end: 1800000000 }] } };
   payments.handleWebhook(...signed("customer.subscription.updated", sub));
   assert.equal(db.getUser(id).sub_cancel_at_end, 1);
   payments.handleWebhook(...signed("customer.subscription.deleted", { ...sub, status: "canceled" }));

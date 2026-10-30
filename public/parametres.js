@@ -62,30 +62,36 @@ function renderSubscription() {
     b.onclick = () => onclick(b);
     actions.append(b);
   };
+  const perks = (list) => ($("#subPerks").innerHTML = (list ?? []).map((p) => `<li>${escapeHtml(p)}</li>`).join(""));
   if (!sub || !ACTIVE_SUB.has(sub.status)) {
     const cheapest = packs?.enabled ? [...(packs.plans ?? [])].sort((a, b) => a.price - b.price)[0] : null;
-    $("#subTitle").textContent = "Pas d'abonnement";
-    $("#subLine").textContent = cheapest
-      ? `Des crédits chaque mois, moins chers que les packs : ${plural(cheapest.credits, "crédit")} pour ${formatPrice(cheapest.price, packs.currency)} par mois. Sans engagement.`
-      : "Les abonnements ne sont pas encore disponibles.";
-    if (cheapest) {
+    // the owner runs on Pro without paying
+    $("#subTitle").textContent = me.tier.id === "free" ? `Offre gratuite · moteur ${me.tier.engineName}` : `${me.tier.label} (compte administrateur)`;
+    $("#subLine").textContent =
+      me.tier.id !== "free"
+        ? "Tous les avantages Pro, sans abonnement."
+        : cheapest
+          ? `Passe à ${cheapest.name} (${formatPrice(cheapest.price, packs.currency)} par mois, sans engagement) pour générer avec le moteur Opus 5.5 et profiter de plus d'avantages. Les scripts coûtent toujours des crédits.`
+          : "Les abonnements ne sont pas encore disponibles.";
+    perks(me.tier.id === "free" ? packs?.free?.perks : packs?.plans?.find((p) => p.id === me.tier.id)?.perks);
+    if (cheapest && me.tier.id === "free") {
       const a = document.createElement("a");
       a.className = "btn primary";
       a.href = "/app?buy";
-      a.textContent = "Voir les abonnements";
+      a.textContent = "Voir Premium et Pro";
       actions.append(a);
     }
     return;
   }
-  const name = sub.plan ? `${sub.plan.name} · ${plural(sub.plan.credits, "crédit")} par mois` : "Abonnement FiveGen";
-  $("#subTitle").textContent = name;
+  $("#subTitle").textContent = sub.plan ? `${sub.plan.name} · moteur ${me.tier.engineName}` : "Abonnement FiveGen";
+  perks(packs?.plans?.find((p) => p.id === sub.plan?.id)?.perks);
   const date = sub.periodEnd ? longDate(sub.periodEnd) : null;
   if (sub.status === "past_due") {
     $("#subLine").textContent = "Le dernier paiement a échoué : Stripe va réessayer. Mets à jour ta carte depuis l'e-mail reçu de Stripe.";
   } else if (sub.cancelAtEnd) {
-    $("#subLine").textContent = date ? `Résilié : il reste actif jusqu'au ${date}, sans nouveau prélèvement.` : "Résilié : aucun nouveau prélèvement.";
+    $("#subLine").textContent = date ? `Résilié : tes avantages restent jusqu'au ${date}, sans nouveau prélèvement.` : "Résilié : aucun nouveau prélèvement.";
   } else {
-    $("#subLine").textContent = date ? `Prochain renouvellement le ${date} : +${plural(sub.plan?.credits ?? 0, "crédit")}.` : "Actif.";
+    $("#subLine").textContent = date ? `Prochain renouvellement le ${date}.` : "Actif.";
   }
   const change = (action, confirmText) => async (b) => {
     if (confirmText && !confirm(confirmText)) return;
@@ -93,14 +99,14 @@ function renderSubscription() {
     try {
       me = await api(`/api/me/subscription/${action}`, { method: "POST" });
       renderSubscription();
-      toast(action === "cancel" ? "Abonnement résilié : tes crédits restent, aucun nouveau prélèvement." : "Abonnement repris ✓", "ok");
+      toast(action === "cancel" ? "Abonnement résilié : tes avantages restent jusqu'à la fin du mois payé, aucun nouveau prélèvement." : "Abonnement repris ✓", "ok");
     } catch (err) {
       toast(err.message, "err");
       b.disabled = false;
     }
   };
   if (sub.cancelAtEnd) button("Reprendre l'abonnement", "primary", change("resume"));
-  else button("Résilier", "", change("cancel", `Résilier l'abonnement ?${date ? ` Il reste actif jusqu'au ${date}.` : ""} Tes crédits ne sont pas perdus.`));
+  else button("Résilier", "", change("cancel", `Résilier l'abonnement ?${date ? ` Tes avantages restent jusqu'au ${date}.` : ""} Tes crédits ne sont pas perdus.`));
 }
 
 // ---------- theme ----------

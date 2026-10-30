@@ -303,7 +303,7 @@
         </div>
         <div class="price featured">
           <span class="badge-top">Le plus choisi</span>
-          <h3>Pro</h3>
+          <h3>Créateur</h3>
           <div class="amount">23,99 €</div>
           <div class="per">45 crédits · 1,60 € le script</div>
           <ul>
@@ -312,7 +312,7 @@
             <li><svg><use href="#i-check" /></svg>Idéal pour monter un serveur</li>
             <li><svg><use href="#i-check" /></svg>Support prioritaire</li>
           </ul>
-          <a class="btn primary buy" href="/login?register=1">Choisir Pro</a>
+          <a class="btn primary buy" href="/login?register=1">Choisir Créateur</a>
         </div>
         <div class="price">
           <h3>Studio</h3>
@@ -325,6 +325,32 @@
             <li><svg><use href="#i-check" /></svg>Support prioritaire</li>
           </ul>
           <a class="btn buy" href="/login?register=1">Choisir Studio</a>
+        </div>
+      </div>
+
+      <div class="head center plans-head">
+        <h3>Un meilleur moteur avec Premium</h3>
+        <p class="sub">Les crédits paient chaque script ; l'abonnement choisit le moteur qui l'écrit et ajoute des avantages. Sans engagement.</p>
+      </div>
+      <div class="plans" id="plans">
+        <div class="plan-card" data-plan="free">
+          <h3>Gratuit</h3>
+          <div class="amount">0 €</div>
+          <ul><li>Moteur Qwen3.8 Max (gratuit)</li><li>Relecture par Qwen3.8 Max</li><li>3 modifications offertes par script</li><li>2 serveurs FiveM connectés</li></ul>
+          <a class="btn" href="/login?register=1">Commencer</a>
+        </div>
+        <div class="plan-card" data-plan="premium">
+          <h3>Premium</h3>
+          <div class="amount">9,99 € <small>/ mois</small></div>
+          <ul><li>Moteur Opus 5.5, le plus puissant</li><li>Relecture par Sonnet 5.5</li><li>5 modifications offertes par script</li><li>5 serveurs FiveM connectés</li></ul>
+          <a class="btn buy-plan" href="/login?register=1">Passer Premium</a>
+        </div>
+        <div class="plan-card featured" data-plan="pro">
+          <span class="badge-top">Le plus complet</span>
+          <h3>Pro</h3>
+          <div class="amount">19,99 € <small>/ mois</small></div>
+          <ul><li>Moteur Opus 5.5, le plus puissant</li><li>Relecture par Opus 5.5 et réflexion poussée</li><li>10 modifications offertes par script</li><li>10 serveurs FiveM connectés</li></ul>
+          <a class="btn primary buy-plan" href="/login?register=1">Passer Pro</a>
         </div>
       </div>
     </div>
@@ -436,7 +462,7 @@
     document.querySelectorAll("#navLinks a").forEach((a) => a.addEventListener("click", () => nav.classList.remove("open")));
 
     // Fade sections in as they enter the viewport (siblings are staggered).
-    const revealable = document.querySelectorAll(".head, .l-steps > *, .tile, .item, .price, .compare-wrap, details.qa, .cta-band, .stats-strip > div, .mock, footer .foot > *");
+    const revealable = document.querySelectorAll(".head, .l-steps > *, .tile, .item, .price, .plan-card, .compare-wrap, details.qa, .cta-band, .stats-strip > div, .mock, footer .foot > *");
     // (with "reduce motion" set, site.css turns it into a plain fade)
     if ("IntersectionObserver" in window) {
       const io = new IntersectionObserver((entries) => {
@@ -489,6 +515,20 @@
         });
       } else if (info.shopUrl) {
         document.querySelectorAll(".buy").forEach((a) => Object.assign(a, { href: info.shopUrl, target: "_blank", rel: "noopener" }));
+      }
+      // Free / Premium / Pro: live prices and perks; subscribing happens in the studio.
+      if (shop?.plans?.length) {
+        const fmt = (c) => (c / 100).toLocaleString("fr-FR", { style: "currency", currency: shop.currency.toUpperCase() });
+        const fill = (card, perks) => card && perks && (card.querySelector("ul").replaceChildren(...perks.map((p) => Object.assign(document.createElement("li"), { textContent: p }))));
+        fill(document.querySelector('.plan-card[data-plan="free"]'), shop.free?.perks);
+        for (const p of shop.plans) {
+          const card = document.querySelector(`.plan-card[data-plan="${p.id}"]`);
+          if (!card) continue;
+          card.querySelector("h3").textContent = p.name;
+          card.querySelector(".amount").firstChild.textContent = `${fmt(p.price)} `;
+          fill(card, p.perks);
+          if (shop.enabled) card.querySelector(".buy-plan").href = "/app?buy";
+        }
       }
       if (info.supportUrl) {
         Object.assign(document.getElementById("supportLink"), { href: info.supportUrl }).classList.remove("hidden");

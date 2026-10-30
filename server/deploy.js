@@ -10,6 +10,7 @@ import { db } from "./db.js";
 import { config, ROOT } from "./config.js";
 import { requireUser, rateLimit } from "./auth.js";
 import { getProject, getFiles } from "./projects.js";
+import { tierOf } from "./tiers.js";
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS servers (
@@ -50,7 +51,6 @@ db.exec(`
 
 const now = () => new Date().toISOString();
 const hash = (t) => crypto.createHash("sha256").update(t).digest("hex");
-const MAX_SERVERS = 10;
 const ONLINE_MS = 30_000; // the bridge polls every 5 s
 const STALE_MS = 10 * 60_000; // a delivery never confirmed is reported as lost
 
@@ -75,9 +75,12 @@ const publicDeployment = (d) => ({
   updatedAt: d.updated_at,
 });
 
-export function createServer(userId, name) {
+// maxServers: how many servers the account plan allows (config.tiers).
+export function createServer(userId, name, maxServers = 10) {
   const count = db.prepare("SELECT COUNT(*) AS n FROM servers WHERE user_id = ?").get(userId).n;
-  if (count >= MAX_SERVERS) throw Object.assign(new Error(`${MAX_SERVERS} serveurs maximum par compte.`), { status: 400 });
+  if (count >= maxServers) {
+    throw Object.assign(new Error(`${maxServers} serveur${maxServers > 1 ? "s" : ""} maximum avec ton offre. Passe à une offre supérieure pour en connecter plus.`), { status: 400 });
+  }
   const token = `FGS-${crypto.randomBytes(24).toString("base64url")}`;
   const r = db
     .prepare("INSERT INTO servers (user_id, name, token_hash, token_hint, created_at) VALUES (?, ?, ?, ?, ?)")
@@ -198,7 +201,7 @@ export function mountDeploy(app) {
     if (!name) return res.status(400).json({ error: "Donne un nom au serveur." });
     const baseUrl = config.publicUrl || `${req.protocol}://${req.get("host")}`;
     try {
-      res.json({ ...createServer(req.user.id, name), baseUrl });
+      res.json({ ...createServer(req.user.id, name, tierOf(req.user).maxServers), baseUrl });
     } catch (err) {
       sendError(res, err);
     }

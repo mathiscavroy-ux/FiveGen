@@ -12,6 +12,7 @@ import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook, createSubscriptionCheckout, setCancelAtPeriodEnd, cancelNow } from "./payments.js";
 import { importResource } from "./importer.js";
 import { mountDiscord, discordEnabled } from "./discord.js";
+import { tierOf } from "./tiers.js";
 import { validateProjectFull } from "./validator.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors } from "./deploy.js";
 import { mountSeo } from "./seo.js";
@@ -175,7 +176,7 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
     const paths = [...new Set(failures.map((f) => f.path))];
     send("status", `${failures.length} remplacement(s) sans emplacement trouvé : réécriture de ${paths.join(", ")}.`);
     try {
-      const redo = await runEngine({ userContent: buildRewriteMessage(spec, getFiles(userId, projectId), failures), onEvent: send, signal, meta: { userId, projectId, purpose: "rewrite" } });
+      const redo = await runEngine({ userContent: buildRewriteMessage(spec, getFiles(userId, projectId), failures), onEvent: send, signal, meta: { userId, projectId, purpose: "rewrite" }, profile: state.profile });
       writeFiles(userId, projectId, redo.files, []);
       state.outputTokens += redo.outputTokens ?? 0;
       touched.push(...redo.files.map((f) => f.path));
@@ -200,8 +201,8 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   const project = getProject(userId, projectId);
   send("phase", { phase: kind, label: LABELS[kind] });
   // a new resource: plan, then groups of files written at the same time (null: single call)
-  const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec: project.spec, send, signal, meta: { userId, projectId } }) : null;
-  const result = parallel ?? (await runEngine({ userContent, onEvent: send, signal, meta: { userId, projectId, purpose: kind } }));
+  const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec: project.spec, send, signal, meta: { userId, projectId }, profile: state.profile }) : null;
+  const result = parallel ?? (await runEngine({ userContent, onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }
@@ -233,8 +234,9 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
         onEvent: send,
         signal,
         meta: { userId, projectId, purpose: "review" },
-        // the review reads more than it writes: the cheaper model is enough, the main one stays as fallback
-        model: (await modelAvailable(config.engine.reviewModel)) ? config.engine.reviewModel : undefined,
+        // the review reads more than it writes: the account's review model, its main models as fallback
+        model: (await modelAvailable(state.profile.review)) ? state.profile.review : undefined,
+        profile: state.profile,
       });
       state.outputTokens += review.outputTokens ?? 0;
       if (review.files.length || review.edits.length || review.deletes.length) {
@@ -252,8 +254,9 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     }
   }
 
-  for (let round = 1; round <= config.autoFixRounds && !validation.ok; round++) {
-    send("phase", { phase: "fix", label: `Correction automatique ${round}/${config.autoFixRounds}` });
+  const rounds = state.profile.autoFixRounds;
+  for (let round = 1; round <= rounds && !validation.ok; round++) {
+    send("phase", { phase: "fix", label: `Correction automatique ${round}/${rounds}` });
     let fix;
     try {
       fix = await runEngine({
@@ -261,6 +264,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
         onEvent: send,
         signal,
         meta: { userId, projectId, purpose: "autofix" },
+        profile: state.profile,
       });
     } catch (err) {
       // The script is already saved: an engine hiccup here must not turn it into a failure.
@@ -300,7 +304,8 @@ async function streamPipeline(res, { userId, projectId, kind, instruction, userC
   watchJob(job, res);
   const send = job.emit;
   const { signal } = job.controller;
-  const state = { produced: false, outputTokens: 0 };
+  // engine profile of the account (free models, or Opus for subscribers), read once per run
+  const state = { produced: false, outputTokens: 0, profile: tierOf(db.getUser(userId)) };
   send("project", { id: projectId });
   send("credits", { credits: db.getUser(userId).credits });
   try {
@@ -652,6 +657,7 @@ app.post("/api/brief", requireUser, briefLimiter, async (req, res) => {
         dependencies: (Array.isArray(server.dependencies) ? server.dependencies : []).filter((d) => CATALOG.dependencies.some((x) => x.id === d)),
       },
       meta: { userId: req.user.id, purpose: "brief" },
+      profile: tierOf(req.user),
     });
     res.json(brief);
   } catch (err) {
@@ -697,7 +703,7 @@ app.post("/api/projects/:id/refine", requireUser, async (req, res) => {
   if (instruction.length > LIMITS.instruction) return res.status(400).json({ error: `Demande trop longue (${LIMITS.instruction} caractères max).` });
   const project = getProject(req.user.id, req.params.id);
   // The first FREE_REFINES modifications of each script are included.
-  const cost = project.refinesUsed < config.freeRefines ? 0 : config.cost.refine;
+  const cost = project.refinesUsed < tierOf(req.user).freeRefines ? 0 : config.cost.refine;
   if (!charge(req, res, cost)) return;
   await streamPipeline(res, {
     userId: req.user.id,
@@ -769,7 +775,7 @@ app.post("/api/projects/:id/transform", requireUser, async (req, res) => {
     if (!CATALOG.frameworks.some((f) => f.id === to)) return res.status(400).json({ error: "Choisis le framework de destination." });
     if (to === from) return res.status(400).json({ error: `Ce script est déjà en ${frameworkLabel(to)}.` });
   }
-  const cost = config.cost[kind];
+  const cost = tierOf(req.user).cost[kind];
   if (!charge(req, res, cost)) return;
   // the checks after the rewrite must judge it against the new framework
   const spec = kind === "convert" ? { ...project.spec, framework: to } : project.spec;

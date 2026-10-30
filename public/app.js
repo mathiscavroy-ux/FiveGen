@@ -140,7 +140,14 @@ function renderAccount() {
     if (me.shopUrl) $(id).href = me.shopUrl;
   }
   $("#costHint").textContent = "Analyse gratuite, aucun crédit débité à cette étape";
-  $("#genCostHint").textContent = `Coût : ${plural(me.costs.generate, "crédit")} (corrections automatiques incluses)`;
+  $("#genCostHint").textContent = `Coût : ${plural(me.costs.generate, "crédit")} · moteur ${me.tier.engineName}${me.tier.id === "free" ? " (Opus 5.5 avec Premium)" : ""}`;
+  // the plan of the account; free accounts see the way to Premium
+  const badge = $("#tierBadge");
+  badge.classList.remove("hidden", "free", "premium", "pro");
+  badge.classList.add(me.tier.id);
+  badge.textContent = me.tier.id === "free" ? "Passer Premium" : me.tier.label;
+  badge.title = me.tier.id === "free" ? `Moteur actuel : ${me.tier.engineName}. Premium : Opus 5.5 et plus d'avantages.` : `Moteur ${me.tier.engineName}`;
+  if (me.tier.id === "free") badge.href = "/app?buy";
   $("#costLine").textContent = plural(me.costs.generate, "crédit");
   $("#freeRefinesLine").textContent = me.freeRefines;
   $("#demoBanner").classList.toggle("hidden", !state.options?.demo);
@@ -194,10 +201,10 @@ function renderPlans() {
     const card = document.createElement("div");
     card.className = `pack plan${p.featured ? " featured" : ""}`;
     card.dataset.pack = p.id;
-    card.innerHTML = `${p.featured ? '<span class="tagline">Le meilleur prix</span>' : ""}
+    card.innerHTML = `${p.featured ? '<span class="tagline">Le plus complet</span>' : ""}
       <b>${escapeHtml(p.name)}</b>
       <span class="amount">${formatPrice(p.price, info.currency)}<small> / mois</small></span>
-      <span class="unit">${plural(p.credits, "crédit")} chaque mois · ${formatPrice(Math.round((p.price / p.credits) * (state.me.costs.generate ?? 1)), info.currency)} le script</span>`;
+      <ul class="plan-perks">${(p.perks ?? []).map((perk) => `<li>${escapeHtml(perk)}</li>`).join("")}</ul>`;
     const btn = document.createElement(subscribed ? "a" : "button");
     btn.className = `btn ${p.featured ? "primary" : ""}`;
     if (subscribed) {

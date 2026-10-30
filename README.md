@@ -65,9 +65,20 @@ Les clients achètent un pack de crédits sur le site (fenêtre « Recharger mes
 5. Teste un achat avec la carte de test Stripe `4242 4242 4242 4242` (date future, n'importe quel code). Les crédits arrivent en quelques secondes et le paiement apparaît dans `/admin`.
 6. Pour encaisser pour de vrai : active ton compte Stripe (identité, IBAN), puis remplace les deux valeurs par celles du mode **Live** (`sk_live_...` et le secret d'un webhook créé en mode Live).
 
-Packs et prix TTC : variable `CREDIT_PACKS` (voir `.env.example`), sinon Starter 15 crédits / 8,99 €, Pro 45 / 23,99 €, Studio 150 / 71,99 €. La TVA est comprise dans le prix (`tax_behavior: inclusive`) : le client paie exactement le prix affiché. Les prix de l'accueil se mettent à jour automatiquement.
+Packs et prix TTC : variable `CREDIT_PACKS` (voir `.env.example`), sinon Starter 15 crédits / 8,99 €, Créateur 45 / 23,99 €, Studio 150 / 71,99 €. La TVA est comprise dans le prix (`tax_behavior: inclusive`) : le client paie exactement le prix affiché. Les prix de l'accueil se mettent à jour automatiquement.
 
-Abonnements mensuels : variable `SUBSCRIPTION_PLANS`, sinon Mensuel 30 crédits / 14,99 € et Mensuel+ 80 crédits / 34,99 € par mois, sans engagement. Les crédits arrivent à chaque facture payée (`invoice.paid`), une seule fois par facture. Le client résilie ou reprend depuis `/parametres` (la résiliation prend effet à la fin du mois payé), et la suppression d'un compte résilie son abonnement tout de suite.
+Abonnements : **Premium** (9,99 €/mois, `PREMIUM_PRICE`) et **Pro** (19,99 €/mois, `PRO_PRICE`), sans engagement. Ils ne donnent pas de crédits : chaque script en coûte toujours. Ce qu'ils changent (`config.tiers` dans `server/config.js`) :
+
+| | Gratuit | Premium | Pro |
+|---|---|---|---|
+| Moteur | modèles gratuits du fournisseur (`FREE_MODELS`, Qwen3.8 Max d'abord) | `ENGINE_MODEL` (Opus 5.5) | `ENGINE_MODEL` (Opus 5.5) |
+| Relecture | modèle gratuit | `ENGINE_REVIEW_MODEL` (Sonnet 5.5) | `ENGINE_MODEL`, réflexion poussée sur les modifications |
+| Corrections automatiques | 2 tours | 2 tours | 3 tours |
+| Modifications offertes par script | 3 | 5 | 10 |
+| Conversion / optimisation | 3 / 2 crédits | 3 / 2 crédits | 2 / 1 crédit |
+| Serveurs FiveM connectés | 2 | 5 | 10 |
+
+Les comptes gratuits ne consomment pas le quota payant du fournisseur (32 millions de tokens gratuits par jour chez xKiro). Le compte administrateur a toujours Pro. Une résiliation garde les avantages jusqu'à la fin du mois payé ; supprimer un compte résilie son abonnement tout de suite.
 
 Sécurité : les crédits ne sont ajoutés que par le webhook signé par Stripe (jamais depuis le navigateur), une seule fois par paiement, et le nombre de crédits vient toujours de la configuration du serveur. Le client coche une case de renonciation au délai de rétractation avant de payer (contenu numérique utilisé immédiatement).
 

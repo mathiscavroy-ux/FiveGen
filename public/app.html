@@ -22,6 +22,7 @@
       </div>
     </a>
     <div class="topbar-actions">
+      <a id="tierBadge" class="pill tier hidden" href="/parametres#abonnement"></a>
       <button id="btnCredits" class="pill credits" title="Recharger mes crédits"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20"/></svg> <span id="creditCount">…</span> crédits</button>
       <button id="btnNew" class="btn ghost"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Nouveau script</button>
       <button type="button" class="theme-toggle" data-theme-toggle></button>
@@ -272,9 +273,10 @@
       <p class="muted">Un script coûte <b id="costLine">1 crédit</b> et inclut <b id="freeRefinesLine">3</b> modifications offertes ; les corrections sont gratuites. Les crédits n'expirent pas.</p>
       <div id="buySection" class="hidden">
         <div id="planSection" class="hidden">
-          <h3 class="buy-title">Abonnement mensuel <span class="muted">· le moins cher par crédit, sans engagement</span></h3>
+          <h3 class="buy-title">Abonnements <span class="muted">· le moteur le plus puissant et plus d'avantages, sans engagement</span></h3>
           <div id="planGrid" class="pack-grid"></div>
-          <h3 class="buy-title">Ou un pack, une fois</h3>
+          <p class="plan-note">Avec ou sans abonnement, chaque script coûte des crédits : choisis un pack ci-dessous.</p>
+          <h3 class="buy-title">Packs de crédits</h3>
         </div>
         <div id="packGrid" class="pack-grid"></div>
         <label class="consent">

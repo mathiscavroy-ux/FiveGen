@@ -50,11 +50,11 @@ export function groupFiles(paths) {
  * ({ files, deletes, edits, notes, stopReason, outputTokens }), or null when no usable
  * plan came back (the caller then generates in a single call).
  */
-export async function generateParallel({ spec, send, signal, meta }) {
+export async function generateParallel({ spec, send, signal, meta, profile }) {
   send("phase", { phase: "plan", label: "Plan de la ressource" });
   let plan;
   try {
-    plan = await runPlan({ userContent: buildPlanMessage(spec), signal, meta });
+    plan = await runPlan({ userContent: buildPlanMessage(spec), signal, meta, profile });
   } catch (err) {
     if (signal?.aborted) throw err;
     send("status", "Plan indisponible : génération en un seul passage.");
@@ -72,7 +72,9 @@ export async function generateParallel({ spec, send, signal, meta }) {
 
   const groups = groupFiles(plan.files.map((f) => f.path));
   send("phase", { phase: "write", label: `Écriture en parallèle · ${groups.length} groupe${groups.length > 1 ? "s" : ""}` });
-  const light = (await modelAvailable(config.engine.lightModel)) ? config.engine.lightModel : null;
+  // the account's cheaper model for light files (a free one for free accounts)
+  const lightModel = profile ? profile.light : config.engine.lightModel;
+  const light = (await modelAvailable(lightModel)) ? lightModel : null;
   const runGroup = (paths, i, notes) =>
     runEngine({
       userContent: buildPartMessage(spec, plan, paths, { notes }),
@@ -81,6 +83,7 @@ export async function generateParallel({ spec, send, signal, meta }) {
       signal,
       meta: { ...meta, purpose: "generate" },
       model: light && paths.every(isLightFile) ? light : undefined,
+      profile,
     });
   const settle = (p) => p.then((value) => ({ status: "fulfilled", value }), (reason) => ({ status: "rejected", reason }));
 

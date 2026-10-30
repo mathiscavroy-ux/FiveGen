@@ -15,8 +15,33 @@ export function publicPacks() {
     enabled: paymentsEnabled(),
     currency: config.stripe.currency,
     packs: config.packs.map(({ id, name, credits, price, featured }) => ({ id, name, credits, price, featured: Boolean(featured) })),
-    plans: config.plans.map(({ id, name, credits, price, featured }) => ({ id, name, credits, price, featured: Boolean(featured) })),
+    plans: config.plans.map(({ id, name, price, featured }) => ({ id, name, price, featured: Boolean(featured), perks: planPerks(id) })),
+    free: { engineName: config.tiers.free.engineName, perks: planPerks("free") },
   };
+}
+
+// "anthropic/claude-sonnet-5.5" -> "Sonnet 5.5", "qwen/qwen3.8-max:free" -> "Qwen3.8 Max".
+const modelLabel = (id) =>
+  String(id ?? "")
+    .split("/")
+    .pop()
+    .replace(/:free$/, "")
+    .replace(/^claude-/, "")
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+// What a plan brings, shown on the plan cards, from its engine profile (config.tiers).
+export function planPerks(id) {
+  const t = config.tiers[id] ?? config.tiers.free;
+  return [
+    id === "free" ? `Moteur ${t.engineName} (gratuit)` : `Moteur ${t.engineName}, le plus puissant`,
+    `Relecture par ${modelLabel(t.review) || t.engineName}${id === "pro" ? " et réflexion poussée sur les modifications" : ""}`,
+    `${t.autoFixRounds} tours de correction automatique`,
+    `${t.freeRefines} modifications offertes par script`,
+    `Conversion ${t.cost.convert} crédit${t.cost.convert > 1 ? "s" : ""} · optimisation ${t.cost.optimize} crédit${t.cost.optimize > 1 ? "s" : ""}`,
+    `${t.maxServers} serveur${t.maxServers > 1 ? "s" : ""} FiveM connecté${t.maxServers > 1 ? "s" : ""}`,
+  ];
 }
 
 // A subscription that still bills or gives credits: a second one is refused.
@@ -26,7 +51,7 @@ export async function createSubscriptionCheckout({ user, planId, baseUrl }) {
   const plan = config.plans.find((p) => p.id === planId);
   if (!plan) throw Object.assign(new Error("Abonnement inconnu."), { status: 400 });
   if (ACTIVE_SUB.has(user.sub_status)) throw Object.assign(new Error("Tu as déjà un abonnement en cours : gère-le depuis tes paramètres."), { status: 400 });
-  const metadata = { userId: String(user.id), planId: plan.id, credits: String(plan.credits), immediateExecutionConsent: "yes" };
+  const metadata = { userId: String(user.id), planId: plan.id, immediateExecutionConsent: "yes" };
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     line_items: [
@@ -37,7 +62,7 @@ export async function createSubscriptionCheckout({ user, planId, baseUrl }) {
           unit_amount: plan.price,
           recurring: { interval: "month" },
           tax_behavior: "inclusive",
-          product_data: { name: `FiveGen — Abonnement ${plan.name} (${plan.credits} crédits / mois)`, tax_code: config.stripe.taxCode },
+          product_data: { name: `FiveGen ${plan.name} (moteur ${config.tiers[plan.id]?.engineName ?? ""}, mensuel)`, tax_code: config.stripe.taxCode },
         },
       },
     ],
@@ -52,7 +77,7 @@ export async function createSubscriptionCheckout({ user, planId, baseUrl }) {
   return session.url;
 }
 
-// Stops (or restarts) the renewal; the credits of the current month stay.
+// Stops (or restarts) the renewal; the perks stay until the end of the paid month.
 export async function setCancelAtPeriodEnd(user, cancel) {
   if (!user.sub_id || !ACTIVE_SUB.has(user.sub_status)) throw Object.assign(new Error("Aucun abonnement en cours."), { status: 400 });
   const sub = await stripe.subscriptions.update(user.sub_id, { cancel_at_period_end: cancel });
@@ -84,8 +109,9 @@ function syncSubscription(sub) {
   return `abonnement ${sub.status} pour l'utilisateur ${user.id}`;
 }
 
-// Credits of a paid subscription invoice: at the start and at each monthly renewal, once.
-function creditInvoice(invoice) {
+// A paid subscription invoice (start and each monthly renewal): recorded once for the
+// accounting, and the plan stays active until the end of the new period. No credits.
+function recordInvoice(invoice) {
   if (!["subscription_create", "subscription_cycle"].includes(invoice.billing_reason)) return `facture ignorée (${invoice.billing_reason})`;
   const details = invoice.parent?.subscription_details ?? invoice.subscription_details;
   const plan = config.plans.find((p) => p.id === details?.metadata?.planId);
@@ -95,7 +121,7 @@ function creditInvoice(invoice) {
     sessionId: invoice.id,
     userId,
     packId: `abonnement:${plan.id}`,
-    credits: plan.credits,
+    credits: 0,
     amount: invoice.amount_paid ?? plan.price,
     currency: invoice.currency ?? config.stripe.currency,
   });
@@ -110,7 +136,7 @@ function creditInvoice(invoice) {
       periodEnd: end ? new Date(end * 1000).toISOString() : undefined,
     });
   }
-  return added ? `+${plan.credits} crédits (abonnement) pour l'utilisateur ${userId}` : "déjà traité";
+  return added ? `abonnement ${plan.name} payé par l'utilisateur ${userId}` : "déjà traité";
 }
 
 export async function createCheckout({ user, packId, baseUrl }) {
@@ -143,7 +169,7 @@ export async function createCheckout({ user, packId, baseUrl }) {
 // Returns a short label for logs; throws when the signature is invalid.
 export function handleWebhook(rawBody, signature) {
   const event = stripe.webhooks.constructEvent(rawBody, signature, config.stripe.webhookSecret);
-  if (event.type === "invoice.paid") return creditInvoice(event.data.object);
+  if (event.type === "invoice.paid") return recordInvoice(event.data.object);
   if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") return syncSubscription(event.data.object);
   if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded") {
     return `ignoré (${event.type})`;
