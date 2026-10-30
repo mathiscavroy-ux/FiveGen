@@ -354,6 +354,14 @@ function checkSql(files, spec) {
       }
     }
   }
+  // A .sql nothing uses: no query in the code and no framework rows (jobs, items, society).
+  if (sql.trim() && !/\bMySQL\.|exports\.oxmysql|exports\[['"]oxmysql['"]\]/.test(luaText) && !/INTO\s+`?(jobs|job_grades|items|addon_account|addon_account_data|addon_inventory|datastore)`?\b/i.test(sql)) {
+    problems.push({
+      file: files.find((f) => f.path.endsWith(".sql")).path,
+      message: "Fichier SQL inutile : aucune requête du code ne s'en sert et il n'ajoute ni job, ni item, ni compte de société. Supprime-le (et la dépendance oxmysql) si la ressource n'a pas besoin de base.",
+      level: "warning",
+    });
+  }
   if (spec?.framework === "esx" && spec?.type === "job" && /job_grades/i.test(sql) && !/INSERT\s+IGNORE\s+INTO\s+`?job_grades/i.test(luaText)) {
     problems.push({
       file: "sql/install.sql",

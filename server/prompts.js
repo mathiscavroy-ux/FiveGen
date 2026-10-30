@@ -251,7 +251,7 @@ Vérifie point par point :
 2. Sécurité serveur : chaque événement réseau et callback valide ses arguments (type, tonumber, bornes), le job et le grade du joueur, la distance, l'existence de la cible, et applique un cooldown aux actions répétables. Aucun argent, item ou job n'est donné sur la seule parole du client.
 3. Robustesse : xPlayer, résultats SQL, items, entités et retours de lib.inputDialog testés avant usage ; aucune variable locale d'un fichier utilisée dans un autre ; pas de boucle sans Wait.
 4. Nettoyage : entités, blips, zones, NUI (SetNuiFocus false) et états libérés dans onResourceStop et à la déconnexion.
-5. Persistance : ce qui doit survivre à un redémarrage ou une reconnexion est stocké (SQL ou métadonnées) et le SQL fourni crée toutes les tables et lignes utilisées.
+5. Persistance : seul ce qui doit vraiment survivre à un redémarrage est stocké (métadonnées du joueur de préférence, SQL si une table est indispensable) ; le reste vit en mémoire ou dans config.lua. Quand il y a du SQL, il crée toutes les tables et lignes utilisées. Un fichier .sql ou une dépendance oxmysql que rien ne justifie (commande, action ponctuelle, table de logs ou de cooldowns) est supprimé.
 6. Cohérence : clés Config, traductions, actions NUI et callbacks présents des deux côtés ; README et fxmanifest à jour.
 7. Messages : chaque refus notifie la vraie raison au joueur.
 </relecture>

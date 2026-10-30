@@ -73,6 +73,17 @@ test("an ESX job without SQL, or a custom table never created, is an error", () 
   assert.doesNotMatch(messages(validateProject(files, { framework: "qbcore", type: "job" })), /Job ESX/);
 });
 
+test("a SQL file nothing uses is flagged; one adding a job or used by queries is not", () => {
+  const warned = (files) => validateProject(files, { framework: "esx", type: "admin" }).warnings.some((w) => /Fichier SQL inutile/.test(w.message));
+  const revive = [manifest("server_script 'server/main.lua'"), { path: "server/main.lua", content: "RegisterCommand('revive', function(src) TriggerClientEvent('esx_ambulancejob:revive', src) end)\n" }];
+  const logs = { path: "sql/install.sql", content: "CREATE TABLE IF NOT EXISTS revive_logs (id INT AUTO_INCREMENT PRIMARY KEY);" };
+  assert.ok(warned([...revive, logs]));
+  assert.ok(!warned(revive));
+  assert.ok(!warned([...revive, { path: "sql/install.sql", content: "INSERT IGNORE INTO items (name, label) VALUES ('medkit', 'Kit');" }]));
+  const queried = { path: "server/db.lua", content: "MySQL.insert('INSERT INTO revive_logs (id) VALUES (?)', {1})" };
+  assert.ok(!warned([...revive, logs, queried]));
+});
+
 test("QBCore-only fields on ESX objects are errors", () => {
   const files = [
     manifest("dependency 'es_extended'\nserver_script 'server/main.lua'"),
