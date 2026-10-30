@@ -160,15 +160,15 @@ section.block .mock-tree .sub { font-size: inherit; color: inherit; margin: 0; }
 /* ---------- responsive ---------- */
 @media (max-width: 1060px) {
   .l-preview { grid-template-columns: 1fr 1fr; }
-  .l-question { grid-column: span 2; order: 2; }
-  .l-result { order: 3; grid-column: span 2; }
+  .l-question { grid-column: span 2; order: 3; }
+  .l-result { order: 2; }
   .l-steps { grid-template-columns: repeat(2, 1fr); }
   .l-steps::before { display: none; }
   .showcase { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 860px) {
   .l-nav .wrap { grid-template-columns: auto 1fr; }
-  .l-nav-links { display: none; position: absolute; top: 64px; left: 0; right: 0; flex-direction: column; gap: 2px; padding: 10px 20px 16px; background: rgb(var(--bg-rgb) / 0.96); backdrop-filter: blur(16px); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
+  .l-nav-links { display: none; position: absolute; top: 64px; left: 0; right: 0; flex-direction: column; gap: 2px; padding: 10px 20px 16px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
   .l-nav.open .l-nav-links { display: flex; }
   .l-nav.open .l-mobile-only { display: block; color: var(--accent-text); font-weight: 600; }
   .l-nav-links a { padding: 12px; font-size: 15px; }
@@ -178,7 +178,6 @@ section.block .mock-tree .sub { font-size: inherit; color: inherit; margin: 0; }
   .l-faq { grid-template-columns: 1fr; gap: 32px; }
   .l-faq .head { position: static; }
   .l-foot { grid-template-columns: 1fr 1fr; }
-  .plans { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
   .l-hero { padding-top: 56px; }
@@ -187,10 +186,17 @@ section.block .mock-tree .sub { font-size: inherit; color: inherit; margin: 0; }
   .l-cta .btn { width: 100%; }
   .l-preview { grid-template-columns: 1fr; padding: 12px; }
   .l-question, .l-result { grid-column: auto; }
+  .l-question { order: 2; } .l-result { order: 3; }
   .l-opts { grid-template-columns: 1fr; }
   .l-float { position: static; justify-self: end; margin-top: 4px; order: 4; }
   .l-steps, .showcase { grid-template-columns: 1fr; }
   .l-nav-actions .btn { display: none; }
-  .l-foot { grid-template-columns: 1fr; }
   .l-stack { margin-top: 56px; }
+}
+@media (max-width: 700px) {
+  .plans { grid-template-columns: 1fr; }
+}
+@media (min-width: 701px) and (max-width: 1060px) {
+  .plan-card { padding: 22px; }
+  .plan-card .amount { font-size: 32px; white-space: nowrap; }
 }

@@ -772,7 +772,10 @@ function renderProjectList() {
     const dot = p.ok === true ? "ok" : p.ok === false ? "err" : "";
     li.innerHTML = `<span class="p-name"><span class="dot ${dot}"></span>${escapeHtml(p.name)}</span>
       <span class="p-meta">${escapeHtml(label(state.options.frameworks, p.framework))} · ${escapeHtml(label(state.options.types, p.type))} · ${timeAgo(p.updatedAt)}</span>`;
-    li.onclick = () => openProject(p.id);
+    li.onclick = () => {
+      setDrawer(false);
+      openProject(p.id);
+    };
     ul.append(li);
   }
 }
@@ -2387,6 +2390,12 @@ async function restore(n) {
   }
 }
 
+// On phones and tablets the script list is a drawer opened from the top bar.
+function setDrawer(open) {
+  document.body.classList.toggle("drawer-open", open);
+  $("#btnProjects").setAttribute("aria-expanded", String(open));
+}
+
 function setInspector(open) {
   $("#viewProject").classList.toggle("no-inspector", !open);
   $("#btnInspector").classList.toggle("active", open);
@@ -2456,8 +2465,12 @@ function bind() {
       $("#refineForm").requestSubmit();
     }
   });
+  $("#btnProjects").onclick = () => setDrawer(!document.body.classList.contains("drawer-open"));
+  $("#drawerBackdrop").onclick = () => setDrawer(false);
+  document.addEventListener("keydown", (e) => e.key === "Escape" && setDrawer(false));
   $("#btnNew").onclick = () => {
     if (state.busy) return toast("Une génération est en cours.", "err");
+    setDrawer(false);
     state.current = null;
     location.hash = "";
     showView("new");

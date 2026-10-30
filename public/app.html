@@ -14,6 +14,7 @@
 </head>
 <body>
   <header class="topbar">
+    <button id="btnProjects" class="btn ghost icon drawer-btn" title="Mes scripts" aria-label="Mes scripts" aria-controls="sidebar" aria-expanded="false"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
     <a class="brand" href="/">
       <span class="logo">F</span>
       <div>
@@ -44,7 +45,7 @@
   </header>
 
   <div class="layout">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-head">
         <span>Mes scripts</span>
         <span id="projectCount" class="muted"></span>
@@ -52,6 +53,7 @@
       <input id="projectSearch" class="input small" placeholder="Rechercher…" />
       <ul id="projectList" class="project-list"></ul>
     </aside>
+    <div id="drawerBackdrop" class="drawer-backdrop"></div>
 
     <main class="main">
       <!-- New script -->

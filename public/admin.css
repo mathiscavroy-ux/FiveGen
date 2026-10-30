@@ -135,3 +135,22 @@ td .err-txt { color: var(--err-text); }
 /* same surface language as the site and the studio */
 .card, .kpi, .side-quota { background-image: var(--sheen); box-shadow: var(--edge); }
 .kpi { border-radius: 14px; }
+@media (max-width: 860px) {
+  .adm-side { width: min(84vw, 290px); transition: transform .28s var(--ease); }
+  body.adm::after { content: ""; position: fixed; inset: 0; z-index: 35; background: rgb(0 0 0 / .5); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity .25s; }
+  body.adm.menu-open::after { opacity: 1; pointer-events: auto; }
+  body.adm.menu-open { overflow: hidden; }
+  .adm-top { padding: 12px 0; }
+  .adm-top h1 { font-size: 18px; }
+  .card { padding: 14px; }
+  .card .table-wrap { margin: 0 -14px -14px; }
+  .toolbar .input { max-width: none; flex: 1 1 100%; font-size: 16px; }
+  .seg { overflow-x: auto; max-width: 100%; }
+}
+@media (max-width: 480px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .kpi b { font-size: 19px; }
+  .settings { grid-template-columns: 1fr; gap: 2px; }
+  .settings dd { text-align: left; margin-bottom: 8px; }
+  .bars .b-row { grid-template-columns: 84px minmax(0, 1fr) 58px; }
+}

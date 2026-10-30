@@ -378,6 +378,10 @@ $("#refresh").onclick = async () => {
   toast("Données actualisées", "ok");
 };
 $("#burger").onclick = () => document.body.classList.toggle("menu-open");
+// A tap outside the side menu closes it on phones and tablets.
+document.addEventListener("click", (e) => {
+  if (document.body.classList.contains("menu-open") && !e.target.closest(".adm-side, #burger")) document.body.classList.remove("menu-open");
+});
 $("#sideQuota").onclick = () => (location.hash = "#engine");
 let resizeTimer;
 addEventListener("resize", () => {

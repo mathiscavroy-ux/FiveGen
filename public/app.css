@@ -1178,3 +1178,113 @@ dialog::backdrop { background: rgb(0 0 0 / .55); backdrop-filter: blur(4px); }
 .menu { border-radius: 12px; box-shadow: var(--edge), var(--shadow-lg); }
 .pack { border-radius: 14px; }
 .pack.featured { background: radial-gradient(120% 70% at 50% 0%, rgb(var(--accent-rgb) / .12), transparent 70%), var(--panel-2); }
+
+/* ---------- phones and tablets: page scroll, script drawer, compact toolbar ---------- */
+.drawer-btn, .drawer-backdrop { display: none; }
+@media (max-width: 980px) {
+  html, body { height: auto; min-height: 100%; }
+  body { display: block; overflow-x: hidden; overflow-y: auto; }
+  .topbar { position: sticky; top: 0; z-index: 50; height: 58px; padding: 0 12px; gap: 8px; }
+  .topbar .brand { margin-right: auto; }
+  .topbar-actions { gap: 6px; }
+  .drawer-btn { display: inline-flex; }
+  .layout { display: block; }
+  .main, .view { overflow: visible; height: auto; }
+
+  /* the script list slides in from the left */
+  .sidebar {
+    position: fixed; inset: 0 auto 0 0; z-index: 70; width: min(86vw, 330px); max-height: none; padding: 18px 12px calc(18px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overscroll-behavior: contain;
+    border-right: 1px solid var(--border); border-bottom: 0; background: var(--bg-2); box-shadow: var(--shadow-lg);
+    transform: translateX(-102%); visibility: hidden; transition: transform .28s var(--ease), visibility 0s linear .28s;
+  }
+  body.drawer-open .sidebar { transform: none; visibility: visible; transition: transform .28s var(--ease); }
+  .drawer-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 65; background: rgb(0 0 0 / .5); backdrop-filter: blur(3px);
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
+  body.drawer-open { overflow: hidden; }
+  .project-list li { padding: 12px; }
+
+  /* project header: title, full-width view switch, one scrollable row of labelled actions */
+  #viewProject { height: auto; }
+  #viewProject:not(.hidden) { display: block; }
+  .studio-head { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 16px; }
+  .sh-title h2 { font-size: 16px; }
+  .studio-head .viewswitch { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+  .studio-head .vs { justify-content: center; padding: 0 6px; }
+  .studio-head .toolbar-actions {
+    display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: 8px; overflow-x: auto; scrollbar-width: none;
+    margin: 0 -16px; padding: 2px 16px; scroll-padding-inline: 16px;
+    mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 24px), transparent);
+  }
+  .studio-head .toolbar-actions::-webkit-scrollbar { display: none; }
+  .studio-head .toolbar-actions .btn { flex: none; }
+  #btnValidate, #btnFix, #btnDeploy { width: auto; padding: 0 12px; font-size: 13px; gap: 7px; }
+  #btnZip { order: -1; }
+  #btnCancel { order: -2; }
+
+  /* code: compact file list above a tall editor, then the inspector */
+  .studio-body { display: block; }
+  .studio-main { min-height: 0; overflow: visible; }
+  .workspace { display: grid; grid-template-columns: 1fr; grid-template-rows: auto minmax(420px, 62vh); }
+  .files { max-height: 168px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .editor-wrap { min-height: 420px; }
+  .inspector { border-left: 0; border-top: 1px solid var(--border); grid-template-rows: auto auto minmax(240px, auto) auto; }
+  .inspector .tab-panels { overflow: visible; }
+  .inspector .tabs { position: sticky; top: 58px; z-index: 5; background: var(--bg-2); }
+  .inspector .refine { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .pane-analysis, .pane-versions { overflow: visible; max-height: none; }
+
+  /* new script */
+  #viewNew { padding: 28px 16px calc(40px + env(safe-area-inset-bottom)); }
+  .toasts { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .toast { max-width: none; }
+}
+@media (max-width: 560px) {
+  .topbar .theme-toggle { display: none; }
+  .pill.credits { padding: 0 10px; height: 34px; }
+  .composer-head h1 { font-size: 26px; }
+  .composer textarea { min-height: 130px; font-size: 16px; } /* 16px stops iOS from zooming on focus */
+  .composer-bar { flex-wrap: wrap; padding: 10px 12px 12px; }
+  .composer-bar .cost-hint { flex-basis: 100%; }
+  .composer-bar .btn { width: 100%; justify-content: center; }
+  .input, select.input, textarea.input { font-size: 16px; }
+  .editor-head { flex-wrap: wrap; gap: 6px; }
+  dialog { width: calc(100vw - 24px); max-width: none; max-height: calc(100dvh - 24px); }
+}
+@media (max-width: 560px) {
+  .file-info span:not(.role) { display: none; }
+  .editor-title { flex-basis: 100%; }
+  .editor-actions { margin-left: auto; }
+}
+/* tablets: file tree beside the editor, header on two lines */
+@media (min-width: 640px) and (max-width: 980px) {
+  .workspace { grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: minmax(480px, 64vh); }
+  .files { max-height: none; border-right: 1px solid var(--border); border-bottom: 0; }
+  .studio-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .studio-head .viewswitch { width: auto; grid-template-columns: repeat(3, auto); }
+  .studio-head .toolbar-actions { grid-column: 1 / -1; }
+  .studio-head .vs { padding: 0 14px; }
+}
+@media (max-width: 980px) {
+  /* wide analysis tables scroll inside their card instead of widening the page */
+  .an-table { display: block; overflow-x: auto; max-width: 100%; }
+  .an-table td, .an-table th { white-space: nowrap; }
+  .an-card { overflow: hidden; }
+}
+@media (max-width: 860px) {
+  .st-nav { scrollbar-width: none; }
+  .st-nav::-webkit-scrollbar { display: none; }
+  .st-nav { top: 58px; }
+  .st-nav a.active { box-shadow: none; background: rgb(var(--fg) / .08); }
+}
+@media (max-width: 560px) {
+  .st-card { padding: 18px; }
+  .st-card .btn.primary { width: 100%; justify-content: center; }
+}
+@media (min-width: 640px) and (max-width: 980px) {
+  .composer-steps { grid-template-columns: repeat(3, 1fr); }
+  #viewNew { padding: 40px 28px; }
+}
