@@ -131,3 +131,7 @@ td .err-txt { color: var(--err-text); }
   .live-dot::before { animation: none; }
   .meter i { transition: none; }
 }
+
+/* same surface language as the site and the studio */
+.card, .kpi, .side-quota { background-image: var(--sheen); box-shadow: var(--edge); }
+.kpi { border-radius: 14px; }
