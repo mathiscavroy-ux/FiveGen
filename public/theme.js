@@ -15,7 +15,7 @@
     { id: "sakura", name: "Sakura", mode: "light", swatch: ["#fdf6f8", "#ffffff", "#db2777"] },
     { id: "ocean", name: "Océan", mode: "light", swatch: ["#f3f7f9", "#ffffff", "#0e7490"] },
   ];
-  // Sun / moon target when no theme of the other mode was picked yet in this browser.
+  // Sun / moon target when there is no theme to go back to.
   const PAIRS = { dark: "light", light: "dark", oled: "light", midnight: "ocean", ocean: "midnight", neon: "sakura", sakura: "neon", forest: "light" };
   const root = document.documentElement;
   const media = window.matchMedia("(prefers-color-scheme: light)");
@@ -47,52 +47,52 @@
     if (!find(current).mode) apply(current);
   });
 
-  // Applies and remembers a theme in this browser. Each mode remembers its theme so the
-  // sun / moon button comes back to it; a deliberate choice (settings, account) resets the
-  // other mode to the matching theme, so old picks never come back by surprise.
-  function set(id, { animate = true, toggled = false } = {}) {
-    const theme = find(id);
-    if (!theme) return;
-    if (animate) root.classList.add("theme-switching");
-    apply(id);
+  const store = (key, value) => {
     try {
-      localStorage.setItem(KEY, id);
-      if (theme.mode) {
-        localStorage.setItem(`${KEY}.${theme.mode}`, id);
-        if (!toggled) {
-          const other = theme.mode === "dark" ? "light" : "dark";
-          const pair = find(PAIRS[id]);
-          localStorage.setItem(`${KEY}.${other}`, pair?.mode === other ? pair.id : other);
-        }
-      }
+      if (value) localStorage.setItem(key, value);
+      else localStorage.removeItem(key);
     } catch {
       // private browsing: the choice lasts for this page only
     }
+  };
+  // per-mode memory of an older version: it kept stale picks (Océan, Minuit) coming back
+  store(`${KEY}.dark`, null);
+  store(`${KEY}.light`, null);
+
+  // Applies and remembers a theme in this browser. "back" is the theme the sun / moon
+  // button left, to return to it; any other change forgets it.
+  function set(id, { animate = true, back = null } = {}) {
+    if (!find(id)) return;
+    if (animate) root.classList.add("theme-switching");
+    apply(id);
+    store(KEY, id);
+    store(`${KEY}.back`, back);
     if (animate) setTimeout(() => root.classList.remove("theme-switching"), 300);
   }
 
   let chosenHere = false;
 
   // A choice made by the visitor, saved on the account when signed in.
-  function choose(id, { toggled = false } = {}) {
+  function choose(id, { back = null } = {}) {
     chosenHere = true;
-    set(id, { toggled });
+    set(id, { back });
     window.dispatchEvent(new CustomEvent("fivegen:theme-chosen", { detail: current }));
     fetch("/api/me/prefs", { method: "PUT", headers: { "Content-Type": "application/json", "X-FiveGen": "1" }, body: JSON.stringify({ theme: current }) }).catch(() => {});
   }
 
-  // Switches mode without losing the theme: back to the theme of the other mode,
-  // otherwise the matching one (Minuit <-> Océan...).
+  // Switches mode without losing the theme: back to the theme it came from (Forêt ->
+  // Clair -> Forêt), otherwise the matching one (Braise <-> Clair, Minuit <-> Océan).
   function toggle() {
     const next = root.dataset.theme === "light" ? "dark" : "light";
-    let target = null;
+    let back = null;
     try {
-      target = find(localStorage.getItem(`${KEY}.${next}`))?.id;
+      back = localStorage.getItem(`${KEY}.back`);
     } catch {
       // private browsing: use the pair
     }
     const pair = find(PAIRS[current]);
-    choose(find(target)?.mode === next ? target : pair?.mode === next ? pair.id : next, { toggled: true });
+    const target = find(back)?.mode === next ? back : pair?.mode === next ? pair.id : next;
+    choose(target, { back: current });
   }
 
   window.FiveGenTheme = { list: THEMES, get: () => current, set, choose };
