@@ -1,8 +1,6 @@
 import { analyzeResource, fileRoles, lastTouched, ROLE_LABELS } from "./analysis.js";
 import { diffLines, hunks, diffFiles } from "./diff.js";
-
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => [...document.querySelectorAll(sel)];
+import { $, $$, api, toast, escapeHtml, plural, formatPrice, syncTheme } from "./common.js";
 
 const state = {
   options: null,
@@ -26,35 +24,6 @@ const state = {
 
 // ---------- helpers ----------
 
-const HEADERS = { "Content-Type": "application/json", "X-FiveGen": "1" };
-
-async function api(url, opts = {}) {
-  const res = await fetch(url, {
-    ...opts,
-    headers: { ...HEADERS, ...(opts.headers ?? {}) },
-    body: opts.body && typeof opts.body !== "string" ? JSON.stringify(opts.body) : opts.body,
-  });
-  if (res.status === 401) {
-    location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
-    throw new Error("Session expirée");
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || `Erreur ${res.status}`), { code: data.code });
-  return data;
-}
-
-function toast(message, kind = "") {
-  const el = document.createElement("div");
-  el.className = `toast ${kind}`;
-  el.textContent = message;
-  $("#toasts").append(el);
-  setTimeout(() => el.remove(), kind === "err" ? 8000 : 4000);
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-}
-
 function label(list, id) {
   return list?.find((x) => x.id === id)?.label ?? id;
 }
@@ -66,8 +35,6 @@ function timeAgo(iso) {
   if (s < 86400) return `il y a ${Math.round(s / 3600)} h`;
   return new Date(iso).toLocaleDateString("fr-FR");
 }
-
-const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
 
 // Small markdown renderer for install notes (headings, lists, code, bold, inline code).
 function renderMarkdown(md) {
@@ -189,9 +156,6 @@ function openRedeem(highlightPack) {
   else if (!state.packs?.enabled) $("#redeemCode").focus();
 }
 
-const formatPrice = (cents, currency) =>
-  (cents / 100).toLocaleString("fr-FR", { style: "currency", currency: currency.toUpperCase() });
-
 function renderPacks() {
   const info = state.packs;
   $("#buySection").classList.toggle("hidden", !info?.enabled);
@@ -270,44 +234,10 @@ async function handlePaymentReturn() {
   }
 }
 
-// ---------- account page ----------
+// ---------- account ----------
 
-const KIND_LABELS = { generate: "Génération", refine: "Modification", fix: "Correction" };
-const STATUS_LABELS = { ok: "Réussi", error: "Échec (crédit rendu)", cancelled: "Annulé (crédit rendu)" };
-const shortDate = (iso) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
-
-async function openAccount() {
-  $("#accountMenu").classList.add("hidden");
-  const me = state.me;
-  $("#accEmail").value = me.email;
-  $("#accEmailStatus").textContent = me.emailVerified ? "Adresse confirmée ✓" : "Adresse non confirmée : regarde tes e-mails (et les spams).";
-  $("#accEmailStatus").classList.toggle("ok", me.emailVerified);
-  for (const id of ["#accEmailPass", "#accPassCurrent", "#accPassNext", "#accDeletePass"]) $(id).value = "";
-  $("#accPayments").innerHTML = '<tr><td colspan="4" class="muted">Chargement…</td></tr>';
-  $("#accGenerations").innerHTML = '<tr><td colspan="5" class="muted">Chargement…</td></tr>';
-  $("#accountDialog").showModal();
-  try {
-    const { payments, generations } = await api("/api/me/activity");
-    $("#accPayments").innerHTML = payments.length
-      ? payments
-          .map((p) => `<tr><td>${shortDate(p.created_at)}</td><td>${escapeHtml(p.pack_id)}</td><td>+${p.credits}</td><td>${formatPrice(p.amount, p.currency)}</td></tr>`)
-          .join("")
-      : '<tr><td colspan="4" class="muted">Aucun achat pour l\'instant.</td></tr>';
-    $("#accGenerations").innerHTML = generations.length
-      ? generations
-          .map(
-            (g) => `<tr><td>${shortDate(g.created_at)}</td><td>${escapeHtml(g.project_id.replace(/-[a-z0-9]+$/, ""))}</td><td>${KIND_LABELS[g.kind] ?? escapeHtml(g.kind)}</td><td>${g.cost ? `−${g.cost}` : "offert"}</td><td>${STATUS_LABELS[g.status] ?? escapeHtml(g.status)}</td></tr>`,
-          )
-          .join("")
-      : '<tr><td colspan="5" class="muted">Aucune génération pour l\'instant.</td></tr>';
-  } catch (err) {
-    toast(err.message, "err");
-  }
-}
-
+// E-mail, password, theme, purchases and account deletion live on /parametres.
 function bindAccount() {
-  $("#btnAccountPage").onclick = openAccount;
-  $("#btnCloseAccount").onclick = () => $("#accountDialog").close();
   $("#btnResendVerify").onclick = async () => {
     try {
       await api("/api/me/resend-verification", { method: "POST" });
@@ -316,39 +246,6 @@ function bindAccount() {
       toast(err.message, "err");
     }
   };
-  $("#emailForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    try {
-      state.me = { ...state.me, ...(await api("/api/me/email", { method: "POST", body: { email: $("#accEmail").value.trim(), password: $("#accEmailPass").value } })) };
-      renderAccount();
-      $("#accEmailPass").value = "";
-      $("#accEmailStatus").textContent = state.me.emailVerified ? "Adresse confirmée ✓" : "Nouvelle adresse enregistrée : clique sur le lien reçu pour la confirmer.";
-      toast("Adresse mise à jour", "ok");
-    } catch (err) {
-      toast(err.message, "err");
-    }
-  });
-  $("#passForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    try {
-      await api("/api/me/password", { method: "POST", body: { current: $("#accPassCurrent").value, next: $("#accPassNext").value } });
-      $("#accPassCurrent").value = "";
-      $("#accPassNext").value = "";
-      toast("Mot de passe changé ✓", "ok");
-    } catch (err) {
-      toast(err.message, "err");
-    }
-  });
-  $("#deleteAccountForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!confirm("Supprimer définitivement ton compte et tous tes scripts ? Cette action est irréversible.")) return;
-    try {
-      await api("/api/me", { method: "DELETE", body: { password: $("#accDeletePass").value } });
-      location.href = "/";
-    } catch (err) {
-      toast(err.message, "err");
-    }
-  });
 }
 
 async function onRedeem(e) {
@@ -393,10 +290,14 @@ const SERVER_KEY = "fivegen.server";
 
 function loadServerProfile() {
   try {
-    return JSON.parse(localStorage.getItem(SERVER_KEY)) ?? null;
+    const saved = JSON.parse(localStorage.getItem(SERVER_KEY));
+    if (saved) return saved;
   } catch {
-    return null;
+    // unreadable: fall back to the account defaults
   }
+  // defaults chosen on the settings page, for a browser that never generated anything
+  const { framework, language } = state.me?.prefs ?? {};
+  return framework || language ? { framework, language } : null;
 }
 
 function saveServerProfile(profile) {
@@ -2462,6 +2363,7 @@ async function boot() {
     if (e.message !== "Session expirée") toast(`Serveur injoignable : ${e.message}`, "err");
     return;
   }
+  syncTheme(state.me);
   renderForm();
   renderAccount();
   renderPacks();

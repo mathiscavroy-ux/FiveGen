@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { promisify } from "node:util";
 import { config } from "./config.js";
-import { createSession, userFromSession, deleteSession, setAdmin } from "./db.js";
+import { createSession, userFromSession, deleteSession, deleteOtherSessions, countOtherSessions, setAdmin } from "./db.js";
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = "fg_session";
@@ -49,6 +49,10 @@ export function endSession(req, res) {
   if (token) deleteSession(token);
   res.clearCookie(COOKIE, { path: "/" });
 }
+
+// "Log out my other devices", and after a password change.
+export const endOtherSessions = (req, userId) => deleteOtherSessions(userId, readCookie(req, COOKIE) ?? "");
+export const otherSessionCount = (req, userId) => countOtherSessions(userId, readCookie(req, COOKIE) ?? "");
 
 // Attaches req.user when a valid session cookie is present.
 export function sessionMiddleware(req, _res, next) {
@@ -101,9 +105,20 @@ export function rateLimit({ windowMs, max, key = (req) => req.ip, message }) {
   };
 }
 
+export function userPrefs(user) {
+  try {
+    const prefs = JSON.parse(user.prefs ?? "{}");
+    return prefs && typeof prefs === "object" && !Array.isArray(prefs) ? prefs : {};
+  } catch {
+    return {};
+  }
+}
+
 export function publicUser(user) {
   return {
     email: user.email,
+    createdAt: user.created_at,
+    prefs: userPrefs(user),
     credits: user.credits,
     isAdmin: Boolean(user.is_admin),
     emailVerified: Boolean(user.email_verified),

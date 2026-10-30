@@ -1,5 +1,6 @@
 /* FiveGen design tokens, shared by every page. Dark is the default; light applies when
-   <html data-theme="light"> (set by theme.js from the saved choice or the system).
+   <html data-theme="light"> (set by theme.js from the saved choice or the system), and
+   <html data-palette="…"> swaps in one of the extra themes below.
    Code windows on the landing page (.mock, .term) stay dark in both themes. */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
 
@@ -25,7 +26,9 @@
   --accent-2: #ff9a4d;
   --accent-3: #ff3d2e;
   --accent-text: #ffb37a;
-  --accent-soft: rgb(255 106 26 / 0.12);
+  --accent-rgb: 255 106 26;
+  --accent-3-rgb: 255 61 46;
+  --accent-soft: rgb(var(--accent-rgb) / 0.12);
   --on-accent: #160b04;
   --grad: linear-gradient(135deg, #ff9a4d 0%, #ff6a1a 45%, #ff3d2e 100%);
   --ok: #34d399;
@@ -63,7 +66,9 @@
   --accent-2: #c2410c;
   --accent-3: #e2361f;
   --accent-text: #c2410c;
-  --accent-soft: rgb(244 96 15 / 0.1);
+  --accent-rgb: 244 96 15;
+  --accent-3-rgb: 226 54 31;
+  --accent-soft: rgb(var(--accent-rgb) / 0.1);
   --on-accent: #1a0c03;
   --grad: linear-gradient(135deg, #ff8a3d 0%, #f4600f 50%, #e2361f 100%);
   --ok: #047857;
@@ -79,6 +84,60 @@
   --backdrop: rgb(16 19 26 / 0.35);
   --shadow: 0 1px 2px rgb(16 19 26 / 0.06), 0 16px 40px -18px rgb(16 19 26 / 0.18);
   --shadow-sm: 0 1px 2px rgb(16 19 26 / 0.08);
+}
+
+/* Extra themes, picked in the settings page. Each one sits on a base mode (data-theme
+   dark or light, which mode-specific styles and the code editor follow) and only
+   changes the colours. Ids are listed in theme.js and server/index.js. */
+[data-palette="oled"] {
+  --bg: #000000; --bg-2: #050506; --bg-rgb: 0 0 0;
+  --surface: #0b0b0d; --surface-2: #111114; --surface-3: #18181c; --field: #070708;
+  --code-bg: #050506; --code-bg-2: #000000;
+}
+[data-palette="midnight"] {
+  --bg: #070b14; --bg-2: #0a101e; --bg-rgb: 7 11 20;
+  --surface: #0e1525; --surface-2: #131c30; --surface-3: #1a253d; --field: #0b1220;
+  --text: #e8edf7; --text-2: #aab4c8; --muted: #75809a; --faint: #45506a;
+  --accent: #4f8cff; --accent-2: #7aa8ff; --accent-3: #6a5cff; --accent-text: #9cc0ff;
+  --accent-rgb: 79 140 255; --accent-3-rgb: 106 92 255; --on-accent: #050b1a;
+  --grad: linear-gradient(135deg, #7aa8ff 0%, #4f8cff 45%, #6a5cff 100%);
+  --code-bg: #0a0f1c; --code-bg-2: #070b14;
+}
+[data-palette="neon"] {
+  --bg: #0a0612; --bg-2: #0e0919; --bg-rgb: 10 6 18;
+  --surface: #140d22; --surface-2: #1a122c; --surface-3: #231839; --field: #100a1c;
+  --text: #f1ecfa; --text-2: #bdb2d4; --muted: #857a9e; --faint: #4f4566;
+  --accent: #d946ef; --accent-2: #22d3ee; --accent-3: #a855f7; --accent-text: #f0abfc;
+  --accent-rgb: 217 70 239; --accent-3-rgb: 168 85 247; --on-accent: #12021a;
+  --grad: linear-gradient(135deg, #22d3ee 0%, #a855f7 50%, #d946ef 100%);
+  --code-bg: #0d0818; --code-bg-2: #0a0612;
+}
+[data-palette="forest"] {
+  --bg: #070d0a; --bg-2: #0a120e; --bg-rgb: 7 13 10;
+  --surface: #0f1a14; --surface-2: #14221a; --surface-3: #1b2c22; --field: #0c1610;
+  --text: #e9f2ec; --text-2: #adc0b4; --muted: #76897d; --faint: #46564c;
+  --accent: #22c55e; --accent-2: #4ade80; --accent-3: #0d9488; --accent-text: #86efac;
+  --accent-rgb: 34 197 94; --accent-3-rgb: 13 148 136; --on-accent: #03140a;
+  --grad: linear-gradient(135deg, #86efac 0%, #22c55e 45%, #0d9488 100%);
+  --code-bg: #0a130e; --code-bg-2: #070d0a;
+}
+[data-palette="sakura"] {
+  --bg: #fdf6f8; --bg-2: #f9ecf1; --bg-rgb: 253 246 248;
+  --surface: #ffffff; --surface-2: #fdf3f6; --surface-3: #f6e4eb; --field: #ffffff;
+  --fg: 40 18 28; --text: #24141b; --text-2: #4d3a43; --muted: #7c6670; --faint: #c4adb7;
+  --accent: #db2777; --accent-2: #be185d; --accent-3: #e11d48; --accent-text: #be185d;
+  --accent-rgb: 219 39 119; --accent-3-rgb: 225 29 72; --on-accent: #ffffff;
+  --grad: linear-gradient(135deg, #ec4899 0%, #db2777 50%, #be185d 100%);
+  --code-bg: #fffafc; --code-bg-2: #fdf6f8;
+}
+[data-palette="ocean"] {
+  --bg: #f3f7f9; --bg-2: #e7eff3; --bg-rgb: 243 247 249;
+  --surface: #ffffff; --surface-2: #f2f7f9; --surface-3: #e2ecf0; --field: #ffffff;
+  --fg: 12 26 32; --text: #0e1a1f; --text-2: #33464e; --muted: #5b7079; --faint: #a0b3ba;
+  --accent: #0e7490; --accent-2: #155e75; --accent-3: #0f766e; --accent-text: #0e7490;
+  --accent-rgb: 14 116 144; --accent-3-rgb: 15 118 110; --on-accent: #ffffff;
+  --grad: linear-gradient(135deg, #0891b2 0%, #0e7490 50%, #0f766e 100%);
+  --code-bg: #f9fbfc; --code-bg-2: #f3f7f9;
 }
 
 :root {

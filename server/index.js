@@ -26,6 +26,9 @@ import {
   csrfGuard,
   rateLimit,
   publicUser,
+  userPrefs,
+  endOtherSessions,
+  otherSessionCount,
 } from "./auth.js";
 import {
   createProject,
@@ -466,7 +469,33 @@ app.post("/api/me/password", requireUser, authLimiter, async (req, res) => {
   if (!(await verifyPassword(String(current ?? ""), req.user.pass_hash))) return res.status(400).json({ error: "Mot de passe actuel incorrect." });
   if (String(next ?? "").length < 8) return res.status(400).json({ error: "Le nouveau mot de passe doit faire au moins 8 caractères." });
   db.setPassword(req.user.id, await hashPassword(String(next)));
+  // A stolen session must not survive a password change; this browser stays logged in.
+  endOtherSessions(req, req.user.id);
   res.json({ ok: true });
+});
+
+app.post("/api/me/logout-others", requireUser, (req, res) => res.json({ ok: true, closed: endOtherSessions(req, req.user.id) }));
+
+// Same ids as public/theme.js.
+const THEMES = new Set(["system", "dark", "light", "oled", "midnight", "neon", "forest", "sakura", "ocean"]);
+
+// Settings page choices. null clears a default; missing keys are left as they are.
+app.put("/api/me/prefs", requireUser, (req, res) => {
+  const body = req.body ?? {};
+  const prefs = userPrefs(req.user);
+  const lists = { framework: CATALOG.frameworks, language: CATALOG.languages };
+  if ("theme" in body) {
+    if (!THEMES.has(body.theme)) return res.status(400).json({ error: "Thème inconnu." });
+    prefs.theme = body.theme;
+  }
+  for (const [key, list] of Object.entries(lists)) {
+    if (!(key in body)) continue;
+    if (body[key] === null) delete prefs[key];
+    else if (list.some((x) => x.id === body[key])) prefs[key] = body[key];
+    else return res.status(400).json({ error: "Valeur inconnue." });
+  }
+  db.setPrefs(req.user.id, prefs);
+  res.json(publicUser(db.getUser(req.user.id)));
 });
 
 app.post("/api/me/email", requireUser, authLimiter, async (req, res) => {
@@ -484,7 +513,11 @@ app.post("/api/me/email", requireUser, authLimiter, async (req, res) => {
 
 // Purchases and credit use, for the account page.
 app.get("/api/me/activity", requireUser, (req, res) => {
-  res.json({ payments: db.listUserPayments(req.user.id), generations: db.listUserGenerations(req.user.id) });
+  res.json({
+    payments: db.listUserPayments(req.user.id),
+    generations: db.listUserGenerations(req.user.id),
+    otherSessions: otherSessionCount(req, req.user.id),
+  });
 });
 
 // GDPR erasure: account, sessions, servers and every project file. Payment records stay

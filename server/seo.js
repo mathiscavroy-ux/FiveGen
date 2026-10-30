@@ -155,7 +155,7 @@ function indexHtml(req) {
 
 export function mountSeo(app) {
   app.get("/robots.txt", (req, res) => {
-    res.type("text/plain").send(`User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /admin\nDisallow: /api/\nDisallow: /reset\nDisallow: /login\n\nSitemap: ${base(req)}/sitemap.xml\n`);
+    res.type("text/plain").send(`User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /parametres\nDisallow: /admin\nDisallow: /api/\nDisallow: /reset\nDisallow: /login\n\nSitemap: ${base(req)}/sitemap.xml\n`);
   });
 
   app.get("/sitemap.xml", (req, res) => {

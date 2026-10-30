@@ -68,6 +68,8 @@ if (!userColumns.has("free_granted")) {
 }
 // 1 when the free credits were actually given (not refused by the per-address limit).
 if (!userColumns.has("credits_from_free")) db.exec("ALTER TABLE users ADD COLUMN credits_from_free INTEGER NOT NULL DEFAULT 0");
+// Settings page choices (theme, default framework and language), as JSON.
+if (!userColumns.has("prefs")) db.exec("ALTER TABLE users ADD COLUMN prefs TEXT");
 db.exec(`
   CREATE TABLE IF NOT EXISTS email_tokens (
     token_hash TEXT PRIMARY KEY,
@@ -154,6 +156,7 @@ export const getUser = (id) => db.prepare("SELECT * FROM users WHERE id = ?").ge
 export const getUserByEmail = (email) => db.prepare("SELECT * FROM users WHERE email = ?").get(email);
 export const setAdmin = (id) => db.prepare("UPDATE users SET is_admin = 1 WHERE id = ?").run(id);
 export const setPassword = (id, hash) => db.prepare("UPDATE users SET pass_hash = ? WHERE id = ?").run(hash, id);
+export const setPrefs = (id, prefs) => db.prepare("UPDATE users SET prefs = ? WHERE id = ?").run(JSON.stringify(prefs), id);
 
 // Atomic: never lets credits go negative. Returns true when charged.
 export function chargeCredits(userId, amount) {
@@ -197,6 +200,11 @@ export function userFromSession(token) {
 }
 
 export const deleteSession = (token) => db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(hashToken(token));
+// Every session of the account except the one with this token. Returns how many closed.
+export const deleteOtherSessions = (userId, token) =>
+  Number(db.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?").run(userId, hashToken(String(token))).changes);
+export const countOtherSessions = (userId, token) =>
+  db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ? AND token_hash != ? AND expires_at > ?").get(userId, hashToken(String(token)), now()).n;
 export const purgeSessions = () => db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(now());
 
 // ---------- activation codes ----------

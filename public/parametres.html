@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="/theme.css" />
+  <script src="/theme.js"></script>
+  <title>Paramètres · FiveGen</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23ff7a1a'/><path d='M18 46V18h28v7H26v6h16v7H26v8z' fill='%23111'/></svg>" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body class="settings-page">
+  <header class="topbar">
+    <a class="brand" href="/app">
+      <span class="logo">F</span>
+      <div>
+        <strong>FiveGen</strong>
+        <small>Paramètres du compte</small>
+      </div>
+    </a>
+    <div class="topbar-actions">
+      <span class="pill credits"><span id="creditCount">…</span> crédits</span>
+      <button type="button" class="theme-toggle" data-theme-toggle></button>
+      <a class="btn ghost" href="/app"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5l-7 7 7 7"/></svg><span class="hide-sm">Retour au studio</span></a>
+    </div>
+  </header>
+
+  <div class="st-shell">
+    <nav class="st-nav" aria-label="Sections">
+      <a href="#profil" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Profil</a>
+      <a href="#securite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Sécurité</a>
+      <a href="#apparence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A5.6 5.6 0 0 0 22 9.8C22 5.5 17.5 2 12 2z"/></svg>Apparence</a>
+      <a href="#studio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Studio</a>
+      <a href="#achats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20"/></svg>Crédits et achats</a>
+      <a href="#compte" class="danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Supprimer le compte</a>
+      <button type="button" id="btnLogout" class="st-logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Se déconnecter</button>
+    </nav>
+
+    <main class="st-main">
+      <!-- Profile -->
+      <section id="profil" class="st-section">
+        <div class="st-hero">
+          <div id="avatar" class="st-avatar">?</div>
+          <div class="st-hero-text">
+            <h1 id="heroEmail">…</h1>
+            <p class="muted"><span id="heroSince"></span> <span id="heroBadge" class="st-badge"></span></p>
+          </div>
+          <div class="st-balance">
+            <span class="muted">Solde</span>
+            <b id="heroCredits">…</b>
+            <a class="btn primary small" href="/app?buy">Recharger</a>
+          </div>
+        </div>
+
+        <form id="emailForm" class="st-card">
+          <div class="st-card-head">
+            <h2>Adresse e-mail</h2>
+            <p class="muted" id="emailStatus"></p>
+          </div>
+          <div class="st-fields">
+            <label class="field"><span>Nouvelle adresse</span><input id="accEmail" class="input" type="email" autocomplete="email" required /></label>
+            <label class="field"><span>Mot de passe actuel</span><input id="accEmailPass" class="input" type="password" autocomplete="current-password" required /></label>
+          </div>
+          <div class="st-actions">
+            <button type="button" id="btnResendVerify" class="btn ghost hidden">Renvoyer l&#39;e-mail de confirmation</button>
+            <span class="spacer"></span>
+            <button class="btn primary">Changer d&#39;adresse</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Security -->
+      <section id="securite" class="st-section">
+        <h2 class="st-title">Sécurité</h2>
+        <form id="passForm" class="st-card">
+          <div class="st-card-head">
+            <h2>Mot de passe</h2>
+            <p class="muted">Changer le mot de passe déconnecte tes autres appareils.</p>
+          </div>
+          <div class="st-fields">
+            <label class="field"><span>Mot de passe actuel</span><input id="accPassCurrent" class="input" type="password" autocomplete="current-password" required /></label>
+            <label class="field"><span>Nouveau mot de passe</span><input id="accPassNext" class="input" type="password" autocomplete="new-password" minlength="8" placeholder="8 caractères minimum" required /></label>
+          </div>
+          <div class="st-actions"><span class="spacer"></span><button class="btn primary">Changer le mot de passe</button></div>
+        </form>
+        <div class="st-card st-row">
+          <div class="st-card-head">
+            <h2>Appareils connectés</h2>
+            <p class="muted" id="sessionsLine">…</p>
+          </div>
+          <button type="button" id="btnLogoutOthers" class="btn">Déconnecter les autres appareils</button>
+        </div>
+      </section>
+
+      <!-- Appearance -->
+      <section id="apparence" class="st-section">
+        <h2 class="st-title">Apparence</h2>
+        <div class="st-card">
+          <div class="st-card-head">
+            <h2>Thème</h2>
+            <p class="muted">S&#39;applique au site et au studio, et suit ton compte sur tous tes appareils.</p>
+          </div>
+          <div id="themeGrid" class="st-themes" role="radiogroup" aria-label="Thème"></div>
+        </div>
+      </section>
+
+      <!-- Studio defaults -->
+      <section id="studio" class="st-section">
+        <h2 class="st-title">Studio</h2>
+        <div class="st-card">
+          <div class="st-card-head">
+            <h2>Valeurs par défaut</h2>
+            <p class="muted">Pré-remplies pour chaque nouveau script. Tu peux toujours les changer au moment de créer.</p>
+          </div>
+          <div class="st-fields">
+            <label class="field"><span>Framework de ton serveur</span><select id="prefFramework" class="input"></select></label>
+            <label class="field"><span>Langue des textes en jeu</span><select id="prefLanguage" class="input"></select></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Credits and purchases -->
+      <section id="achats" class="st-section">
+        <h2 class="st-title">Crédits et achats</h2>
+        <div class="st-card">
+          <div class="st-card-head"><h2>Mes achats</h2></div>
+          <div class="st-table"><table><thead><tr><th>Date</th><th>Pack</th><th>Crédits</th><th>Montant</th></tr></thead><tbody id="accPayments"></tbody></table></div>
+        </div>
+        <div class="st-card">
+          <div class="st-card-head"><h2>Utilisation des crédits</h2></div>
+          <div class="st-table"><table><thead><tr><th>Date</th><th>Script</th><th>Action</th><th>Crédits</th><th>Statut</th></tr></thead><tbody id="accGenerations"></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- Delete -->
+      <section id="compte" class="st-section">
+        <h2 class="st-title">Supprimer le compte</h2>
+        <form id="deleteAccountForm" class="st-card st-danger">
+          <div class="st-card-head">
+            <h2>Suppression définitive</h2>
+            <p class="muted">Ton compte, tes scripts, leurs versions et tes serveurs connectés sont supprimés définitivement. Les crédits restants sont perdus. Les justificatifs de paiement sont conservés de façon anonyme (obligation comptable).</p>
+          </div>
+          <div class="st-fields one">
+            <label class="field"><span>Mot de passe pour confirmer</span><input id="accDeletePass" class="input" type="password" autocomplete="current-password" required /></label>
+          </div>
+          <div class="st-actions"><span class="spacer"></span><button class="btn danger">Supprimer mon compte</button></div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+  <script src="parametres.js" type="module"></script>
+</body>
+</html>
