@@ -38,8 +38,21 @@
     if (theme.id !== mode && theme.mode) root.dataset.palette = theme.id;
     else delete root.dataset.palette;
     current = theme.id;
+    tintBrowser();
     window.dispatchEvent(new CustomEvent("fivegen:theme", { detail: mode }));
   };
+
+  // Mobile browsers colour their status bar from theme-color: keep it on the page background.
+  function tintBrowser() {
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "theme-color";
+      document.head.append(meta);
+    }
+    const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
+    if (bg) meta.content = bg;
+  }
 
   apply(current);
 

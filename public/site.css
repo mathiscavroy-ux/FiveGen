@@ -35,7 +35,7 @@ code { font-family: var(--mono); font-size: 0.86em; background: var(--surface-2)
 }
 
 /* ---------- nav ---------- */
-.nav { position: sticky; top: 0; z-index: 30; background: transparent; border-bottom: 1px solid transparent; transition: background 0.3s, border-color 0.3s, backdrop-filter 0.3s; }
+.nav { position: sticky; top: 0; z-index: 30; background: var(--bg); border-bottom: 1px solid transparent; transition: background 0.3s, border-color 0.3s, backdrop-filter 0.3s; }
 .nav.scrolled, .nav:not(.l-nav) { background: rgb(var(--bg-rgb) / 0.9); backdrop-filter: saturate(170%) blur(16px); -webkit-backdrop-filter: saturate(170%) blur(16px); border-bottom-color: var(--line); }
 .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 20px; }
 .nav-links { display: flex; align-items: center; gap: 2px; }

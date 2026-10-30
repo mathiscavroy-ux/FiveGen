@@ -166,7 +166,7 @@
    Pages cross-fade into each other (View Transitions, browsers that support it), anchor
    links scroll smoothly below the sticky bar. With "reduce motion" set, only fades remain
    (nothing slides or scrolls by itself). */
-html { scroll-padding-top: 84px; }
+html { scroll-padding-top: 84px; background: var(--bg); } /* iOS Safari tints its bars from the page background */
 @view-transition { navigation: auto; }
 ::view-transition-old(root) { animation: fg-page-out 0.16s ease-in both; }
 ::view-transition-new(root) { animation: fg-fade 0.26s ease both; }
