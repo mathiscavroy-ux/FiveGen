@@ -76,3 +76,11 @@ test("an unknown pack is refused", () => {
   const { payload, header } = signedEvent(session({ id: "cs_test_5", metadata: { userId: String(userId), packId: "mega" } }));
   assert.throws(() => payments.handleWebhook(payload, header), /métadonnées/);
 });
+
+test("a payment for an account deleted meanwhile is still recorded", () => {
+  const gone = db.createUser("gone@test.local", "x", 0, false).id;
+  db.deleteUser(gone);
+  const { payload, header } = signedEvent(session({ id: "cs_test_gone", metadata: { userId: String(gone), packId: "pro" } }));
+  assert.match(payments.handleWebhook(payload, header), /\+\d+ crédits/);
+  assert.ok(db.listPayments().some((p) => p.session_id === "cs_test_gone" && p.email === null));
+});

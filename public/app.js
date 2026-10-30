@@ -1,6 +1,6 @@
 import { analyzeResource, fileRoles, lastTouched, ROLE_LABELS } from "./analysis.js";
 import { diffLines, hunks, diffFiles } from "./diff.js";
-import { $, $$, api, toast, escapeHtml, plural, formatPrice, syncTheme } from "./common.js";
+import { $, $$, HEADERS, api, toast, escapeHtml, plural, formatPrice, syncTheme } from "./common.js";
 
 const state = {
   options: null,

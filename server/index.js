@@ -570,7 +570,15 @@ app.get("/api/projects", requireUser, (req, res) => res.json(listProjects(req.us
 
 app.get("/api/projects/:id", requireUser, (req, res) => res.json(getProject(req.user.id, req.params.id)));
 
+// The project a generation of this account is writing to right now, if any.
+function busyProject(userId) {
+  const job = jobs.get(userId);
+  return job && !job.done ? job.projectId : null;
+}
+const BUSY = "Une génération est en cours sur ce script : attends qu'elle se termine ou arrête-la.";
+
 app.delete("/api/projects/:id", requireUser, (req, res) => {
+  if (busyProject(req.user.id) === req.params.id) return res.status(409).json({ error: BUSY });
   deleteProject(req.user.id, req.params.id);
   res.json({ ok: true });
 });
@@ -660,9 +668,10 @@ app.post("/api/projects/:id/fix", requireUser, async (req, res) => {
     problems.push({ ...locateRuntimeError(e.message, project.name), message: `Erreur en jeu (console du serveur, ${e.count}×) : ${e.message}`, level: "error" });
   }
   if (!problems.length) return res.status(400).json({ error: "Aucun problème à corriger." });
-  if (runtime.length) clearRuntimeErrors(req.user.id, project.id);
   const cost = config.cost.fix;
   if (!charge(req, res, cost)) return;
+  // only once the fix really starts: a refused one keeps the errors for the next try
+  if (runtime.length) clearRuntimeErrors(req.user.id, project.id);
   await streamPipeline(res, {
     userId: req.user.id,
     projectId: project.id,
@@ -677,6 +686,7 @@ app.put("/api/projects/:id/files", requireUser, async (req, res) => {
   const { path: filePath, content } = req.body ?? {};
   if (typeof filePath !== "string" || typeof content !== "string") return res.status(400).json({ error: "path et content requis" });
   if (Buffer.byteLength(content) > LIMITS.fileBytes) return res.status(400).json({ error: "Fichier trop volumineux." });
+  if (busyProject(req.user.id) === req.params.id) return res.status(409).json({ error: BUSY });
   writeFiles(req.user.id, req.params.id, [{ path: filePath, content }]);
   snapshot(req.user.id, req.params.id, { type: "edit", label: filePath });
   addHistory(req.user.id, req.params.id, { type: "edit", instruction: filePath });

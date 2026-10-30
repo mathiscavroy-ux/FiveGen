@@ -275,9 +275,12 @@ export function redeemCode(code, userId) {
 export function recordPayment({ sessionId, userId, packId, credits, amount, currency }) {
   db.exec("BEGIN IMMEDIATE");
   try {
+    // An account deleted between checkout and webhook: keep the payment (accounting) without
+    // the link, instead of a foreign key error that makes Stripe retry for days.
+    const owner = getUser(userId) ? userId : null;
     const inserted = db
       .prepare("INSERT OR IGNORE INTO payments (session_id, user_id, pack_id, credits, amount, currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(sessionId, userId, packId, credits, amount, currency, now()).changes === 1;
+      .run(sessionId, owner, packId, credits, amount, currency, now()).changes === 1;
     if (inserted) db.prepare("UPDATE users SET credits = credits + ? WHERE id = ?").run(credits, userId);
     db.exec("COMMIT");
     return inserted;

@@ -64,7 +64,8 @@
     let mode = params.has("register") ? "register" : "login";
     // Only same-site paths, never an absolute URL: avoids open redirects.
     const rawNext = params.get("next") || "";
-    const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/app";
+    // same site only: "//x" and "/\x" would send the visitor to another site
+    const next = /^\/(?![/\\])/.test(rawNext) ? rawNext : "/app";
 
     function render() {
       const forgot = mode === "forgot";

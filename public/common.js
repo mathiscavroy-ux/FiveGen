@@ -3,7 +3,7 @@
 export const $ = (sel) => document.querySelector(sel);
 export const $$ = (sel) => [...document.querySelectorAll(sel)];
 
-const HEADERS = { "Content-Type": "application/json", "X-FiveGen": "1" };
+export const HEADERS = { "Content-Type": "application/json", "X-FiveGen": "1" };
 
 export async function api(url, opts = {}) {
   const res = await fetch(url, {
