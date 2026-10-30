@@ -19,9 +19,6 @@ export function newWarnings(warnings, known) {
   return warnings.filter((w) => !seen.has(warningKey(w)));
 }
 
-// A change is worth a review when it touched code or brought a new warning.
-export const reviewsChange = (touched, warnings) => warnings.length > 0 || touched.some((p) => /\.(lua|js)$/i.test(p));
-
 // best: { validation, version, notes }. fixRound(round, errors) returns the same shape, or
 // null when the engine failed before changing anything. Returns the version kept.
 export async function fixRounds({ rounds, best, fixRound, rollback }) {

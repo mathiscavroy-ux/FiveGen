@@ -68,6 +68,39 @@ test("crashes that happen on a real server are errors, missing argument checks a
   assert.equal(result.ok, false);
 });
 
+test("a function that exists nowhere is found behind the first checks of a handler", async () => {
+  const files = [
+    manifest(),
+    { path: "config.lua", content: "Config = {}" },
+    {
+      path: "server/main.lua",
+      content: `RegisterNetEvent('demo:pay', function(amount)
+  local src = source
+  if type(amount) ~= 'number' then return end
+  local xPlayer = ESX.GetPlayerFromId(src)
+  if not xPlayer or xPlayer.job.name ~= 'mechanic' then return end
+  if xPlayer.getMoney() < 500 then return end
+  payMechanic(src, amount)
+end)
+`,
+    },
+  ];
+  const r = await run(files);
+  const found = r.errors.filter((e) => /payMechanic/.test(e.message));
+  assert.equal(found.length, 1, JSON.stringify(r.errors));
+  assert.match(found[0].message, /en appelant demo:pay avec des arguments valides/);
+});
+
+test("the second pass does not report what its made-up arguments cause", async () => {
+  const files = [
+    manifest(),
+    { path: "config.lua", content: "Config = {}" },
+    { path: "server/main.lua", content: "RegisterNetEvent('demo:go', function(data)\n  if type(data) ~= 'number' then return end\n  local x = data.field.value\nend)\n" },
+  ];
+  const r = await run(files);
+  assert.deepEqual(runtime(r.errors), []);
+});
+
 test("the dry run is skipped while the Lua does not compile", async () => {
   const files = [manifest(), { path: "config.lua", content: "Config = {}" }, { path: "server/main.lua", content: "if true then" }, { path: "server/other.lua", content: "" }, { path: "client/main.lua", content: "" }];
   const result = await run(files);

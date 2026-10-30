@@ -180,7 +180,7 @@ local function returnsFor(name)
 end
 
 local function makeXPlayer(src)
-  local job = { id = 1, name = "police", label = "Police", grade = 0, grade_name = "boss", grade_label = "Chef", grade_salary = 0, onDuty = true }
+  local job = { id = 1, name = JOB_NAME, label = "Job", grade = 0, grade_name = "boss", grade_label = "Chef", grade_salary = 0, onDuty = true }
   local x = { source = src or 1, playerId = src or 1, identifier = "char1:test", license = "license:test", name = "Test", group = "admin",
     job = job, job2 = job, accounts = {}, inventory = {}, loadout = {}, metadata = {} }
   for _, m in ipairs(ESX_PLAYER_METHODS) do x[m] = function(...) return returnsFor(m) end end
@@ -188,11 +188,11 @@ local function makeXPlayer(src)
   x.getIdentifier = function() return x.identifier end
   x.getName = function() return "Test" end
   x.getGroup = function() return "admin" end
-  x.getMoney = function() return 0 end
-  x.getAccount = function(name) return { name = name, money = 0, label = name } end
+  x.getMoney = function() return 100000 end
+  x.getAccount = function(name) return { name = name, money = 100000, label = name } end
   x.getAccounts = emptyTable
-  x.getInventoryItem = function(name) return { name = name, label = name, count = 0, weight = 0 } end
-  x.hasItem = function(name) return { name = name, count = 0 } end
+  x.getInventoryItem = function(name) return { name = name, label = name, count = 5, weight = 0 } end
+  x.hasItem = function(name) return { name = name, count = 5 } end
   x.getInventory = emptyTable
   x.getLoadout = emptyTable
   x.getCoords = function(asVector) return asVector and vector3(0, 0, 0) or { x = 0.0, y = 0.0, z = 0.0 } end
@@ -387,6 +387,16 @@ function RUN_FILE(path, text)
   resume("load", coroutine.create(chunk))
 end
 
+-- Handlers again with plausible arguments, to reach the code behind their first checks.
+-- Only a call to a function that exists nowhere counts: anything else can come from the made-up arguments.
+local function deep(kind, fn, ...)
+  if os.clock() - started > TIME_BUDGET then return end
+  local co = coroutine.create(fn)
+  debug.sethook(co, function() error(LOOP, 2) end, "", INSTRUCTION_LIMIT)
+  local ok, err = coroutine.resume(co, ...)
+  if not ok and tostring(err):find("global '", 1, true) then report(kind, err, debug.traceback(co)) end
+end
+
 function RUN_ALL()
   -- threads: a few iterations each, including threads they create
   for _ = 1, THREAD_TICKS do
@@ -412,6 +422,18 @@ function RUN_ALL()
     end
     source = nil
   end
+  for _, h in ipairs(handlers) do
+    local name = tostring(h.name)
+    if netEvents[name] and not FRAMEWORK_EVENT(name) then
+      source = 1
+      deep("deep:" .. name, h.fn, 1, 1, 1)
+      source = 1
+      deep("deep:" .. name, h.fn, "test", "test", "test")
+    end
+  end
+  for name, fn in pairs(nuiCallbacks) do deep("deep:" .. tostring(name), fn, {}, noop) end
+  for name, fn in pairs(commands) do deep("deep:" .. tostring(name), fn, 1, {}, "") end
+  source = nil
   return problems
 end
 `;
@@ -470,6 +492,8 @@ async function runSide(side, scripts, files, { includes, dependencies }, resourc
     g.set("ESX_PLAYER_METHODS", esxPlayerMethods);
     g.set("ESX_FUNCTIONS", esxFunctions);
     g.set("INCLUDES", Object.fromEntries([...includes].map((k) => [k, true])));
+    // the job the code expects, so the test player gets past its first check
+    g.set("JOB_NAME", /\bjob\.name\s*[=~]=\s*['"]([\w-]+)['"]/.exec(code)?.[1] ?? "police");
     // the prelude itself runs under a hook too: a bug in it must never hang the site
     await lua.doString(`debug.sethook(function() error("prelude: boucle infinie") end, "", 50000000)\n${PRELUDE}\ndebug.sethook()`);
     const runFile = g.get("RUN_FILE");
@@ -487,6 +511,7 @@ const kindLabel = (kind) =>
   : kind.startsWith("event:") ? `quand un client déclenche l'événement ${kind.slice(6)} sans arguments valides (valider les arguments côté serveur)`
   : kind.startsWith("callback:") ? `quand le callback ${kind.slice(9)} est appelé sans arguments valides`
   : kind.startsWith("item:") ? `à l'utilisation de l'item ${kind.slice(5)}`
+  : kind.startsWith("deep:") ? `en appelant ${kind.slice(5)} avec des arguments valides`
   : kind;
 
 /**

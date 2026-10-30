@@ -1,7 +1,7 @@
 // The automatic fix rounds keep the best version and never leave a script worse.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fixRounds, isBetter, newWarnings, reviewsChange } from "../server/autofix.js";
+import { fixRounds, isBetter, newWarnings } from "../server/autofix.js";
 import { buildReviewMessage } from "../server/prompts.js";
 
 const problem = (n) => ({ file: `server/f${n}.lua`, message: `Erreur à l'exécution ${n}`, level: "error" });
@@ -83,13 +83,6 @@ test("a warning is the same one when an edit only moved its line", () => {
   const other = { file: "client/main.lua", line: 4, message: "Item absent" };
   assert.deepEqual(newWarnings([moved, other], [old]), [other]);
   assert.deepEqual(newWarnings([old], []), [old]);
-});
-
-test("a change is reviewed when it touched code or brought a warning, not for a README", () => {
-  assert.equal(reviewsChange(["server/main.lua"], []), true);
-  assert.equal(reviewsChange(["html/app.js", "README.md"], []), true);
-  assert.equal(reviewsChange(["README.md", "html/style.css"], []), false);
-  assert.equal(reviewsChange(["README.md"], [{ file: "README.md", message: "x" }]), true);
 });
 
 test("a new resource is reviewed whole, a change only on what it touched", () => {

@@ -14,7 +14,8 @@ import { importResource } from "./importer.js";
 import { mountDiscord, discordEnabled } from "./discord.js";
 import { tierOf } from "./tiers.js";
 import { validateProjectFull } from "./validator.js";
-import { fixRounds, isBetter, newWarnings, reviewsChange } from "./autofix.js";
+import { fixRounds, isBetter, newWarnings } from "./autofix.js";
+import { repairResource } from "./repair.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory } from "./deploy.js";
 import { inventoryBlock, inventoryCounts } from "./inventory.js";
 import { mountSeo } from "./seo.js";
@@ -188,6 +189,13 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
       send("status", "Une partie de la modification n'a pas pu être appliquée : relance-la si besoin.");
     }
   }
+  const repairs = repairResource(getFiles(userId, projectId), spec);
+  if (repairs.length) {
+    writeFiles(userId, projectId, repairs, []);
+    for (const f of repairs) send("file", f);
+    touched.push(...repairs.map((f) => f.path));
+    send("status", `Réparé sans appel au moteur : ${[...new Set(repairs.map((f) => f.why))].join(", ")}.`);
+  }
   return [...new Set(touched)];
 }
 
@@ -278,10 +286,11 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     }
   };
 
-  // After a change, the warnings the script already had stay out of it: the client asked for something else.
+  // After a change, the warnings the script already had stay out of it: the client asked
+  // for something else. With no new warning there is nothing to review: that call is saved.
   const known = kind === "generate" ? [] : (project.validation?.warnings ?? []);
   const warnings = newWarnings(best.validation.warnings, known);
-  const reviewed = config.reviewPass && (kind === "generate" || (kind !== "fix" && config.reviewChanges && reviewsChange(touched, warnings)));
+  const reviewed = config.reviewPass && (kind === "generate" || (kind !== "fix" && config.reviewChanges && warnings.length > 0));
   if (reviewed) await reviewPass(warnings);
 
   const rounds = state.profile.autoFixRounds;
@@ -297,6 +306,8 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
           onEvent: send,
           signal,
           meta: { userId, projectId, purpose: "autofix" },
+          // a checked error is a small job: the cheaper model first, the main one as last try
+          model: round < rounds && (await modelAvailable(state.profile.review)) ? state.profile.review : undefined,
           profile: state.profile,
         });
       } catch (err) {

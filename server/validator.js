@@ -84,7 +84,7 @@ function checkJs(file, src) {
   }
 }
 
-function globToRegex(glob) {
+export function globToRegex(glob) {
   const re = glob
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
     .replace(/\*\*\//g, "(?:.*/)?")
@@ -95,7 +95,7 @@ function globToRegex(glob) {
 }
 
 // Every quoted string inside a manifest directive (single entry or { ... } table).
-function manifestEntries(manifest) {
+export function manifestEntries(manifest) {
   const entries = [];
   const code = manifest.replace(/--[^\n]*/g, "");
   const directive =
@@ -107,6 +107,8 @@ function manifestEntries(manifest) {
   }
   return entries;
 }
+
+export const usesOxLib = (lua) => /\blib\.(callback|notify|progressBar|progressCircle|registerContext|showContext|inputDialog|skillCheck|zones|points|addKeybind|locale|showTextUI)\b/.test(lua);
 
 function checkManifest(files) {
   const problems = [];
@@ -134,7 +136,7 @@ function checkManifest(files) {
   }
 
   const allLua = files.filter((f) => f.path.endsWith(".lua")).map((f) => f.content).join("\n");
-  const usesLib = /\blib\.(callback|notify|progressBar|progressCircle|registerContext|showContext|inputDialog|skillCheck|zones|points|addKeybind|locale|showTextUI)\b/.test(allLua);
+  const usesLib = usesOxLib(allLua);
   if (usesLib && !manifest.includes("@ox_lib/init.lua")) {
     problems.push({ file: "fxmanifest.lua", message: "Le code utilise ox_lib (lib.*) mais '@ox_lib/init.lua' n'est pas dans shared_scripts", level: "error" });
   }
@@ -262,7 +264,7 @@ const SERVER_ONLY = [
 ];
 
 // Blanks comments and string contents (keeping newlines) so names inside them never match.
-function codeOnly(src) {
+export function codeOnly(src) {
   return src
     .replace(/--\[(=*)\[[\s\S]*?\]\1\]/g, (m) => m.replace(/[^\n]/g, " "))
     // long strings ([[ SQL ]], [=[ … ]=]) keep their delimiters, their content is blanked
