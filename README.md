@@ -146,7 +146,9 @@ npm run api-catalog -- --natives <dossier des natives> --resources <serveur>/res
 
 ## Panneau d'administration
 
-`/admin` (compte `ADMIN_EMAIL`) : vue d'ensemble, moteur & quota, clients, générations, paiements, codes.
+`/admin` (compte `ADMIN_EMAIL`) : vue d'ensemble, moteur & quota, qualité, clients, générations, paiements, codes.
+
+La page **Qualité** montre, sur 30 jours, la part de scripts sans erreur du premier coup, les tours de correction, le coût d'un script corrigé et les erreurs les plus fréquentes. Elle ne garde que le type d'erreur, jamais le code ni les noms du script d'un client. Elle sert à choisir la prochaine réparation automatique (`server/repair.js`).
 
 - **Quota du moteur en direct** : fenêtres de dépense (5 h, 7 jours), tokens gratuits et portefeuille, lus sur `GET {ENGINE_BASE_URL}/usage` et rafraîchis toutes les 30 s. La clé reste côté serveur.
 - **Coût réel de chaque appel** : tokens d'entrée, de cache et de sortie, prix lus sur `GET {ENGINE_BASE_URL}/models` (table `engine_calls`). Le panneau en tire le coût par jour, par étape (génération, relecture, corrections…), par modèle et par client, le coût moyen d'un script et une marge estimée.

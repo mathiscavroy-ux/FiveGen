@@ -35,7 +35,7 @@ function repairInstall(files, spec) {
   const queries = [...tables, ...rows].map((s) => `  MySQL.query.await(${longString(s)})`);
   if (rows.length) queries.push("  local ESX = exports.es_extended:getSharedObject()", "  if ESX and ESX.RefreshJobs then ESX.RefreshJobs() end");
   const content = `${INSTALL_MARK} les tables et le job s'installent au démarrage, même si le SQL n'a pas été importé.\nMySQL.ready(function()\n${queries.join("\n")}\nend)\n`;
-  return existing?.content === content ? null : { path: INSTALL, content, why: "installation des tables et du job au démarrage" };
+  return existing?.content === content ? null : { path: INSTALL, content, kind: "install", why: "installation des tables et du job au démarrage" };
 }
 
 // Before the first script line: shared scripts run in order and libraries come first.
@@ -89,7 +89,7 @@ function repairManifest(files) {
     text = `${text.replace(/\n*$/, "\n")}files {\n${ui.map((p) => `  '${p}',`).join("\n")}\n}\n`;
     fixes.push("fichiers de l'interface");
   }
-  return fixes.length ? { path: manifest.path, content: text, why: `fxmanifest (${fixes.join(", ")})` } : null;
+  return fixes.length ? { path: manifest.path, content: text, kind: "manifest", why: `fxmanifest (${fixes.join(", ")})` } : null;
 }
 
 // ESX has no job.isboss (always nil, so the boss is refused); QBCore does.
@@ -97,7 +97,7 @@ function repairEsxBoss(files, spec) {
   if (spec?.framework !== "esx") return [];
   return files
     .filter((f) => f.path.endsWith(".lua") && /\.job\.isboss\b/.test(codeOnly(f.content)))
-    .map((f) => ({ path: f.path, content: f.content.replace(/([\w.]+)\.job\.isboss\b/g, "($1.job.grade_name == 'boss')"), why: `job.isboss dans ${f.path}` }));
+    .map((f) => ({ path: f.path, content: f.content.replace(/([\w.]+)\.job\.isboss\b/g, "($1.job.grade_name == 'boss')"), kind: "boss", why: `job.isboss dans ${f.path}` }));
 }
 
 // The job copied at login and never updated: refused menus until the player reconnects.
@@ -113,6 +113,7 @@ function repairJobRefresh(files, spec) {
   return {
     path: file.path,
     content: `${file.content.replace(/\n*$/, "\n")}\n-- job à jour après un /setjob ou une promotion\nRegisterNetEvent('${event}', function(job) PlayerData.job = job end)\n`,
+    kind: "job",
     why: `job du joueur mis à jour dans ${file.path}`,
   };
 }

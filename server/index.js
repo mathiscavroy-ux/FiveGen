@@ -16,6 +16,7 @@ import { tierOf } from "./tiers.js";
 import { validateProjectFull } from "./validator.js";
 import { fixRounds, isBetter, newWarnings } from "./autofix.js";
 import { repairResource } from "./repair.js";
+import { finishQuality, newQuality, noteCheck, summarizeQuality } from "./quality.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory } from "./deploy.js";
 import { inventoryBlock, inventoryCounts } from "./inventory.js";
 import { mountSeo } from "./seo.js";
@@ -194,6 +195,7 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
     writeFiles(userId, projectId, repairs, []);
     for (const f of repairs) send("file", f);
     touched.push(...repairs.map((f) => f.path));
+    for (const f of repairs) state.quality.repairs.add(f.kind);
     send("status", `Réparé sans appel au moteur : ${[...new Set(repairs.map((f) => f.why))].join(", ")}.`);
   }
   return [...new Set(touched)];
@@ -239,6 +241,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   const recheck = async () => {
     send("checking", {});
     const result = await checkProject(userId, projectId);
+    noteCheck(state.quality, result);
     updateMeta(userId, projectId, { validation: result });
     send("validation", result);
     return result;
@@ -246,6 +249,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   const kept = (validation, version) => ({ validation, version, notes: getProject(userId, projectId).notes });
   // Back to a version that checked better; the reason shows in the studio.
   const rollback = async (target, reason) => {
+    state.quality.rollbacks += 1;
     restoreVersion(userId, projectId, target.version);
     updateMeta(userId, projectId, { notes: target.notes });
     addHistory(userId, projectId, { type: "restore", instruction: `version ${target.version}`, files: [] });
@@ -299,6 +303,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     best,
     fixRound: async (round, errors) => {
       send("phase", { phase: "fix", label: `Correction automatique ${round}/${rounds}` });
+      state.quality.rounds += 1;
       let fix;
       try {
         fix = await runEngine({
@@ -357,13 +362,13 @@ async function streamPipeline(res, { userId, projectId, kind, instruction, userC
   const send = job.emit;
   const { signal } = job.controller;
   // engine profile of the account (free models, or Opus for subscribers), read once per run
-  const state = { produced: false, outputTokens: 0, profile: tierOf(db.getUser(userId)) };
+  const state = { produced: false, outputTokens: 0, profile: tierOf(db.getUser(userId)), quality: newQuality() };
   console.log(`[fivegen] ${LABELS[kind]} pour l'utilisateur ${userId} · offre ${state.profile.label} · modèle ${state.profile.models[0]}`);
   send("project", { id: projectId });
   send("credits", { credits: db.getUser(userId).credits });
   try {
     await runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state });
-    db.logGeneration({ userId, projectId, kind, cost, status: "ok", outputTokens: state.outputTokens });
+    db.logGeneration({ userId, projectId, kind, cost, status: "ok", outputTokens: state.outputTokens, quality: finishQuality(state.quality, getProject(userId, projectId).validation) });
   } catch (err) {
     const detail = err instanceof EngineError ? err.detail : err?.stack ?? String(err);
     if (detail !== "aborted") console.error(`[fivegen] ${kind} failed for user ${userId}:`, detail);
@@ -1019,6 +1024,8 @@ app.get("/api/admin/usage", requireUser, requireAdmin, async (req, res) => {
     revenue30d: db.stats().revenue30d,
   });
 });
+
+app.get("/api/admin/quality", requireUser, requireAdmin, (_req, res) => res.json(summarizeQuality(db.qualityRuns())));
 
 app.get("/api/admin/generations", requireUser, requireAdmin, (req, res) => {
   const status = ["ok", "error", "cancelled"].includes(req.query.status) ? req.query.status : undefined;

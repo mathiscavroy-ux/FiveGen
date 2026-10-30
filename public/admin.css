@@ -113,6 +113,7 @@ body.adm { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-heigh
 .btn.danger { color: var(--err-text); }
 td .ok-txt { color: var(--ok-text); }
 td .err-txt { color: var(--err-text); }
+.data td.family { white-space: normal; min-width: 280px; }
 
 @keyframes admPulse { 50% { opacity: .35; } }
 

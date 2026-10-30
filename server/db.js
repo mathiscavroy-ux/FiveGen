@@ -322,10 +322,13 @@ export function listPayments(limit = 200) {
 
 // ---------- generation log ----------
 
-export function logGeneration({ userId, projectId, kind, cost, status, error, outputTokens }) {
+// What the generation met on its way, as JSON (see quality.js).
+if (!db.prepare("PRAGMA table_info(generations)").all().some((c) => c.name === "quality")) db.exec("ALTER TABLE generations ADD COLUMN quality TEXT");
+
+export function logGeneration({ userId, projectId, kind, cost, status, error, outputTokens, quality }) {
   db.prepare(
-    "INSERT INTO generations (user_id, project_id, kind, cost, status, error, output_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-  ).run(userId, projectId, kind, cost, status, error ?? null, outputTokens ?? null, now());
+    "INSERT INTO generations (user_id, project_id, kind, cost, status, error, output_tokens, quality, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(userId, projectId, kind, cost, status, error ?? null, outputTokens ?? null, quality ? JSON.stringify(quality) : null, now());
 }
 
 // Every call to the engine with its token counts and cost (USD), for the admin panel.
@@ -356,6 +359,12 @@ export function logEngineCall({ userId, projectId, purpose, model, inputTokens, 
 
 const ISO = "%Y-%m-%dT%H:%M:%fZ"; // same text format as now(), so dates compare as strings
 
+// Cost of one delivered script: its plan and generation plus the review, fixes and rewrites
+// made on the same project in the hour before it was logged as finished.
+const SCRIPT_COST = `(SELECT COALESCE(SUM(c.cost_usd), 0) FROM engine_calls c
+  WHERE c.project_id = g.project_id AND c.purpose IN ('plan', 'generate', 'review', 'autofix', 'rewrite')
+    AND c.created_at BETWEEN strftime('${ISO}', g.created_at, '-1 hour') AND strftime('${ISO}', g.created_at, '+1 minute'))`;
+
 export function usageSummary() {
   const since = (days) => new Date(Date.now() - days * 86400000).toISOString();
   const totals = (from) =>
@@ -367,15 +376,8 @@ export function usageSummary() {
       )
       .get(from);
   const month = since(30);
-  // Cost of one delivered script: its generation plus the review, fixes and rewrites
-  // made on the same project in the hour before it was logged as finished.
   const scripts = db
-    .prepare(
-      `SELECT (SELECT COALESCE(SUM(c.cost_usd), 0) FROM engine_calls c
-               WHERE c.project_id = g.project_id AND c.purpose IN ('generate', 'review', 'autofix', 'rewrite')
-                 AND c.created_at BETWEEN strftime('${ISO}', g.created_at, '-1 hour') AND strftime('${ISO}', g.created_at, '+1 minute')) AS cost
-       FROM generations g WHERE g.kind = 'generate' AND g.status = 'ok' AND g.created_at > ?`,
-    )
+    .prepare(`SELECT ${SCRIPT_COST} AS cost FROM generations g WHERE g.kind = 'generate' AND g.status = 'ok' AND g.created_at > ?`)
     .all(month)
     .filter((s) => s.cost > 0);
   const group = (column) =>
@@ -411,6 +413,17 @@ export function usageSummary() {
       )
       .all(),
   };
+}
+
+// Delivered runs of the last days, for quality.js. Runs logged before the measure have no quality.
+export function qualityRuns(days = 30) {
+  return db
+    .prepare(
+      `SELECT g.kind, g.quality, CASE WHEN g.kind = 'generate' THEN ${SCRIPT_COST} END AS cost
+       FROM generations g WHERE g.status = 'ok' AND g.quality IS NOT NULL AND g.created_at > ? ORDER BY g.id DESC`,
+    )
+    .all(new Date(Date.now() - days * 86400000).toISOString())
+    .map((r) => ({ kind: r.kind, cost: r.cost, quality: JSON.parse(r.quality) }));
 }
 
 export function listGenerations({ status, limit = 100 } = {}) {

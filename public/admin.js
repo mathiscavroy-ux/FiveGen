@@ -26,7 +26,8 @@ const USD_EUR = 0.92; // indicative rate, only for the margin estimate
 const VAT = 0.2; // pack prices include VAT (French rate): the margin is counted without it
 
 const PURPOSES = { generate: "Génération", plan: "Plan", review: "Relecture", autofix: "Correction auto", fix: "Correction", refine: "Modification", rewrite: "Réécriture", brief: "Questions" };
-const KINDS = { generate: "Génération", refine: "Modification", fix: "Correction" };
+const KINDS = { generate: "Génération", refine: "Modification", fix: "Correction", convert: "Conversion", optimize: "Optimisation" };
+const REPAIRS = { install: "Tables et job installés au démarrage", manifest: "Lignes du fxmanifest", boss: "job.isboss sur ESX", job: "Job du joueur tenu à jour" };
 
 async function api(url, opts = {}) {
   const res = await fetch(url, { ...opts, headers: { "Content-Type": "application/json", "X-FiveGen": "1" }, body: opts.body ? JSON.stringify(opts.body) : undefined });
@@ -244,6 +245,33 @@ async function loadEngine() {
     : emptyRow(8, "Aucun appel enregistré pour l'instant.");
 }
 
+const percent = (part, total) => (total ? `${Math.round((part / total) * 100)} %` : "—");
+const decimal = (n) => (n === null ? "—" : n.toLocaleString("fr-FR", { maximumFractionDigits: 1 }));
+
+async function loadQuality() {
+  const q = await api("/api/admin/quality");
+  const g = q.generated;
+  $("#qualityKpis").innerHTML = [
+    kpi("Scripts générés · 30 j", int(g.runs), `${int(q.total - g.runs)} modifications et corrections`),
+    kpi("Sans erreur du premier coup", percent(g.clean, g.runs), "après les réparations gratuites", true),
+    kpi("Tours de correction par script", decimal(g.rounds), "chaque tour coûte un appel"),
+    kpi("Livrés avec des erreurs", percent(g.delivered, g.runs), `${int(g.delivered)} scripts`),
+    kpi("Réparés sans moteur", percent(g.repaired, g.runs), "au moins une réparation"),
+    kpi("Versions annulées", int(g.rollbacks), "elles n'amélioraient pas le script"),
+    kpi("Coût d'un script sans correction", q.cost.clean === null ? "—" : usd(q.cost.clean)),
+    kpi("Coût d'un script corrigé", q.cost.fixed === null ? "—" : usd(q.cost.fixed)),
+  ].join("");
+  $("#qualityErrors").innerHTML = q.errors.length
+    ? q.errors.map((e) => `<tr><td class="family">${esc(e.family)}</td><td>${int(e.runs)}</td><td>${percent(e.runs, q.total)}</td><td>${e.left ? `<span class="err-txt">${int(e.left)}</span>` : "0"}</td></tr>`).join("")
+    : emptyRow(4, q.total ? "Aucune erreur sur 30 jours." : "Pas encore de données : la mesure démarre avec les prochaines générations.");
+  $("#qualityKinds").innerHTML = q.kinds.length
+    ? q.kinds.map((k) => `<tr><td>${esc(KINDS[k.kind] ?? k.kind)}</td><td>${int(k.runs)}</td><td>${percent(k.clean, k.runs)}</td><td>${decimal(k.rounds)}</td><td>${percent(k.delivered, k.runs)}</td></tr>`).join("")
+    : emptyRow(5, "Aucune donnée.");
+  $("#qualityRepairs").innerHTML = q.repairs.length
+    ? q.repairs.map((r) => `<tr><td>${esc(REPAIRS[r.kind] ?? r.kind)}</td><td>${int(r.runs)}</td></tr>`).join("")
+    : emptyRow(2, "Aucune réparation.");
+}
+
 let users = [];
 const userStatus = (u) => (u.blocked ? '<span class="tag err">suspendu</span>' : u.email_verified ? '<span class="tag ok">vérifié</span>' : '<span class="tag">non vérifié</span>');
 
@@ -331,6 +359,7 @@ async function openUser(id) {
 const PAGES = {
   overview: ["Vue d'ensemble", loadOverview],
   engine: ["Moteur & quota", loadEngine],
+  quality: ["Qualité", loadQuality],
   users: ["Clients", loadUsers],
   generations: ["Générations", loadGenerations],
   payments: ["Paiements", loadPayments],
