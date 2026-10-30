@@ -9,7 +9,7 @@ import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from ".
 import { providerUsage, modelPricing, modelAvailable } from "./provider.js";
 import { generateParallel } from "./parallel.js";
 import { sanitizeAnswers } from "./brief.js";
-import { paymentsEnabled, publicPacks, createCheckout, handleWebhook, createSubscriptionCheckout, setCancelAtPeriodEnd, cancelNow } from "./payments.js";
+import { paymentsEnabled, publicPacks, createCheckout, handleWebhook, createSubscriptionCheckout, setCancelAtPeriodEnd, cancelNow, changePlan } from "./payments.js";
 import { importResource } from "./importer.js";
 import { mountDiscord, discordEnabled } from "./discord.js";
 import { tierOf } from "./tiers.js";
@@ -609,6 +609,19 @@ app.post("/api/subscribe", requireUser, checkoutLimiter, async (req, res) => {
 });
 
 // cancel: renewal stopped at the end of the paid month; resume: renewal back on.
+// Premium <-> Pro on the running subscription (prorated, see changePlan).
+app.post("/api/me/subscription/change", requireUser, checkoutLimiter, async (req, res) => {
+  if (!paymentsEnabled()) return res.status(503).json({ error: "Le paiement par carte n'est pas encore disponible." });
+  try {
+    const { upgrade } = await changePlan(req.user, String(req.body?.planId ?? ""));
+    res.json({ ...publicUser(db.getUser(req.user.id)), upgrade });
+  } catch (err) {
+    if (err.status === 400 || err.status === 402) return res.status(err.status).json({ error: err.message });
+    console.error("[fivegen] changement d'abonnement impossible :", err.message);
+    res.status(502).json({ error: "Stripe ne répond pas : réessaie dans un instant." });
+  }
+});
+
 for (const [action, cancel] of [["cancel", true], ["resume", false]]) {
   app.post(`/api/me/subscription/${action}`, requireUser, checkoutLimiter, async (req, res) => {
     try {

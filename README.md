@@ -78,7 +78,7 @@ Abonnements : **Premium** (9,99 €/mois, `PREMIUM_PRICE`) et **Pro** (19,99 €
 | Conversion / optimisation | 3 / 2 crédits | 3 / 2 crédits | 2 / 1 crédit |
 | Serveurs FiveM connectés | 2 | 5 | 10 |
 
-Les comptes gratuits ne consomment pas le quota payant du fournisseur (32 millions de tokens gratuits par jour chez xKiro). Le compte administrateur a toujours Pro. Une résiliation garde les avantages jusqu'à la fin du mois payé ; supprimer un compte résilie son abonnement tout de suite.
+Les comptes gratuits ne consomment pas le quota payant du fournisseur (32 millions de tokens gratuits par jour chez xKiro). Le compte administrateur a toujours Pro. Un abonné passe de Premium à Pro (ou l'inverse) depuis ses paramètres, sans résilier : à la montée, la différence du mois est prélevée tout de suite (rien ne change si le paiement échoue) ; à la descente, le temps non utilisé est déduit de la facture suivante. Une résiliation garde les avantages jusqu'à la fin du mois payé ; supprimer un compte résilie son abonnement tout de suite.
 
 Sécurité : les crédits ne sont ajoutés que par le webhook signé par Stripe (jamais depuis le navigateur), une seule fois par paiement, et le nombre de crédits vient toujours de la configuration du serveur. Le client coche une case de renonciation au délai de rétractation avant de payer (contenu numérique utilisé immédiatement).
 

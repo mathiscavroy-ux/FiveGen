@@ -122,7 +122,7 @@ test("each paid subscription invoice is recorded once, without credits, and keep
   assert.match(payments.handleWebhook(...signed("invoice.paid", invoice())), /abonnement Premium payé/);
   assert.equal(payments.handleWebhook(...signed("invoice.paid", invoice())), "déjà traité");
   assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_2", billing_reason: "subscription_cycle" }))), /abonnement Premium payé/);
-  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_3", billing_reason: "subscription_update" }))), /ignorée/);
+  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_3", billing_reason: "subscription_update", amount_paid: 0 }))), /ignorée/);
   assert.equal(db.getUser(id).credits, start);
   assert.equal(db.getUser(id).sub_plan, "premium");
   assert.equal(db.listPayments().filter((p) => p.pack_id === "abonnement:premium").length, 2);
@@ -151,4 +151,22 @@ test("subscription changes from Stripe are mirrored on the account", () => {
   assert.equal(db.getUser(id).sub_cancel_at_end, 1);
   payments.handleWebhook(...signed("customer.subscription.deleted", { ...sub, status: "canceled" }));
   assert.equal(db.getUser(id).sub_status, "canceled");
+});
+
+test("a plan change is refused without an active subscription, for the same plan or an unknown one", async () => {
+  const id = db.getUserByEmail("sub@test.local").id;
+  await assert.rejects(payments.changePlan({ ...db.getUser(id), sub_status: "canceled" }, "pro"), /Aucun abonnement actif/);
+  await assert.rejects(payments.changePlan({ ...db.getUser(id), sub_status: "active", sub_plan: "pro" }, "pro"), /déjà abonné à Pro/);
+  await assert.rejects(payments.changePlan({ ...db.getUser(id), sub_status: "active" }, "gold"), /Abonnement inconnu/);
+});
+
+test("the prorated invoice of an upgrade is recorded without touching the plan", () => {
+  const id = db.getUserByEmail("sub@test.local").id;
+  db.setSubscription(id, { plan: "pro", status: "active" });
+  // made before the metadata switch: it still says premium
+  const result = payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_up", billing_reason: "subscription_update", amount_paid: 650 })));
+  assert.match(result, /changement d'abonnement payé/);
+  assert.equal(db.getUser(id).sub_plan, "pro");
+  assert.ok(db.listPayments().some((p) => p.session_id === "in_up" && p.pack_id === "abonnement:changement" && p.amount === 650));
+  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_down", billing_reason: "subscription_update", amount_paid: 0 }))), /ignorée/);
 });

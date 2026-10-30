@@ -84,6 +84,34 @@ export async function setCancelAtPeriodEnd(user, cancel) {
   syncSubscription(sub);
 }
 
+// Premium <-> Pro without cancelling. Upgrade: the difference for the rest of the month is
+// charged at once, and nothing changes if that payment fails. Downgrade: immediate, the
+// unused part of the higher plan is credited on the next invoice.
+export async function changePlan(user, planId) {
+  const plan = config.plans.find((p) => p.id === planId);
+  if (!plan) throw Object.assign(new Error("Abonnement inconnu."), { status: 400 });
+  if (!user.sub_id || !["active", "trialing"].includes(user.sub_status)) throw Object.assign(new Error("Aucun abonnement actif à modifier."), { status: 400 });
+  if (user.sub_plan === plan.id) throw Object.assign(new Error(`Tu es déjà abonné à ${plan.name}.`), { status: 400 });
+  const current = await stripe.subscriptions.retrieve(user.sub_id);
+  const item = current.items.data[0];
+  const product = typeof item.price.product === "string" ? item.price.product : item.price.product.id;
+  const from = config.plans.find((p) => p.id === user.sub_plan);
+  const upgrade = !from || plan.price > from.price;
+  const changed = await stripe.subscriptions.update(user.sub_id, {
+    items: [{ id: item.id, price_data: { currency: config.stripe.currency, product, unit_amount: plan.price, recurring: { interval: "month" }, tax_behavior: "inclusive" } }],
+    proration_behavior: upgrade ? "always_invoice" : "create_prorations",
+    // an upgrade only applies once its prorated invoice is paid
+    ...(upgrade ? { payment_behavior: "pending_if_incomplete" } : {}),
+  });
+  if (changed.pending_update) throw Object.assign(new Error("Le paiement de la différence a été refusé : ton abonnement n'a pas changé. Vérifie ta carte et réessaie."), { status: 402 });
+  // the plan travels in the metadata (invoices and webhooks read it), and the product is
+  // the one created for this subscription: renamed so invoices show the new plan
+  const sub = await stripe.subscriptions.update(user.sub_id, { metadata: { ...current.metadata, planId: plan.id }, cancel_at_period_end: false });
+  await stripe.products.update(product, { name: `FiveGen ${plan.name} (moteur ${config.tiers[plan.id]?.engineName ?? ""}, mensuel)` }).catch(() => {});
+  syncSubscription(sub);
+  return { upgrade };
+}
+
 // Account deletion: nothing may be billed after it.
 export async function cancelNow(user) {
   if (stripe && user.sub_id && ACTIVE_SUB.has(user.sub_status)) await stripe.subscriptions.cancel(user.sub_id);
@@ -112,7 +140,9 @@ function syncSubscription(sub) {
 // A paid subscription invoice (start and each monthly renewal): recorded once for the
 // accounting, and the plan stays active until the end of the new period. No credits.
 function recordInvoice(invoice) {
-  if (!["subscription_create", "subscription_cycle"].includes(invoice.billing_reason)) return `facture ignorée (${invoice.billing_reason})`;
+  // subscription_update: the prorated difference of an upgrade (a downgrade bills nothing)
+  const update = invoice.billing_reason === "subscription_update";
+  if (!["subscription_create", "subscription_cycle"].includes(invoice.billing_reason) && !(update && invoice.amount_paid > 0)) return `facture ignorée (${invoice.billing_reason})`;
   const details = invoice.parent?.subscription_details ?? invoice.subscription_details;
   const plan = config.plans.find((p) => p.id === details?.metadata?.planId);
   const userId = Number(details?.metadata?.userId);
@@ -120,11 +150,14 @@ function recordInvoice(invoice) {
   const added = recordPayment({
     sessionId: invoice.id,
     userId,
-    packId: `abonnement:${plan.id}`,
+    packId: update ? "abonnement:changement" : `abonnement:${plan.id}`,
     credits: 0,
     amount: invoice.amount_paid ?? plan.price,
     currency: invoice.currency ?? config.stripe.currency,
   });
+  // an upgrade invoice is made before the plan in the metadata changes: only the payment
+  // is recorded, the new plan comes from changePlan and customer.subscription.updated
+  if (update) return added ? `changement d'abonnement payé par l'utilisateur ${userId}` : "déjà traité";
   const subId = typeof details.subscription === "string" ? details.subscription : details.subscription?.id;
   const end = invoice.lines?.data?.[0]?.period?.end;
   if (getUser(userId)) {

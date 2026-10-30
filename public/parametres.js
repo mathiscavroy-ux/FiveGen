@@ -105,6 +105,26 @@ function renderSubscription() {
       b.disabled = false;
     }
   };
+  // the other plan, on the same subscription (prorated by Stripe)
+  const other = sub.status === "active" && !sub.cancelAtEnd ? packs?.plans?.find((p) => p.id !== sub.plan?.id) : null;
+  if (other) {
+    const upgrade = other.price > (sub.plan?.price ?? 0);
+    button(`Passer à ${other.name}`, upgrade ? "primary" : "", async (b) => {
+      const text = upgrade
+        ? `Passer à ${other.name} (${formatPrice(other.price, packs.currency)} par mois) ? La différence pour le reste du mois est prélevée maintenant, puis ${formatPrice(other.price, packs.currency)} à chaque renouvellement.`
+        : `Passer à ${other.name} (${formatPrice(other.price, packs.currency)} par mois) ? Le changement est immédiat et le temps non utilisé de ton offre actuelle est déduit de ta prochaine facture.`;
+      if (!confirm(text)) return;
+      b.disabled = true;
+      try {
+        me = await api("/api/me/subscription/change", { method: "POST", body: { planId: other.id } });
+        renderSubscription();
+        toast(upgrade ? `Tu es passé à ${other.name} ✓ La différence pour ce mois a été prélevée.` : `Tu es passé à ${other.name} ✓ Le reste de ton offre précédente sera déduit de ta prochaine facture.`, "ok");
+      } catch (err) {
+        toast(err.message, "err");
+        b.disabled = false;
+      }
+    });
+  }
   if (sub.cancelAtEnd) button("Reprendre l'abonnement", "primary", change("resume"));
   else button("Résilier", "", change("cancel", `Résilier l'abonnement ?${date ? ` Tes avantages restent jusqu'au ${date}.` : ""} Tes crédits ne sont pas perdus.`));
 }

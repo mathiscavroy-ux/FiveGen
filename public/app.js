@@ -205,9 +205,15 @@ function renderPlans() {
       <b>${escapeHtml(p.name)}</b>
       <span class="amount">${formatPrice(p.price, info.currency)}<small> / mois</small></span>
       <ul class="plan-perks">${(p.perks ?? []).map((perk) => `<li>${escapeHtml(perk)}</li>`).join("")}</ul>`;
-    const btn = document.createElement(subscribed ? "a" : "button");
+    // subscribed: the current plan leads to the settings, the other one switches in place
+    const switchable = subscribed && current.status === "active" && !current.cancelAtEnd && current.plan?.id !== p.id;
+    const btn = document.createElement(subscribed && !switchable ? "a" : "button");
     btn.className = `btn ${p.featured ? "primary" : ""}`;
-    if (subscribed) {
+    if (switchable) {
+      btn.type = "button";
+      btn.textContent = `Passer à ${p.name}`;
+      btn.onclick = () => switchPlan(p, btn);
+    } else if (subscribed) {
       btn.href = "/parametres#abonnement";
       btn.textContent = current.plan?.id === p.id ? "Ton abonnement actuel" : "Gérer mon abonnement";
     } else {
@@ -217,6 +223,26 @@ function renderPlans() {
     }
     card.append(btn);
     $("#planGrid").append(card);
+  }
+}
+
+// Premium <-> Pro on the running subscription: prorated by Stripe, no new checkout.
+async function switchPlan(plan, btn) {
+  const upgrade = plan.price > (state.me.subscription?.plan?.price ?? 0);
+  const price = formatPrice(plan.price, state.packs.currency);
+  const text = upgrade
+    ? `Passer à ${plan.name} (${price} par mois) ? La différence pour le reste du mois est prélevée maintenant.`
+    : `Passer à ${plan.name} (${price} par mois) ? Le changement est immédiat, le temps non utilisé est déduit de ta prochaine facture.`;
+  if (!confirm(text)) return;
+  btn.disabled = true;
+  try {
+    state.me = { ...state.me, ...(await api("/api/me/subscription/change", { method: "POST", body: { planId: plan.id } })) };
+    renderAccount();
+    renderPlans();
+    toast(`Tu es passé à ${plan.name} ✓ Moteur ${state.me.tier.engineName}.`, "ok");
+  } catch (err) {
+    toast(err.message, "err");
+    btn.disabled = false;
   }
 }
 
