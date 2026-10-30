@@ -2,6 +2,7 @@
 // restates it and asks the few questions that actually change the code.
 import { CATALOG } from "./prompts.js";
 import { SCRIPTS } from "./knowledge/scripts.js";
+import { inventoryBlock } from "./inventory.js";
 
 const ids = (list) => list.map((x) => x.id).join(" | ");
 
@@ -13,6 +14,7 @@ Règles :
 - Privilégie les choix (single ou multi) avec 2 à 6 options concrètes ; une seule question "text" au plus, pour un détail libre. Mets une valeur par défaut raisonnable sur chaque question (la plupart des clients gardent les défauts).
 - Pour une question multi, pré-coche par défaut les fonctionnalités qu'un serveur RP attend.
 - Si la demande est déjà très précise, pose moins de questions (au minimum 1).
+- Si un bloc <serveur_reel> est fourni, propose ses vrais jobs et items dans les options et ne demande pas ce qu'il indique déjà.
 - Ne mentionne jamais intelligence artificielle, IA, modèle, assistant ou prompt.
 - Refuse les cheats, menus de triche, backdoors : dans ce cas "refused": true et "understood" explique poliment que FiveGen ne produit pas ce type de contenu.
 
@@ -38,7 +40,7 @@ export function buildBriefMessage(description, server = {}) {
   const lines = [];
   if (server.framework) lines.push(`Framework du serveur : ${server.framework}`);
   if (server.dependencies?.length) lines.push(`Ressources installées : ${server.dependencies.join(", ")}`);
-  return `${lines.length ? `<serveur_du_client>\n${lines.join("\n")}\n</serveur_du_client>\n\n` : ""}<demande_du_client>\n${description}\n</demande_du_client>`;
+  return `${lines.length ? `<serveur_du_client>\n${lines.join("\n")}\n</serveur_du_client>\n\n` : ""}${inventoryBlock(server.inventory, description)}<demande_du_client>\n${description}\n</demande_du_client>`;
 }
 
 const clip = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);

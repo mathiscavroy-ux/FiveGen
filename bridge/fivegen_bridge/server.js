@@ -20,6 +20,9 @@
 // The .sql files of a resource are run through oxmysql before it starts (tables, items).
 // Statements that can lose data (DROP, DELETE, TRUNCATE...) are never run. Turn it off
 // with: set fivegen_sql "0"
+//
+// The names of the resources, jobs, items and tables of the server are sent to FiveGen so
+// generated scripts reuse them (inventory.js). Turn it off with: set fivegen_inventory "0"
 
 const fs = require("fs");
 const path = require("path");
@@ -27,12 +30,14 @@ const http = require("http");
 const https = require("https");
 const { execFile } = require("child_process");
 
-const VERSION = "1.5.0";
+const VERSION = "1.6.0";
 const TOKEN = GetConvar("fivegen_token", "");
 const BASE = GetConvar("fivegen_url", "https://flazehdr.alwaysdata.net").replace(/\/+$/, "");
 const FOLDER = GetConvar("fivegen_folder", "[fivegen]");
 const POLL_MS = 5000;
 const AUTO_SQL = GetConvar("fivegen_sql", "1") !== "0";
+const INVENTORY = GetConvar("fivegen_inventory", "1") !== "0";
+const INVENTORY_MS = 10 * 60000;
 
 const log = (msg) => console.log(`^3[FiveGen]^7 ${msg}`);
 const fail = (msg) => console.log(`^1[FiveGen]^7 ${msg}`);
@@ -231,6 +236,36 @@ async function runResourceSql(files) {
   return { line: parts.join(", ") + ".", tables };
 }
 
+// Read a while after start (resources need time to load), then only sent when it changed.
+let nextInventory = Date.now() + 45000;
+let sentInventory = "";
+
+function readServer() {
+  const resources = [];
+  for (let i = 0; i < GetNumResources(); i++) {
+    const name = GetResourceByFindIndex(i);
+    if (name && GetResourceState(name) === "started") resources.push(name);
+  }
+  return {
+    resources: () => resources,
+    started: (name) => GetResourceState(name) === "started",
+    query: sqlQuery,
+    qbCore: () => exports["qb-core"].GetCoreObject(),
+    qbxJobs: () => exports.qbx_core.GetJobs(),
+    oxItems: () => exports.ox_inventory.Items(),
+  };
+}
+
+async function sendInventory() {
+  if (!INVENTORY || Date.now() < nextInventory) return;
+  nextInventory = Date.now() + INVENTORY_MS;
+  const inventory = await FiveGenInventory.collect(readServer());
+  const body = JSON.stringify(inventory);
+  if (body === sentInventory) return;
+  const res = await request("POST", "/api/bridge/inventory", { inventory });
+  if (res.status === 200) sentInventory = body;
+}
+
 // ESX keeps jobs and items in memory from server start. After the SQL added some, jobs
 // are reloaded (ESX.RefreshJobs); items cannot be, so the studio says to restart.
 function refreshFramework(tables) {
@@ -288,6 +323,7 @@ async function deploy(job) {
     const how = await startResource(job.resource);
     log(`^2${job.resource} ${how}^7 depuis ${dest}`);
     await request("POST", `/api/bridge/deployments/${job.id}`, { status: "started", message: `Ressource ${how} sur le serveur.${extra ? ` ${extra}` : ""}` });
+    nextInventory = Date.now() + 5000; // its jobs, items and tables count from now on
   } catch (err) {
     fail(`${job.resource} : ${err.message}`);
     await request("POST", `/api/bridge/deployments/${job.id}`, { status: "error", message: err.message }).catch(() => {});
@@ -317,6 +353,7 @@ async function loop() {
         if (warned) log(`Reconnecté (serveur « ${res.json.server} »).`);
         warned = "";
         await flushErrors();
+        sendInventory().catch(() => {}); // never holds up a deployment
         if (res.json.deployment) {
           await deploy(res.json.deployment);
           wait = 500; // something else may be queued

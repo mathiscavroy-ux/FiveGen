@@ -15,7 +15,8 @@ import { mountDiscord, discordEnabled } from "./discord.js";
 import { tierOf } from "./tiers.js";
 import { validateProjectFull } from "./validator.js";
 import { fixRounds, isBetter } from "./autofix.js";
-import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors } from "./deploy.js";
+import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory } from "./deploy.js";
+import { inventoryBlock, inventoryCounts } from "./inventory.js";
 import { mountSeo } from "./seo.js";
 import * as db from "./db.js";
 import {
@@ -193,25 +194,32 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
 // Static checks plus the dry run of the resource in a fake FiveM.
 function checkProject(userId, projectId) {
   const project = getProject(userId, projectId);
-  return validateProjectFull(getFiles(userId, projectId), project.spec, { resource: project.name });
+  return validateProjectFull(getFiles(userId, projectId), { ...project.spec, inventory: serverInventory(userId, projectId) }, { resource: project.name });
 }
 
 // Generation → save → check → review pass (new resources) → automatic fix rounds
 // (free) while errors remain.
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
+  const inventory = serverInventory(userId, projectId);
+  const spec = inventory ? { ...project.spec, inventory } : project.spec;
   // a manual fix must not leave the script worse than it found it
   const before = kind === "fix" ? { validation: await checkProject(userId, projectId), version: listVersions(userId, projectId)[0]?.n, notes: project.notes } : null;
   send("phase", { phase: kind, label: LABELS[kind] });
+  if (inventory) {
+    const n = inventoryCounts(inventory);
+    const count = (value, word) => `${value} ${word}${value > 1 ? "s" : ""}`;
+    send("status", `Serveur « ${inventory.server} » lu : ${count(n.resources, "ressource")}, ${count(n.jobs, "job")}, ${count(n.items, "item")}.`);
+  }
   // a new resource: plan, then groups of files written at the same time (null: single call)
-  const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec: project.spec, send, signal, meta: { userId, projectId }, profile: state.profile }) : null;
-  const result = parallel ?? (await runEngine({ userContent, onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
+  const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec, send, signal, meta: { userId, projectId }, profile: state.profile }) : null;
+  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }
   state.outputTokens += result.outputTokens ?? 0;
   state.produced = true;
-  const touched = await saveResult({ userId, projectId, result, spec: project.spec, send, signal, state });
+  const touched = await saveResult({ userId, projectId, result, spec, send, signal, state });
   const version = snapshot(userId, projectId, { type: kind, label: instruction ?? null });
   updateMeta(userId, projectId, {
     notes: kind === "generate" ? result.notes : mergeNotes(project.notes, result.notes, `${LABELS[kind]} : ${instruction ?? ""}`),
@@ -242,7 +250,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     send("phase", { phase: "review", label: "Relecture" });
     try {
       const review = await runEngine({
-        userContent: buildReviewMessage(project.spec, getFiles(userId, projectId), best.validation.warnings),
+        userContent: buildReviewMessage(spec, getFiles(userId, projectId), best.validation.warnings),
         onEvent: send,
         signal,
         meta: { userId, projectId, purpose: "review" },
@@ -252,7 +260,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       });
       state.outputTokens += review.outputTokens ?? 0;
       if (review.files.length || review.edits.length || review.deletes.length) {
-        const reviewed = await saveResult({ userId, projectId, result: review, spec: project.spec, send, signal, state });
+        const reviewed = await saveResult({ userId, projectId, result: review, spec, send, signal, state });
         const reviewVersion = snapshot(userId, projectId, { type: "review", label: "Relecture" });
         updateMeta(userId, projectId, { notes: mergeNotes(getProject(userId, projectId).notes, review.notes, "Relecture") });
         addHistory(userId, projectId, { type: "review", instruction: "Relecture", files: reviewed, outputTokens: review.outputTokens });
@@ -278,7 +286,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       let fix;
       try {
         fix = await runEngine({
-          userContent: buildFixMessage(project.spec, getFiles(userId, projectId), errors),
+          userContent: buildFixMessage(spec, getFiles(userId, projectId), errors),
           onEvent: send,
           signal,
           meta: { userId, projectId, purpose: "autofix" },
@@ -292,7 +300,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
         return null;
       }
       state.outputTokens += fix.outputTokens ?? 0;
-      const fixed = await saveResult({ userId, projectId, result: fix, spec: project.spec, send, signal, state });
+      const fixed = await saveResult({ userId, projectId, result: fix, spec, send, signal, state });
       const fixVersion = snapshot(userId, projectId, { type: "autofix", label: `Correction automatique ${round} · ${errors.length} erreur(s)` });
       const current = getProject(userId, projectId);
       updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
@@ -690,6 +698,7 @@ app.post("/api/brief", requireUser, briefLimiter, async (req, res) => {
       server: {
         framework: CATALOG.frameworks.some((x) => x.id === server.framework) ? server.framework : null,
         dependencies: (Array.isArray(server.dependencies) ? server.dependencies : []).filter((d) => CATALOG.dependencies.some((x) => x.id === d)),
+        inventory: serverInventory(req.user.id),
       },
       meta: { userId: req.user.id, purpose: "brief" },
       profile: tierOf(req.user),

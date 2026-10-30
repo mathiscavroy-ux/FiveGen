@@ -11,6 +11,7 @@ import { config, ROOT } from "./config.js";
 import { requireUser, rateLimit } from "./auth.js";
 import { getProject, getFiles } from "./projects.js";
 import { tierOf } from "./tiers.js";
+import { sanitizeInventory, inventoryCounts } from "./inventory.js";
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS servers (
@@ -49,6 +50,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_runtime_errors_project ON runtime_errors(user_id, project_id);
 `);
 
+const serverColumns = new Set(db.prepare("PRAGMA table_info(servers)").all().map((c) => c.name));
+if (!serverColumns.has("inventory")) db.exec("ALTER TABLE servers ADD COLUMN inventory TEXT");
+if (!serverColumns.has("inventory_at")) db.exec("ALTER TABLE servers ADD COLUMN inventory_at TEXT");
+
 const now = () => new Date().toISOString();
 const hash = (t) => crypto.createHash("sha256").update(t).digest("hex");
 const ONLINE_MS = 30_000; // the bridge polls every 5 s
@@ -62,6 +67,8 @@ const publicServer = (s) => ({
   lastSeenAt: s.last_seen_at,
   online: Boolean(s.last_seen_at && Date.now() - new Date(s.last_seen_at).getTime() < ONLINE_MS),
   bridgeVersion: s.bridge_version,
+  inventory: s.inventory ? inventoryCounts(JSON.parse(s.inventory)) : null,
+  inventoryAt: s.inventory_at,
 });
 
 const publicDeployment = (d) => ({
@@ -137,6 +144,21 @@ export function reportForServer(server, id, status, message) {
     .prepare("UPDATE deployments SET status = ?, message = ?, updated_at = ? WHERE id = ? AND server_id = ? AND status = 'delivered'")
     .run(status, String(message ?? "").slice(0, 2000) || null, now(), id, server.id);
   return r.changes === 1;
+}
+
+// ---- what is really on the server, read by the bridge ----
+
+export function recordInventory(server, raw) {
+  db.prepare("UPDATE servers SET inventory = ?, inventory_at = ? WHERE id = ?").run(JSON.stringify(sanitizeInventory(raw)), now(), server.id);
+}
+
+// The server a project was last deployed to, otherwise the one last seen on the account.
+export function serverInventory(userId, projectId = null) {
+  const deployed = projectId
+    ? db.prepare("SELECT s.name, s.inventory FROM deployments d JOIN servers s ON s.id = d.server_id WHERE d.user_id = ? AND d.project_id = ? AND s.inventory IS NOT NULL ORDER BY d.id DESC LIMIT 1").get(userId, projectId)
+    : null;
+  const row = deployed ?? db.prepare("SELECT name, inventory FROM servers WHERE user_id = ? AND inventory IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1").get(userId);
+  return row ? { ...JSON.parse(row.inventory), server: row.name } : null;
 }
 
 // ---- errors printed by deployed resources in the FiveM server console ----
@@ -274,6 +296,11 @@ export function mountDeploy(app) {
     const resource = String(req.body?.resource ?? "");
     if (!/^[a-z0-9_-]{1,64}$/i.test(resource)) return res.status(400).json({ error: "Ressource invalide." });
     res.json({ recorded: recordRuntimeErrors(req.fgServer, resource, req.body?.lines) });
+  });
+
+  router.post("/bridge/inventory", bridgeLimiter, bridgeAuth, (req, res) => {
+    recordInventory(req.fgServer, req.body?.inventory);
+    res.json({ ok: true });
   });
 
   app.use("/api", router);

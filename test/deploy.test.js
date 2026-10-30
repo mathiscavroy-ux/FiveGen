@@ -42,7 +42,7 @@ function makeProject(name, files) {
 }
 
 // Runs the real bridge script with fake FiveM natives against the test API.
-function startBridge(token, resourcesDir, { foreign = {} } = {}) {
+function startBridge(token, resourcesDir, { foreign = {}, extra = {} } = {}) {
   const commands = [];
   const started = new Set();
   const natives = {
@@ -75,8 +75,10 @@ function startBridge(token, resourcesDir, { foreign = {} } = {}) {
     URL,
     // unref'd so the polling loop never keeps the test process alive
     setTimeout: (fn, ms) => setTimeout(fn, ms).unref(),
+    ...extra,
   };
-  vm.runInNewContext(fs.readFileSync(new URL("../bridge/fivegen_bridge/server.js", import.meta.url), "utf8"), sandbox);
+  vm.createContext(sandbox);
+  for (const file of ["inventory.js", "server.js"]) vm.runInContext(fs.readFileSync(new URL(`../bridge/fivegen_bridge/${file}`, import.meta.url), "utf8"), sandbox);
   return commands;
 }
 
@@ -158,6 +160,60 @@ test("console errors of a deployed resource reach its project, deduplicated", as
   assert.equal(errors[0].count, 2);
   assert.doesNotMatch(errors[0].message, /\^\d/);
   assert.deepEqual(deploy.locateRuntimeError(errors[0].message, "err_res"), { file: "server/main.lua", line: 12 });
+});
+
+test("the real bridge reads the server and the account sees it, names only", async () => {
+  const { server: s, token } = deploy.createServer(userId, "Inventaire");
+  const resources = fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-res-"));
+  const started = ["es_extended", "oxmysql", "ox_lib"];
+  const rows = {
+    "SELECT name FROM jobs": [{ name: "police" }],
+    "SELECT job_name, grade, name FROM job_grades": [{ job_name: "police", grade: 3, name: "boss" }],
+    "SELECT name FROM items": [{ name: "water" }, { name: "<script>" }],
+    "SHOW TABLES": [{ Tables_in_db: "users" }],
+  };
+  let skew = 0;
+  startBridge(token, resources, {
+    extra: {
+      // the first read waits 45 s after start: the bridge's clock jumps instead
+      Date: class extends Date {
+        static now = () => Date.now() + skew;
+      },
+      clearTimeout,
+      GetNumResources: () => started.length,
+      GetResourceByFindIndex: (i) => started[i],
+      GetResourceState: (name) => (started.includes(name) ? "started" : "missing"),
+      exports: { oxmysql: { query: (sql, _params, done) => done(rows[sql]) } },
+    },
+  });
+  skew = 60_000;
+  const seen = await waitFor(() => deploy.listServers(userId).find((x) => x.id === s.id)?.inventory);
+  assert.deepEqual(seen, { resources: 3, jobs: 1, items: 1, tables: 1 });
+  assert.deepEqual(deploy.serverInventory(userId).jobs, [{ name: "police", grades: [{ grade: 3, name: "boss", boss: true }] }]);
+  assert.equal(deploy.serverInventory(userId).server, "Inventaire");
+});
+
+test("a project uses the server it was deployed to, the account its latest one", async () => {
+  const owner = db.createUser("two-servers@test.local", "x", 0, false).id;
+  const a = deploy.createServer(owner, "A");
+  const b = deploy.createServer(owner, "B");
+  const send = (token, items) => fetch(`${baseUrl}/api/bridge/inventory`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ inventory: { items } }) });
+  assert.equal(deploy.serverInventory(owner), null);
+  assert.equal((await send(a.token, ["from_a"])).status, 200);
+  assert.equal((await send(b.token, ["from_b"])).status, 200);
+  db.db.prepare("UPDATE servers SET last_seen_at = ? WHERE id = ?").run("2026-01-02T00:00:00.000Z", a.server.id);
+  db.db.prepare("UPDATE servers SET last_seen_at = ? WHERE id = ?").run("2026-01-03T00:00:00.000Z", b.server.id);
+  assert.deepEqual(deploy.serverInventory(owner).items, ["from_b"]);
+  const p = projects.createProject(owner, { name: "two_srv", framework: "esx", type: "job", ui: "auto", dependencies: [], language: "fr", description: "x" });
+  projects.writeFiles(owner, p.id, [{ path: "fxmanifest.lua", content: "fx_version 'cerulean'\n" }]);
+  deploy.queueDeployment(owner, a.server.id, projects.getProject(owner, p.id));
+  assert.deepEqual(deploy.serverInventory(owner, p.id).items, ["from_a"]);
+  assert.equal(deploy.serverInventory(userId, p.id)?.server === "A", false); // never another account's server
+});
+
+test("the inventory endpoint needs a valid token", async () => {
+  const res = await fetch(`${baseUrl}/api/bridge/inventory`, { method: "POST", headers: { Authorization: "Bearer nope", "Content-Type": "application/json" }, body: "{}" });
+  assert.equal(res.status, 401);
 });
 
 test("a revoked token is refused", async () => {

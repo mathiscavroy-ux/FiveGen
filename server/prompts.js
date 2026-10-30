@@ -8,6 +8,7 @@ import { PITFALLS } from "./knowledge/pitfalls.js";
 import { SCRIPTS } from "./knowledge/scripts.js";
 import { API_REFERENCE } from "./knowledge/api-reference.js";
 import { LOCATIONS } from "./knowledge/locations.js";
+import { inventoryBlock } from "./inventory.js";
 
 export const CATALOG = {
   frameworks: [
@@ -64,6 +65,7 @@ export const SYSTEM_PROMPT = [CORE, FRAMEWORKS, LIBS, SCRIPTS, PITFALLS, LOCATIO
 
 const label = (list, id) => list.find((x) => x.id === id)?.label ?? id;
 
+// spec.inventory is added for the run by the pipeline, never saved with the project.
 export function describeSpec(spec) {
   const deps = (spec.dependencies ?? []).map((d) => label(CATALOG.dependencies, d));
   return [
@@ -73,7 +75,7 @@ export function describeSpec(spec) {
     `Interface : ${label(CATALOG.ui, spec.ui ?? "auto")}`,
     `Dépendances à utiliser : ${deps.length ? deps.join(", ") : "aucune imposée (choisis le minimum nécessaire)"}`,
     `Langue des textes joueur : ${label(CATALOG.languages, spec.language ?? "fr")}`,
-  ].join("\n");
+  ].join("\n") + inventoryBlock(spec.inventory, `${spec.description ?? ""} ${spec.understood ?? ""}`);
 }
 
 function recipe(spec) {
