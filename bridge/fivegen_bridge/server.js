@@ -16,6 +16,10 @@
 //   add_ace resource.fivegen_bridge command.ensure allow
 //   add_ace resource.fivegen_bridge command.restart allow
 //   ensure fivegen_bridge
+//
+// The .sql files of a resource are run through oxmysql before it starts (tables, items).
+// Statements that can lose data (DROP, DELETE, TRUNCATE...) are never run. Turn it off
+// with: set fivegen_sql "0"
 
 const fs = require("fs");
 const path = require("path");
@@ -23,11 +27,12 @@ const http = require("http");
 const https = require("https");
 const { execFile } = require("child_process");
 
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 const TOKEN = GetConvar("fivegen_token", "");
 const BASE = GetConvar("fivegen_url", "https://flazehdr.alwaysdata.net").replace(/\/+$/, "");
 const FOLDER = GetConvar("fivegen_folder", "[fivegen]");
 const POLL_MS = 5000;
+const AUTO_SQL = GetConvar("fivegen_sql", "1") !== "0";
 
 const log = (msg) => console.log(`^3[FiveGen]^7 ${msg}`);
 const fail = (msg) => console.log(`^1[FiveGen]^7 ${msg}`);
@@ -174,6 +179,55 @@ async function writeResource(resource, files) {
   return dest;
 }
 
+// One statement through oxmysql; rejects with its error message. The 5th argument asks
+// oxmysql to hand errors to the callback instead of printing them.
+function sqlQuery(statement) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("oxmysql ne répond pas")), 20000);
+    exports.oxmysql.query(statement, [], (result, err) => {
+      clearTimeout(timer);
+      if (err) reject(new Error(String(err)));
+      else resolve(result);
+    }, GetCurrentResourceName(), true);
+  });
+}
+
+// The .sql files of the resource, applied before it starts so its tables exist.
+// Returns a line for the studio, or null when the resource has no SQL.
+async function runResourceSql(files) {
+  const sqlFiles = files.filter((f) => /\.sql$/i.test(f.path)).sort((a, b) => a.path.localeCompare(b.path));
+  if (!sqlFiles.length) return null;
+  if (!AUTO_SQL) return "SQL non exécuté (fivegen_sql 0) : importe le fichier .sql à la main.";
+  if (GetResourceState("oxmysql") !== "started") return "SQL non exécuté : oxmysql n'est pas démarré. Importe le fichier .sql à la main.";
+  let ran = 0;
+  let already = 0;
+  const skipped = [];
+  const failed = [];
+  for (const f of sqlFiles) {
+    for (const statement of FiveGenSql.splitSql(String(f.content))) {
+      const why = FiveGenSql.checkStatement(statement);
+      if (why) {
+        skipped.push(`${f.path} : « ${statement.replace(/\s+/g, " ").slice(0, 60)} » (${why})`);
+        continue;
+      }
+      try {
+        await sqlQuery(statement);
+        ran++;
+      } catch (err) {
+        if (FiveGenSql.ALREADY_DONE.test(err.message)) already++;
+        else failed.push(`${f.path} : ${err.message.trim().split("\n").pop().slice(0, 200)}`);
+      }
+    }
+  }
+  for (const s of skipped) fail(`SQL ignoré par sécurité — ${s}`);
+  for (const s of failed) fail(`SQL en erreur — ${s}`);
+  const parts = [`SQL : ${ran} requête(s) exécutée(s)`];
+  if (already) parts.push(`${already} déjà en place`);
+  if (skipped.length) parts.push(`${skipped.length} ignorée(s) par sécurité, à faire à la main si besoin (${skipped[0]})`);
+  if (failed.length) parts.push(`${failed.length} en erreur (${failed[0]})`);
+  return parts.join(", ") + ".";
+}
+
 async function startResource(resource) {
   const wasStarted = GetResourceState(resource) === "started";
   ExecuteCommand("refresh");
@@ -201,9 +255,11 @@ async function deploy(job) {
   log(`Déploiement de ^5${job.resource}^7 (${job.files.length} fichiers)…`);
   try {
     const dest = await writeResource(job.resource, job.files);
+    const sql = await runResourceSql(job.files);
+    if (sql) log(sql);
     const how = await startResource(job.resource);
     log(`^2${job.resource} ${how}^7 depuis ${dest}`);
-    await request("POST", `/api/bridge/deployments/${job.id}`, { status: "started", message: `Ressource ${how} sur le serveur.` });
+    await request("POST", `/api/bridge/deployments/${job.id}`, { status: "started", message: `Ressource ${how} sur le serveur.${sql ? ` ${sql}` : ""}` });
   } catch (err) {
     fail(`${job.resource} : ${err.message}`);
     await request("POST", `/api/bridge/deployments/${job.id}`, { status: "error", message: err.message }).catch(() => {});
