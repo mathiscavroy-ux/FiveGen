@@ -1,7 +1,9 @@
 // Parallel generation of a new resource. One engine call writing a big resource in a
 // single answer thinks for minutes, then writes file after file and can hit the output
 // limit (cut files, missing files). Here a short plan fixes the files and every name
-// they share, then groups of files are written at the same time from that plan.
+// they share, then groups of files are written at the same time from that plan: first
+// the config and the server, then the rest, which reads that real code instead of
+// guessing it from the plan.
 import { buildPlanMessage, buildPartMessage } from "./prompts.js";
 import { runEngine, runPlan } from "./engine.js";
 import { modelAvailable } from "./provider.js";
@@ -11,8 +13,12 @@ import { config } from "./config.js";
 // The logic (config, client, server, interface script) stays on the main model.
 export const isLightFile = (p) => /(^|\/)readme[^/]*$|\.md$|(^|\/)locales?\/|\.sql$|^fxmanifest\.lua$|\.(html|css)$/i.test(p);
 
-// The run lasts as long as its slowest group: up to 6 calls, split by expected size.
+// What the client and the interface depend on: written first.
+export const isFirstStep = (p) => !isLightFile(p) && !/^client\//.test(p) && !/^(html|web|ui|nui)\//i.test(p);
+
+// A step lasts as long as its slowest group: up to 6 calls, split by expected size.
 const MAX_GROUPS = 6;
+const STEP_GROUPS = 4;
 const MIN_SPLIT_WEIGHT = 6; // below this a group is quick enough on its own
 const clean = (p) => String(p ?? "").trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
 
@@ -23,7 +29,7 @@ const total = (g) => g.reduce((n, p) => n + weight(p), 0);
 // Simple files (manifest, locales, SQL, README, HTML/CSS) together; client and server
 // apart; config, shared and interface script together. Then the heaviest group is split
 // in two (balanced by weight) while there is room for another call and it is worth it.
-export function groupFiles(paths) {
+export function groupFiles(paths, max = MAX_GROUPS) {
   const light = [];
   const client = [];
   const server = [];
@@ -35,7 +41,7 @@ export function groupFiles(paths) {
     else rest.push(p);
   }
   const groups = [light, rest, client, server].filter((g) => g.length);
-  while (groups.length < MAX_GROUPS) {
+  while (groups.length < max) {
     const heaviest = groups.filter((g) => g.length > 1).sort((a, b) => total(b) - total(a))[0];
     if (!heaviest || total(heaviest) < MIN_SPLIT_WEIGHT) break;
     const halves = [[], []];
@@ -70,40 +76,57 @@ export async function generateParallel({ spec, send, signal, meta, profile }) {
   }
   send("plan", { files: plan.files.map((f) => ({ path: f.path, role: f.role ?? "" })) });
 
-  const groups = groupFiles(plan.files.map((f) => f.path));
-  send("phase", { phase: "write", label: `Écriture en parallèle · ${groups.length} groupe${groups.length > 1 ? "s" : ""}` });
+  const paths = plan.files.map((f) => f.path);
+  const steps = [
+    { label: "Écriture du serveur", paths: paths.filter(isFirstStep) },
+    { label: "Écriture du client", paths: paths.filter((p) => !isFirstStep(p)) },
+  ].filter((step) => step.paths.length);
   // the account's cheaper model for light files (a free one for free accounts)
   const lightModel = profile ? profile.light : config.engine.lightModel;
   const light = (await modelAvailable(lightModel)) ? lightModel : null;
-  const runGroup = (paths, i, notes) =>
+  const runGroup = (files, i, notes, written) =>
     runEngine({
-      userContent: buildPartMessage(spec, plan, paths, { notes }),
+      userContent: buildPartMessage(spec, plan, files, { notes, written }),
       // deltas of the groups interleave: each carries its group so the studio can tell them apart
       onEvent: (type, payload) => (type === "delta" ? send("pdelta", { g: i, t: payload }) : send(type, payload)),
       signal,
       meta: { ...meta, purpose: "generate" },
-      model: light && paths.every(isLightFile) ? light : undefined,
+      model: light && files.every(isLightFile) ? light : undefined,
       profile,
     });
   const settle = (p) => p.then((value) => ({ status: "fulfilled", value }), (reason) => ({ status: "rejected", reason }));
 
-  let settled = await Promise.all(groups.map((g, i) => settle(runGroup(g, i, i === 0))));
-  if (signal?.aborted) throw settled.find((s) => s.status === "rejected")?.reason ?? new Error("aborted");
-  // a group that failed (overload…) gets one more try
-  settled = await Promise.all(settled.map((s, i) => (s.status === "fulfilled" ? s : settle(runGroup(groups[i], i, i === 0)))));
-  const ok = settled.filter((s) => s.status === "fulfilled").map((s) => s.value);
-  if (!ok.length) throw settled[0].reason;
-
-  // each file comes from the group that owns it; a file written by another group only fills a gap
-  const owner = new Map(groups.flatMap((g, i) => g.map((p) => [p, i])));
   const byPath = new Map();
-  settled.forEach((s, i) => {
-    if (s.status !== "fulfilled") return;
-    for (const f of s.value.files) {
-      const path = clean(f.path);
-      if (owner.get(path) === i || !byPath.has(path)) byPath.set(path, { ...f, path });
-    }
-  });
+  const ok = [];
+  let failure = null;
+  let offset = 0; // the studio tells the groups apart by index, across steps
+  for (const step of steps) {
+    const groups = groupFiles(step.paths, STEP_GROUPS);
+    send("phase", { phase: "write", label: `${step.label} · ${groups.length} groupe${groups.length > 1 ? "s" : ""}` });
+    const written = [...byPath.values()];
+    const run = (i) => settle(runGroup(groups[i], offset + i, step === steps.at(-1) && i === 0, written));
+    let settled = await Promise.all(groups.map((_, i) => run(i)));
+    if (signal?.aborted) throw settled.find((s) => s.status === "rejected")?.reason ?? new Error("aborted");
+    // a group that failed (overload…) gets one more try
+    settled = await Promise.all(settled.map((s, i) => (s.status === "fulfilled" ? s : run(i))));
+
+    // each file comes from the group that owns it; a file written by another group only fills a gap
+    const owner = new Map(groups.flatMap((g, i) => g.map((p) => [p, i])));
+    settled.forEach((s, i) => {
+      if (s.status !== "fulfilled") {
+        failure ??= s.reason;
+        return;
+      }
+      ok.push(s.value);
+      for (const f of s.value.files) {
+        const path = clean(f.path);
+        if (owner.get(path) === i || !byPath.has(path)) byPath.set(path, { ...f, path });
+      }
+    });
+    offset += groups.length;
+  }
+  if (!ok.length) throw failure;
+
   const result = {
     files: [...byPath.values()],
     deletes: [],
@@ -118,7 +141,7 @@ export async function generateParallel({ spec, send, signal, meta, profile }) {
   if (missing.length) {
     send("status", `Fichiers manquants (${missing.join(", ")}) : écriture complémentaire.`);
     try {
-      const extra = await runGroup(missing, groups.length, false);
+      const extra = await runGroup(missing, offset, false, [...byPath.values()]);
       for (const f of extra.files) if (!byPath.has(clean(f.path))) result.files.push({ ...f, path: clean(f.path) });
       result.outputTokens += extra.outputTokens ?? 0;
     } catch (err) {

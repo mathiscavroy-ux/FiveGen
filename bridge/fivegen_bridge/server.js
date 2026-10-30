@@ -21,8 +21,9 @@
 // Statements that can lose data (DROP, DELETE, TRUNCATE...) are never run. Turn it off
 // with: set fivegen_sql "0"
 //
-// The names of the resources, jobs, items and tables of the server are sent to FiveGen so
-// generated scripts reuse them (inventory.js). Turn it off with: set fivegen_inventory "0"
+// The names of the resources, jobs, items, tables and columns of the server are sent to
+// FiveGen so generated scripts reuse them (inventory.js). Turn it off with:
+// set fivegen_inventory "0"
 
 const fs = require("fs");
 const path = require("path");
@@ -30,7 +31,7 @@ const http = require("http");
 const https = require("https");
 const { execFile } = require("child_process");
 
-const VERSION = "1.6.1";
+const VERSION = "1.7.0";
 const TOKEN = GetConvar("fivegen_token", "");
 const BASE = GetConvar("fivegen_url", "https://flazehdr.alwaysdata.net").replace(/\/+$/, "");
 const FOLDER = GetConvar("fivegen_folder", "[fivegen]");
@@ -250,6 +251,7 @@ function readServer() {
   return {
     resources: () => resources,
     started: (name) => GetResourceState(name) === "started",
+    version: (name) => GetResourceMetadata(name, "version", 0),
     query: sqlQuery,
     qbCore: () => exports["qb-core"].GetCoreObject(),
     qbxJobs: () => exports.qbx_core.GetJobs(),

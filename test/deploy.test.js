@@ -183,7 +183,8 @@ test("the real bridge reads the server and the account sees it, names only", asy
       GetNumResources: () => started.length,
       GetResourceByFindIndex: (i) => started[i],
       GetResourceState: (name) => (started.includes(name) ? "started" : "missing"),
-      exports: { oxmysql: { query: (sql, _params, done) => done(rows[sql]) } },
+      GetResourceMetadata: (name, key) => (name === "ox_lib" && key === "version" ? "3.30.0" : null),
+      exports: { oxmysql: { query: (sql, _params, done) => done(sql.includes("information_schema") ? [{ t: "users", c: "identifier", k: "varchar(60)", p: "PRI" }] : rows[sql]) } },
     },
   });
   skew = 60_000;
@@ -191,6 +192,8 @@ test("the real bridge reads the server and the account sees it, names only", asy
   assert.deepEqual(seen, { resources: 3, jobs: 1, items: 1, tables: 1 });
   assert.deepEqual(deploy.serverInventory(userId).jobs, [{ name: "police", grades: [{ grade: 3, name: "boss", boss: true }] }]);
   assert.equal(deploy.serverInventory(userId).server, "Inventaire");
+  assert.deepEqual(deploy.serverInventory(userId).versions, { ox_lib: "3.30.0" });
+  assert.deepEqual(deploy.serverInventory(userId).columns, { users: ["identifier varchar(60) PK"] });
 });
 
 test("a failed read of the server is logged, then retried a minute later", async () => {

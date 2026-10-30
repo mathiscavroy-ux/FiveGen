@@ -143,8 +143,10 @@ Règles :
 }
 
 // Step 2: one group of files, written alongside the others from the same plan.
-export function buildPartMessage(spec, plan, paths, { notes = false } = {}) {
-  const others = (plan.files ?? []).filter((f) => !paths.includes(f.path));
+export function buildPartMessage(spec, plan, paths, { notes = false, written = [] } = {}) {
+  const shown = pickWritten(written);
+  const done = new Set(shown.map((f) => f.path));
+  const others = (plan.files ?? []).filter((f) => !paths.includes(f.path) && !done.has(f.path));
   return `Tu écris une PARTIE d'une ressource FiveM. Les autres fichiers sont écrits en même temps par d'autres appels, à partir du même plan.
 
 <specification>
@@ -162,7 +164,13 @@ ${briefBlock(spec)}
 <plan_de_la_ressource>
 ${JSON.stringify(plan)}
 </plan_de_la_ressource>
+${shown.length ? `
+<deja_ecrits>
+Ces fichiers sont terminés et ne changeront plus. Ils font foi : si le plan diffère de leur code, suis leur code (noms des événements et des callbacks, ordre des arguments, forme exacte des données renvoyées, clés Config). Ne les réécris pas.
 
+${filesBlock(shown)}
+</deja_ecrits>
+` : ""}
 <fichiers_a_ecrire>
 ${paths.map((p) => `- ${p}`).join("\n")}
 </fichiers_a_ecrire>
@@ -173,6 +181,15 @@ ${others.map((f) => `- ${f.path} : ${f.role ?? ""}`).join("\n") || "- aucun"}
 
 Écris UNIQUEMENT les fichiers à écrire, complets, au format FILE. Utilise exactement les noms du contrat (événements et leurs arguments, callbacks, clés Config, clés de traduction, actions et callbacks NUI, tables et colonnes SQL, exports) : les autres fichiers comptent dessus. Tout nom qui n'est pas dans le contrat reste local à ton fichier. Ne réécris pas les fichiers des autres.
 ${notes ? "Termine par le bloc NOTES : installation et utilisation de la ressource complète." : "Pas de bloc NOTES."}`;
+}
+
+// What the first step of a parallel generation really wrote, for the second one: config
+// first, and bounded. A file left out stays listed by name with the others.
+const WRITTEN_CHARS = 60000;
+
+function pickWritten(files) {
+  let left = WRITTEN_CHARS;
+  return [...files].sort((a, b) => /(^|\/)config\.lua$/.test(b.path) - /(^|\/)config\.lua$/.test(a.path)).filter((f) => (left -= f.content.length) >= 0);
 }
 
 // Answers given in the questions step: they override the defaults of the script family.

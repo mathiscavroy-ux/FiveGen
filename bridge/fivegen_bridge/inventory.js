@@ -1,5 +1,6 @@
 // What the bridge tells FiveGen about the server, so scripts reuse what already exists:
-// started resources, jobs and grades, items, table names. Names only, never player data.
+// started resources and their versions, jobs and grades, items, tables and their columns.
+// Names and types only, never what a table holds.
 // Turn it off with: set fivegen_inventory "0"
 
 // { police: { grades: { 0: { name, isboss } } } } → [{ name, grades: [{ grade, name, boss }] }]
@@ -22,7 +23,23 @@ const firstValues = (rows) => rows.map((row) => String(Object.values(row)[0]));
 
 const sorted = (list) => [...list].sort();
 
-// server: { resources(), started(name), query(sql), qbCore(), qbxJobs(), oxItems() }
+// The libraries generated scripts call: the engine writes for these versions.
+const VERSIONED = ["es_extended", "qb-core", "qbx_core", "ox_lib", "ox_inventory", "ox_target", "oxmysql"];
+
+const COLUMNS_SQL = "SELECT TABLE_NAME AS t, COLUMN_NAME AS c, COLUMN_TYPE AS k, COLUMN_KEY AS p FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION LIMIT 15000";
+
+// { users: ["identifier varchar(60) PK", "accounts longtext"] }. The type stops at its
+// size: the values of an enum are free text.
+function tableColumns(rows) {
+  const tables = {};
+  for (const { t, c, k, p } of rows) {
+    const type = /^[a-z]+(\(\d+(,\d+)?\))?/i.exec(String(k))?.[0] ?? "";
+    (tables[t] ??= []).push(`${c} ${type}${p === "PRI" ? " PK" : ""}`);
+  }
+  return tables;
+}
+
+// server: { resources(), started(name), version(name), query(sql), qbCore(), qbxJobs(), oxItems() }
 async function collect(server) {
   const attempt = async (read, fallback) => {
     try {
@@ -48,9 +65,11 @@ async function collect(server) {
 
   return {
     resources: sorted(server.resources()),
+    versions: await attempt(() => Object.fromEntries(VERSIONED.filter((name) => server.started(name)).map((name) => [name, server.version(name)]).filter(([, version]) => version)), {}),
     jobs: jobs.sort((a, b) => a.name.localeCompare(b.name)),
     items: sorted(items),
     tables: sql ? sorted(firstValues(await attempt(() => server.query("SHOW TABLES"), []))) : [],
+    columns: sql ? await attempt(async () => tableColumns(await server.query(COLUMNS_SQL)), {}) : {},
   };
 }
 

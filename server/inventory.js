@@ -3,12 +3,17 @@
 // jobs and dependencies a script expects but the server does not have.
 
 const NAME = /^[\w.:-]{1,64}$/; // nothing here can close a prompt tag or carry a sentence
-const MAX = { resources: 1000, jobs: 300, grades: 30, items: 6000, tables: 1500 };
-const IN_PROMPT = { resources: 200, jobsWithGrades: 40, items: 300, tables: 150 };
+const COLUMN = /^[\w$]{1,64} [a-z]+(\(\d+(,\d+)?\))?( PK)?$/i;
+const VERSION = /^[\w.+-]{1,32}$/;
+const MAX = { resources: 1000, jobs: 300, grades: 30, items: 6000, tables: 1500, tablesWithColumns: 500, columns: 120, versions: 20 };
+const IN_PROMPT = { resources: 200, jobsWithGrades: 40, items: 300, tables: 150, tablesWithColumns: 20 };
+// Read or written by most scripts, whatever the request says.
+const CORE_TABLES = ["users", "players", "owned_vehicles", "player_vehicles", "jobs", "job_grades"];
 // Started on every server: listing them tells the engine nothing.
 const STOCK = new Set(["chat", "spawnmanager", "sessionmanager", "mapmanager", "hardcap", "rconlog", "baseevents", "fivem", "monitor", "webadmin", "yarn", "webpack", "fivegen_bridge"]);
 
 const names = (list, max) => [...new Set((Array.isArray(list) ? list : []).filter((v) => typeof v === "string" && NAME.test(v)))].slice(0, max);
+const pairs = (map) => Object.entries(map && typeof map === "object" ? map : {});
 
 export function sanitizeInventory(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
@@ -22,7 +27,15 @@ export function sanitizeInventory(raw) {
         .slice(0, MAX.grades)
         .map((g) => ({ grade: g.grade, name: g.name, boss: g.boss === true })),
     }));
-  return { resources: names(r.resources, MAX.resources), jobs, items: names(r.items, MAX.items), tables: names(r.tables, MAX.tables) };
+  const columns = pairs(r.columns)
+    .filter(([table, list]) => NAME.test(table) && Array.isArray(list))
+    .slice(0, MAX.tablesWithColumns)
+    .map(([table, list]) => [table, list.filter((c) => typeof c === "string" && COLUMN.test(c)).slice(0, MAX.columns)])
+    .filter(([, list]) => list.length);
+  const versions = pairs(r.versions)
+    .filter(([name, version]) => NAME.test(name) && typeof version === "string" && VERSION.test(version))
+    .slice(0, MAX.versions);
+  return { resources: names(r.resources, MAX.resources), versions: Object.fromEntries(versions), jobs, items: names(r.items, MAX.items), tables: names(r.tables, MAX.tables), columns: Object.fromEntries(columns) };
 }
 
 export const inventoryCounts = (inventory) => ({
@@ -36,22 +49,41 @@ const line = (label, list, max) => (list.length ? `${label}${list.length > max ?
 
 const grades = (job) => (job.grades.length ? `${job.name} (${job.grades.map((g) => `${g.grade} ${g.name}${g.boss ? " [patron]" : ""}`).join(", ")})` : job.name);
 
+const matcher = (text) => {
+  const words = String(text ?? "").toLowerCase().match(/[a-zà-ÿ0-9]{4,}/g) ?? [];
+  return (name) => words.some((w) => name.toLowerCase().includes(w));
+};
+
 // Big servers have thousands of items: the ones that look like the request come first.
 function relevantFirst(items, text) {
-  const words = String(text ?? "").toLowerCase().match(/[a-zà-ÿ0-9]{4,}/g) ?? [];
-  if (!words.length || items.length <= IN_PROMPT.items) return items;
-  const matches = (item) => words.some((w) => item.toLowerCase().includes(w));
+  if (items.length <= IN_PROMPT.items) return items;
+  const matches = matcher(text);
   return [...items.filter(matches), ...items.filter((i) => !matches(i))];
+}
+
+// Every column of every table would drown the rest: the tables of the request, then the core ones.
+function columnLines(columns = {}, text = "") {
+  const tables = Object.keys(columns);
+  const shown = [...new Set([...tables.filter(matcher(text)), ...CORE_TABLES.filter((t) => columns[t])])].slice(0, IN_PROMPT.tablesWithColumns);
+  return shown.map((t) => `- ${t} : ${columns[t].join(", ")}`);
 }
 
 export function inventoryBlock(inventory, text = "") {
   if (!inventory) return "";
   const resources = inventory.resources.filter((r) => !STOCK.has(r));
+  const versions = Object.entries(inventory.versions ?? {}).map(([name, version]) => `${name} ${version}`);
+  const columns = columnLines(inventory.columns, text);
   const lines = [
     line("Ressources démarrées", resources, IN_PROMPT.resources),
+    versions.length ? `Versions : ${versions.join(", ")}` : null,
     inventory.jobs.length ? `Jobs : ${[...inventory.jobs.slice(0, IN_PROMPT.jobsWithGrades).map(grades), ...inventory.jobs.slice(IN_PROMPT.jobsWithGrades).map((j) => j.name)].join(", ")}` : null,
     line("Items", relevantFirst(inventory.items, text), IN_PROMPT.items),
     line("Tables SQL", inventory.tables, IN_PROMPT.tables),
+    columns.length ? `Colonnes réelles de ces tables :\n${columns.join("\n")}` : null,
+  ].filter(Boolean);
+  const rules = [
+    versions.length ? "- Écris pour ces versions. Si l'une est plus ancienne que la référence d'API, n'utilise que ce qui existe déjà dans cette version." : null,
+    columns.length ? "- Tes requêtes SQL utilisent ces colonnes exactes, sans en inventer. Pour une table listée sans ses colonnes, ne suppose rien : évite-la, ou dis dans les notes ce qu'il faut vérifier." : null,
   ].filter(Boolean);
   if (!lines.length) return "";
   return `
@@ -63,7 +95,7 @@ Règles :
 - Les grades et le grade patron sont ceux listés ici, pas des valeurs supposées.
 - Un item ou un job nécessaire et absent : ajoute-le au .sql, ou indique-le dans les notes si l'inventaire est géré ailleurs (ox_inventory).
 - Ne dépends que de ressources présentes dans la liste, sauf si le client demande explicitement autre chose : dis-le alors dans les notes.
-</serveur_reel>
+${rules.length ? `${rules.join("\n")}\n` : ""}</serveur_reel>
 `;
 }
 
