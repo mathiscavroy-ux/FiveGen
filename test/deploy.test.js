@@ -245,6 +245,28 @@ test("the inventory endpoint needs a valid token", async () => {
   assert.equal(res.status, 401);
 });
 
+test("the server list says when the bridge is behind the one offered for download", () => {
+  const { server: s } = deploy.createServer(userId, "Version");
+  const manifest = fs.readFileSync(new URL("../bridge/fivegen_bridge/fxmanifest.lua", import.meta.url), "utf8");
+  const script = fs.readFileSync(new URL("../bridge/fivegen_bridge/server.js", import.meta.url), "utf8");
+  const latest = /^version '(.+)'/m.exec(manifest)[1];
+  assert.equal(/const VERSION = "(.+)";/.exec(script)[1], latest); // both must move together
+  const seen = (version) => {
+    db.db.prepare("UPDATE servers SET bridge_version = ? WHERE id = ?").run(version, s.id);
+    return deploy.listServers(userId).find((x) => x.id === s.id);
+  };
+  assert.equal(seen(null).bridgeOutdated, false); // never connected: nothing to update yet
+  assert.equal(seen("1.5.0").bridgeOutdated, true);
+  assert.equal(seen(latest).bridgeOutdated, false);
+  assert.equal(seen("99.0.0").bridgeLatest, latest);
+});
+
+test("the bridge stays downloadable without a token", async () => {
+  const res = await fetch(`${baseUrl}/api/bridge/download`);
+  assert.equal(res.status, 200);
+  assert.ok((await res.arrayBuffer()).byteLength > 1000);
+});
+
 test("a revoked token is refused", async () => {
   const { server: s, token } = deploy.createServer(userId, "Revoked");
   assert.ok(deploy.deleteServer(userId, s.id));

@@ -326,6 +326,13 @@
     <p class="muted">La ressource est copiée dans <code>resources/[fivegen]/</code> puis démarrée automatiquement. Ça marche aussi avec un serveur sur ton PC : aucun port à ouvrir.</p>
     <div id="deployStatus" class="deploy-status hidden"></div>
     <ul id="serverList" class="server-list"></ul>
+    <div id="bridgeRow" class="bridge-row hidden">
+      <div>
+        <b id="bridgeTitle">Bridge FiveGen</b>
+        <span>Pour le mettre à jour, remplace le dossier <code>fivegen_bridge</code> sur ton serveur puis redémarre la ressource. Ton jeton reste dans <code>server.cfg</code> : rien à reconnecter.</span>
+      </div>
+      <a id="btnBridge" class="btn small" href="/api/bridge/download" download>Télécharger le bridge</a>
+    </div>
     <details id="addServer" class="add-server">
       <summary>+ Connecter un serveur</summary>
       <form id="addServerForm" class="add-form">

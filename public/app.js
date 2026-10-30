@@ -2273,13 +2273,19 @@ async function loadServers() {
         .map((s) => `<li>
           <span class="srv-dot ${s.online ? "on" : ""}" title="${s.online ? "En ligne" : "Hors ligne"}"></span>
           <div class="srv-info"><b>${escapeHtml(s.name)}</b>
-            <span>${s.online ? "En ligne" : s.lastSeenAt ? `Vu ${timeAgo(s.lastSeenAt)}` : "Jamais connecté : installe le bridge"} · jeton …${escapeHtml(s.hint)}</span>
+            <span>${s.online ? "En ligne" : s.lastSeenAt ? `Vu ${timeAgo(s.lastSeenAt)}` : "Jamais connecté : installe le bridge"} · jeton …${escapeHtml(s.hint)}${s.bridgeVersion ? ` · bridge ${escapeHtml(s.bridgeVersion)}` : ""}</span>
             ${serverRead(s)}</div>
           ${canDeploy ? `<button class="btn small primary" data-deploy="${s.id}">Déployer ${escapeHtml(state.current.name)}</button>` : ""}
           <button class="btn small ghost" data-remove-server="${s.id}" title="Révoquer le jeton">Supprimer</button>
         </li>`)
         .join("")
     : '<li class="muted empty-srv">Aucun serveur connecté pour l\'instant.</li>';
+  // the same download stays here once a server is connected, for updates
+  const outdated = deploy.servers.some((s) => s.bridgeOutdated);
+  $("#bridgeRow").classList.toggle("hidden", !deploy.servers.length);
+  $("#bridgeRow").classList.toggle("outdated", outdated);
+  $("#bridgeTitle").textContent = outdated ? `Nouveau bridge disponible : version ${deploy.servers[0].bridgeLatest}` : "Bridge FiveGen";
+  $("#btnBridge").classList.toggle("primary", outdated);
 }
 
 // What the engine knows about the server, or what is missing for it to know.

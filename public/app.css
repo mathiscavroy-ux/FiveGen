@@ -1288,3 +1288,15 @@ dialog::backdrop { background: rgb(0 0 0 / .55); backdrop-filter: blur(4px); }
   .composer-steps { grid-template-columns: repeat(3, 1fr); }
   #viewNew { padding: 40px 28px; }
 }
+
+/* deploy dialog: the bridge stays downloadable once a server is connected */
+.bridge-row { display: flex; align-items: center; gap: 14px; margin: 0 0 12px; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); font-size: 12px; color: var(--muted); }
+.bridge-row > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bridge-row b { font-size: 13.5px; color: var(--text); }
+.bridge-row .btn { flex: none; }
+.bridge-row.outdated { border-color: rgb(var(--accent-rgb) / .5); background: var(--accent-soft); }
+@media (max-width: 560px) {
+  .bridge-row, .server-list li { flex-wrap: wrap; }
+  .bridge-row .btn { width: 100%; justify-content: center; }
+  .srv-info { flex-basis: calc(100% - 24px); }
+}

@@ -4,6 +4,7 @@
 // resources, writes them under resources/[fivegen]/ and reports back.
 import crypto from "node:crypto";
 import express from "express";
+import fs from "node:fs";
 import path from "node:path";
 import { ZipArchive } from "archiver";
 import { db } from "./db.js";
@@ -58,6 +59,9 @@ const now = () => new Date().toISOString();
 const hash = (t) => crypto.createHash("sha256").update(t).digest("hex");
 const ONLINE_MS = 30_000; // the bridge polls every 5 s
 const STALE_MS = 10 * 60_000; // a delivery never confirmed is reported as lost
+// The version served by /bridge/download.
+const BRIDGE_VERSION = /^version '([\d.]+)'/m.exec(fs.readFileSync(path.join(ROOT, "bridge", "fivegen_bridge", "fxmanifest.lua"), "utf8"))[1];
+const bridgeOutdated = (version) => Boolean(version) && version.localeCompare(BRIDGE_VERSION, undefined, { numeric: true }) < 0;
 
 const publicServer = (s) => ({
   id: s.id,
@@ -67,6 +71,8 @@ const publicServer = (s) => ({
   lastSeenAt: s.last_seen_at,
   online: Boolean(s.last_seen_at && Date.now() - new Date(s.last_seen_at).getTime() < ONLINE_MS),
   bridgeVersion: s.bridge_version,
+  bridgeLatest: BRIDGE_VERSION,
+  bridgeOutdated: bridgeOutdated(s.bridge_version),
   inventory: s.inventory ? inventoryCounts(JSON.parse(s.inventory)) : null,
   inventoryAt: s.inventory_at,
 });
