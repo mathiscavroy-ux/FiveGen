@@ -84,3 +84,54 @@ test("a payment for an account deleted meanwhile is still recorded", () => {
   assert.match(payments.handleWebhook(payload, header), /\+\d+ crédits/);
   assert.ok(db.listPayments().some((p) => p.session_id === "cs_test_gone" && p.email === null));
 });
+
+// ---- monthly subscriptions ----
+
+function signed(type, object) {
+  const payload = JSON.stringify({ id: `evt_${object.id}_${type}`, object: "event", type, data: { object } });
+  return [payload, signer.webhooks.generateTestHeaderString({ payload, secret: SECRET })];
+}
+
+test("a subscription checkout links the subscription without adding credits", () => {
+  const subscriber = db.createUser("sub@test.local", "x", 0, false).id;
+  const before = db.getUser(subscriber).credits;
+  const result = payments.handleWebhook(
+    ...signed("checkout.session.completed", {
+      id: "cs_sub_1", object: "checkout.session", mode: "subscription", payment_status: "paid",
+      customer: "cus_1", subscription: "sub_1", metadata: { userId: String(subscriber), planId: "mensuel" },
+    }),
+  );
+  assert.match(result, /abonnement enregistré/);
+  const u = db.getUser(subscriber);
+  assert.equal(u.credits, before);
+  assert.equal(u.sub_id, "sub_1");
+  assert.equal(u.stripe_customer, "cus_1");
+  assert.equal(u.sub_status, "active");
+});
+
+const invoice = (over = {}) => ({
+  id: "in_1", object: "invoice", billing_reason: "subscription_create", amount_paid: 1499, currency: "eur", customer: "cus_1",
+  parent: { type: "subscription_details", subscription_details: { subscription: "sub_1", metadata: { userId: String(db.getUserByEmail("sub@test.local").id), planId: "mensuel" } } },
+  lines: { data: [{ period: { end: 1800000000 } }] },
+  ...over,
+});
+
+test("each paid subscription invoice adds the plan credits once", () => {
+  const id = db.getUserByEmail("sub@test.local").id;
+  const start = db.getUser(id).credits;
+  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice())), /\+30 crédits/);
+  assert.equal(payments.handleWebhook(...signed("invoice.paid", invoice())), "déjà traité");
+  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_2", billing_reason: "subscription_cycle" }))), /\+30 crédits/);
+  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_3", billing_reason: "subscription_update" }))), /ignorée/);
+  assert.equal(db.getUser(id).credits, start + 60);
+  assert.equal(db.getUser(id).sub_period_end, new Date(1800000000 * 1000).toISOString());
+});
+
+test("subscription changes from Stripe are mirrored on the account", () => {
+  const id = db.getUserByEmail("sub@test.local").id;
+  const sub = { id: "sub_1", object: "subscription", customer: "cus_1", status: "active", cancel_at_period_end: true, metadata: { userId: String(id), planId: "mensuel" }, items: { data: [{ current_period_end: 1800000000 }] } };
+  payments.handleWebhook(...signed("customer.subscription.updated", sub));
+  assert.equal(db.getUser(id).sub_cancel_at_end, 1);
+  payments.handleWebhook(...signed("customer.subscription.deleted", { ...sub, status: "canceled" }));
+  assert.equal(db.getUser(id).sub_status, "canceled");
+});

@@ -1078,3 +1078,19 @@ body.settings-page { display: block; height: auto; min-height: 100%; overflow: a
   .composer-steps { grid-template-columns: 1fr; }
   .composer-kbd { display: none; }
 }
+
+/* ---------- import, conversion, subscriptions ---------- */
+.import-box {
+  display: flex; align-items: center; gap: 14px; margin-top: 18px; padding: 14px 16px; border-radius: var(--radius);
+  border: 1px dashed var(--border-strong); background: var(--panel); transition: border-color .15s, background .15s;
+}
+.import-box > svg { width: 22px; height: 22px; color: var(--accent-text); flex: none; }
+.import-box > div { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.45; }
+.import-box.drag { border-color: var(--accent); background: var(--accent-soft); }
+.refine-tools { display: flex; gap: 8px; align-items: center; }
+.refine-tools select { flex: 1; min-width: 0; }
+.buy-title { margin: 4px 0 8px; font-size: 13.5px; }
+.buy-title .muted { font-weight: 500; }
+.pack .amount small { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+@media (max-width: 640px) { .import-box { flex-wrap: wrap; } .import-box .btn { width: 100%; justify-content: center; } }
+.st-badge.discord { color: #fff; background: #5865f2; }

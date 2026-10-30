@@ -34,6 +34,11 @@
         <button type="button" data-mode="login" class="active">Connexion</button>
         <button type="button" data-mode="register">Créer un compte</button>
       </div>
+      <div id="discordBox" class="discord-box hidden">
+        <a id="discordBtn" class="btn discord-btn" href="/api/auth/discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.6 1.3a18.3 18.3 0 0 0-5.6 0L8.6 3a19.7 19.7 0 0 0-4.9 1.5C.6 9.1-.3 13.6.1 18.1a19.9 19.9 0 0 0 6 3l1.3-2a12.9 12.9 0 0 1-2-1l.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.6.4-1.3.7-2 1l1.3 2a19.8 19.8 0 0 0 6-3c.5-5.2-.9-9.7-3.6-13.7zM8 15.3c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.5 8 10.5s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4z"/></svg>Continuer avec Discord</a>
+        <p class="discord-terms">En continuant avec Discord, tu acceptes les <a href="/cgv" target="_blank">conditions générales</a>.</p>
+        <div class="or"><span>ou avec ton e-mail</span></div>
+      </div>
       <form id="authForm" novalidate>
         <label class="field">
           <span>Adresse e-mail</span>
@@ -70,6 +75,7 @@
     function render() {
       const forgot = mode === "forgot";
       document.querySelector(".tabs").classList.toggle("hidden", forgot);
+      $("#discordBox").classList.toggle("hidden", forgot || !discord);
       $("#passRow").classList.toggle("hidden", forgot);
       $("#forgotLink").classList.toggle("hidden", mode !== "login");
       $("#backLogin").classList.toggle("hidden", !forgot);
@@ -118,9 +124,30 @@
       }
     });
 
+    // Back from Discord with a refusal (/api/auth/discord/callback).
+    const DISCORD_ERRORS = {
+      cancel: "Connexion Discord annulée.",
+      noemail: "Ton compte Discord n'a pas d'adresse e-mail vérifiée : vérifie-la dans Discord, ou crée un compte avec ton e-mail.",
+      disposable: "Les adresses e-mail jetables ne sont pas acceptées.",
+      blocked: "Ce compte est suspendu. Contacte le support FiveGen.",
+      failed: "La connexion avec Discord n'a pas abouti. Réessaie dans un instant.",
+    };
+    const discordError = DISCORD_ERRORS[params.get("discord")] ?? "";
+    let discord = false;
+    $("#discordBtn").href = `/api/auth/discord?next=${encodeURIComponent(next)}`;
+
     fetch("/api/me").then((r) => r.ok && (location.href = next));
-    fetch("/api/public").then((r) => r.json()).then((p) => ($("#bonus").textContent = `${p.freeCredits} crédits offerts à l'inscription pour tester.`)).catch(() => {});
+    fetch("/api/public")
+      .then((r) => r.json())
+      .then((p) => {
+        $("#bonus").textContent = `${p.freeCredits} crédits offerts à l'inscription pour tester.`;
+        discord = Boolean(p.discord);
+        render();
+        $("#error").textContent = discordError;
+      })
+      .catch(() => {});
     render();
+    $("#error").textContent = discordError;
   </script>
 </body>
 </html>

@@ -9,7 +9,9 @@ import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from ".
 import { providerUsage, modelPricing, modelAvailable } from "./provider.js";
 import { generateParallel } from "./parallel.js";
 import { sanitizeAnswers } from "./brief.js";
-import { paymentsEnabled, publicPacks, createCheckout, handleWebhook } from "./payments.js";
+import { paymentsEnabled, publicPacks, createCheckout, handleWebhook, createSubscriptionCheckout, setCancelAtPeriodEnd, cancelNow } from "./payments.js";
+import { importResource } from "./importer.js";
+import { mountDiscord, discordEnabled } from "./discord.js";
 import { validateProjectFull } from "./validator.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors } from "./deploy.js";
 import { mountSeo } from "./seo.js";
@@ -159,7 +161,7 @@ function mergeNotes(previous, notes, title) {
   return `${previous}\n\n### ${title}\n\n${notes}`;
 }
 
-const LABELS = { generate: "Génération", refine: "Modification", fix: "Correction" };
+const LABELS = { generate: "Génération", refine: "Modification", fix: "Correction", convert: "Conversion", optimize: "Optimisation" };
 
 // Whole files and SEARCH/REPLACE edits from one engine run. Edits whose SEARCH text
 // is not found are redone once as whole files, so a stale anchor never loses a change.
@@ -290,8 +292,9 @@ function safeProject(userId, id) {
   }
 }
 
-// Credits are already charged by the caller; refunded when nothing was produced.
-async function streamPipeline(res, { userId, projectId, kind, instruction, userContent, cost }) {
+// Credits are already charged by the caller; refunded when nothing was produced
+// (onNothing then undoes what the caller prepared).
+async function streamPipeline(res, { userId, projectId, kind, instruction, userContent, cost, onNothing }) {
   running.add(userId);
   const job = createJob({ userId, projectId, kind });
   watchJob(job, res);
@@ -308,6 +311,7 @@ async function streamPipeline(res, { userId, projectId, kind, instruction, userC
     if (detail !== "aborted") console.error(`[fivegen] ${kind} failed for user ${userId}:`, detail);
     if (!state.produced) db.addCredits(userId, cost);
     if (!state.produced && kind === "generate") deleteProject(userId, projectId);
+    if (!state.produced) onNothing?.();
     db.logGeneration({
       userId,
       projectId,
@@ -466,8 +470,9 @@ app.get("/api/me", requireUser, (req, res) => res.json(publicUser(req.user)));
 
 app.post("/api/me/password", requireUser, authLimiter, async (req, res) => {
   const { current, next } = req.body ?? {};
-  if (!(await verifyPassword(String(current ?? ""), req.user.pass_hash))) return res.status(400).json({ error: "Mot de passe actuel incorrect." });
-  if (String(next ?? "").length < 8) return res.status(400).json({ error: "Le nouveau mot de passe doit faire au moins 8 caractères." });
+  // an account created with Discord sets its first password without a current one
+  if (req.user.pass_hash && !(await verifyPassword(String(current ?? ""), req.user.pass_hash))) return res.status(400).json({ error: "Mot de passe actuel incorrect." });
+  if (String(next ?? "").length < 8 || String(next).length > 200) return res.status(400).json({ error: "Le nouveau mot de passe doit faire au moins 8 caractères." });
   db.setPassword(req.user.id, await hashPassword(String(next)));
   // A stolen session must not survive a password change; this browser stays logged in.
   endOtherSessions(req, req.user.id);
@@ -500,6 +505,7 @@ app.put("/api/me/prefs", requireUser, (req, res) => {
 
 app.post("/api/me/email", requireUser, authLimiter, async (req, res) => {
   const email = String(req.body?.email ?? "").trim().toLowerCase();
+  if (!req.user.pass_hash) return res.status(400).json({ error: "Choisis d'abord un mot de passe (section Sécurité)." });
   if (!(await verifyPassword(String(req.body?.password ?? ""), req.user.pass_hash))) return res.status(400).json({ error: "Mot de passe incorrect." });
   if (!validEmail(email)) return res.status(400).json({ error: "Adresse e-mail invalide." });
   if (disposable(email)) return res.status(400).json({ error: "Les adresses e-mail jetables ne sont pas acceptées." });
@@ -522,9 +528,26 @@ app.get("/api/me/activity", requireUser, (req, res) => {
 
 // GDPR erasure: account, sessions, servers and every project file. Payment records stay
 // (accounting obligation) but lose the link to the account.
+// Stops a running subscription before an account goes; false (and the answer sent) if Stripe refused.
+async function stopSubscription(user, res) {
+  try {
+    await cancelNow(user);
+    return true;
+  } catch (err) {
+    console.error("[fivegen] résiliation de l'abonnement impossible :", err.message);
+    res.status(502).json({ error: "Impossible de résilier l'abonnement pour le moment : réessaie dans un instant." });
+    return false;
+  }
+}
+
 app.delete("/api/me", requireUser, authLimiter, async (req, res) => {
-  if (!(await verifyPassword(String(req.body?.password ?? ""), req.user.pass_hash))) return res.status(400).json({ error: "Mot de passe incorrect." });
+  // without a password (Discord account), typing the address confirms
+  const confirmed = req.user.pass_hash
+    ? await verifyPassword(String(req.body?.password ?? ""), req.user.pass_hash)
+    : String(req.body?.confirm ?? "").trim().toLowerCase() === req.user.email;
+  if (!confirmed) return res.status(400).json({ error: req.user.pass_hash ? "Mot de passe incorrect." : "Tape ton adresse e-mail exacte pour confirmer." });
   if (running.has(req.user.id)) return res.status(409).json({ error: "Une génération est en cours : attends qu'elle se termine." });
+  if (!(await stopSubscription(req.user, res))) return;
   deleteUserData(req.user.id);
   db.deleteUser(req.user.id);
   endSession(req, res);
@@ -544,7 +567,7 @@ app.post("/api/redeem", requireUser, redeemLimiter, (req, res) => {
 app.get("/api/options", (_req, res) => res.json({ ...CATALOG, demo: config.mock }));
 
 app.get("/api/public", (_req, res) =>
-  res.json({ freeCredits: config.freeCredits, costs: config.cost, freeRefines: config.freeRefines, shopUrl: config.shopUrl, supportUrl: config.supportUrl }),
+  res.json({ freeCredits: config.freeCredits, costs: config.cost, freeRefines: config.freeRefines, shopUrl: config.shopUrl, supportUrl: config.supportUrl, discord: discordEnabled() }),
 );
 
 app.get("/api/packs", (_req, res) => res.json(publicPacks()));
@@ -565,6 +588,34 @@ app.post("/api/checkout", requireUser, checkoutLimiter, async (req, res) => {
     res.status(502).json({ error: "Le paiement est momentanément indisponible. Réessaie dans un instant." });
   }
 });
+
+app.post("/api/subscribe", requireUser, checkoutLimiter, async (req, res) => {
+  if (!paymentsEnabled()) return res.status(503).json({ error: "Le paiement par carte n'est pas encore disponible." });
+  if (req.body?.consent !== true) {
+    return res.status(400).json({ error: "Coche la case : tu demandes l'utilisation immédiate des crédits et renonces au délai de rétractation." });
+  }
+  try {
+    res.json({ url: await createSubscriptionCheckout({ user: req.user, planId: String(req.body?.planId ?? ""), baseUrl: siteUrl(req) }) });
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    console.error("[fivegen] création de l'abonnement impossible :", err.message);
+    res.status(502).json({ error: "L'abonnement est momentanément indisponible. Réessaie dans un instant." });
+  }
+});
+
+// cancel: renewal stopped at the end of the paid month; resume: renewal back on.
+for (const [action, cancel] of [["cancel", true], ["resume", false]]) {
+  app.post(`/api/me/subscription/${action}`, requireUser, checkoutLimiter, async (req, res) => {
+    try {
+      await setCancelAtPeriodEnd(req.user, cancel);
+      res.json(publicUser(db.getUser(req.user.id)));
+    } catch (err) {
+      if (err.status === 400) return res.status(400).json({ error: err.message });
+      console.error("[fivegen] abonnement non modifié :", err.message);
+      res.status(502).json({ error: "Stripe ne répond pas : réessaie dans un instant." });
+    }
+  });
+}
 
 app.get("/api/projects", requireUser, (req, res) => res.json(listProjects(req.user.id)));
 
@@ -655,6 +706,82 @@ app.post("/api/projects/:id/refine", requireUser, async (req, res) => {
     instruction,
     userContent: buildRefineMessage(project.spec, project.files, instruction),
     cost,
+  });
+});
+
+// ---------- imported scripts ----------
+
+const importLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 10, key: (req) => `i${req.user?.id ?? req.ip}`, message: "Trop d'imports. Réessaie dans quelques minutes." });
+
+// Free: the ZIP of an existing resource becomes a project (checked like a generated one).
+app.post("/api/import", requireUser, importLimiter, express.raw({ type: () => true, limit: "10mb" }), async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: "Envoie le fichier .zip de ta ressource." });
+  let found;
+  try {
+    let fileName = "";
+    try {
+      fileName = decodeURIComponent(req.get("x-file-name") ?? "");
+    } catch {
+      // malformed name: the folder inside the archive names the resource
+    }
+    found = importResource(req.body, fileName);
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+  if (!found.files.length) return res.status(400).json({ error: "Aucun fichier de code lisible dans l'archive." });
+  const project = createProject(req.user.id, {
+    name: found.name,
+    framework: found.framework,
+    type: "other",
+    ui: "auto",
+    dependencies: [],
+    language: "fr",
+    description: `Ressource importée par le client (${found.files.length} fichiers). Garde son fonctionnement actuel.`,
+    imported: true,
+  });
+  writeFiles(req.user.id, project.id, found.files);
+  snapshot(req.user.id, project.id, { type: "import", label: "Import du ZIP" });
+  addHistory(req.user.id, project.id, { type: "import", instruction: found.skipped.length ? `${found.skipped.length} fichier(s) non texte ignoré(s)` : null, files: found.files.map((f) => f.path) });
+  updateMeta(req.user.id, project.id, { validation: await checkProject(req.user.id, project.id) });
+  res.json({ project: getProject(req.user.id, project.id), skipped: found.skipped });
+});
+
+const frameworkLabel = (id) => CATALOG.frameworks.find((f) => f.id === id)?.label ?? id;
+
+const TRANSFORMS = {
+  convert: (from, to) =>
+    to === "bridge"
+      ? `Rends toute la ressource compatible QBCore, Qbox et ESX avec une détection automatique du framework au démarrage (actuellement ${frameworkLabel(from)}). Chaque appel au framework (joueur, argent, inventaire, jobs, callbacks, notifications, chargement du joueur) passe par une petite couche commune. Le comportement et les fonctionnalités ne changent pas. Mets à jour fxmanifest.lua et README.md.`
+      : `Convertis toute la ressource de ${frameworkLabel(from)} vers ${frameworkLabel(to)}. Remplace chaque appel du framework d'origine (objet joueur, argent, inventaire, jobs et grades, callbacks, notifications, événements de chargement du joueur, dépendances du fxmanifest, tables SQL du framework) par son équivalent ${frameworkLabel(to)}. Le comportement et les fonctionnalités ne changent pas. Mets à jour fxmanifest.lua et README.md (installation).`,
+  optimize: () =>
+    "Optimise les performances de la ressource (resmon côté client et serveur) sans changer son comportement visible : pas de boucle Wait(0) permanente (attente adaptative selon la distance ou l'état), natives coûteuses sorties des boucles et mises en cache, zones ou points de proximité au lieu de vérifier en boucle, threads arrêtés quand ils ne servent plus, requêtes SQL asynchrones et regroupées, pas de données inutiles envoyées aux clients. Résume dans tes notes ce qui a été optimisé.",
+};
+
+// Paid rewrites of a whole resource, mostly for imported ones: other framework, or performance.
+app.post("/api/projects/:id/transform", requireUser, async (req, res) => {
+  const project = getProject(req.user.id, req.params.id);
+  const kind = req.body?.action;
+  if (!TRANSFORMS[kind]) return res.status(400).json({ error: "Action inconnue." });
+  const from = project.spec.framework;
+  const to = req.body?.framework;
+  if (kind === "convert") {
+    if (!CATALOG.frameworks.some((f) => f.id === to)) return res.status(400).json({ error: "Choisis le framework de destination." });
+    if (to === from) return res.status(400).json({ error: `Ce script est déjà en ${frameworkLabel(to)}.` });
+  }
+  const cost = config.cost[kind];
+  if (!charge(req, res, cost)) return;
+  // the checks after the rewrite must judge it against the new framework
+  const spec = kind === "convert" ? { ...project.spec, framework: to } : project.spec;
+  if (kind === "convert") updateMeta(req.user.id, project.id, { spec });
+  await streamPipeline(res, {
+    userId: req.user.id,
+    projectId: project.id,
+    kind,
+    instruction: kind === "convert" ? `${frameworkLabel(from)} → ${frameworkLabel(to)}` : "Performances",
+    userContent: buildRefineMessage(spec, project.files, TRANSFORMS[kind](from, to)),
+    cost,
+    onNothing: kind === "convert" ? () => updateMeta(req.user.id, project.id, { spec: project.spec }) : undefined,
   });
 });
 
@@ -791,6 +918,7 @@ app.get("/api/projects/:id/zip", requireUser, (req, res) => {
 });
 
 mountDeploy(app);
+mountDiscord(app, { siteUrl, disposable });
 
 // ---------- admin ----------
 
@@ -871,10 +999,11 @@ app.post("/api/admin/users/:id/block", requireUser, requireAdmin, (req, res) => 
   res.json({ blocked });
 });
 
-app.delete("/api/admin/users/:id", requireUser, requireAdmin, (req, res) => {
+app.delete("/api/admin/users/:id", requireUser, requireAdmin, async (req, res) => {
   const user = adminTarget(req, res);
   if (!user) return;
   if (running.has(user.id)) return res.status(409).json({ error: "Une génération est en cours sur ce compte." });
+  if (!(await stopSubscription(user, res))) return;
   deleteUserData(user.id);
   db.deleteUser(user.id);
   res.json({ ok: true });

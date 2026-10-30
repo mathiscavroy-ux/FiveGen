@@ -177,23 +177,60 @@ function renderPacks() {
     card.append(btn);
     $("#packGrid").append(card);
   }
+  renderPlans();
 }
 
-async function buyPack(packId, btn) {
+const ACTIVE_SUB = new Set(["active", "trialing", "past_due", "incomplete"]);
+
+// Monthly plans above the packs. An account already subscribed manages it from the settings.
+function renderPlans() {
+  const info = state.packs;
+  const plans = info?.enabled ? (info.plans ?? []) : [];
+  $("#planSection").classList.toggle("hidden", !plans.length);
+  $("#planGrid").innerHTML = "";
+  const current = state.me.subscription;
+  const subscribed = current && ACTIVE_SUB.has(current.status);
+  for (const p of plans) {
+    const card = document.createElement("div");
+    card.className = `pack plan${p.featured ? " featured" : ""}`;
+    card.dataset.pack = p.id;
+    card.innerHTML = `${p.featured ? '<span class="tagline">Le meilleur prix</span>' : ""}
+      <b>${escapeHtml(p.name)}</b>
+      <span class="amount">${formatPrice(p.price, info.currency)}<small> / mois</small></span>
+      <span class="unit">${plural(p.credits, "crédit")} chaque mois · ${formatPrice(Math.round((p.price / p.credits) * (state.me.costs.generate ?? 1)), info.currency)} le script</span>`;
+    const btn = document.createElement(subscribed ? "a" : "button");
+    btn.className = `btn ${p.featured ? "primary" : ""}`;
+    if (subscribed) {
+      btn.href = "/parametres#abonnement";
+      btn.textContent = current.plan?.id === p.id ? "Ton abonnement actuel" : "Gérer mon abonnement";
+    } else {
+      btn.type = "button";
+      btn.textContent = "S'abonner";
+      btn.onclick = () => startCheckout("/api/subscribe", { planId: p.id }, btn);
+    }
+    card.append(btn);
+    $("#planGrid").append(card);
+  }
+}
+
+const buyPack = (packId, btn) => startCheckout("/api/checkout", { packId }, btn);
+
+// Card payment on Stripe's page, for a pack or a subscription.
+async function startCheckout(url, body, btn) {
   if (!$("#buyConsent").checked) {
     toast("Coche la case de consentement avant de payer.", "err");
     $("#buyConsent").closest(".consent").classList.add("highlight");
     return;
   }
+  const text = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Redirection…";
   try {
-    const { url } = await api("/api/checkout", { method: "POST", body: { packId, consent: true } });
-    location.href = url;
+    location.href = (await api(url, { method: "POST", body: { ...body, consent: true } })).url;
   } catch (err) {
     toast(err.message, "err");
     btn.disabled = false;
-    btn.textContent = "Acheter";
+    btn.textContent = text;
   }
 }
 
@@ -204,7 +241,7 @@ async function handlePaymentReturn() {
   if (params.has("canceled")) {
     clean();
     toast("Paiement annulé : aucun montant n'a été débité.");
-  } else if (params.has("paid")) {
+  } else if (params.has("paid") || params.has("subscribed")) {
     clean();
     const before = state.me.credits;
     toast("Paiement reçu, ajout des crédits…");
@@ -1026,6 +1063,7 @@ function renderProject({ keepEditor = false } = {}) {
   renderInstallCheck();
   $("#btnPreview").classList.toggle("hidden", !hasNui(p));
   renderRefineCost();
+  renderTransformTools();
   state.versions = null;
   refreshInsights();
   if (!keepEditor) {
@@ -1110,7 +1148,7 @@ function resetLive(text) {
 function setBusy(busy) {
   state.busy = busy;
   $("#btnCancel").classList.toggle("hidden", !busy);
-  for (const id of ["#btnGenerate", "#btnRefine", "#btnFix", "#btnValidate", "#btnDelete"]) $(id).disabled = busy;
+  for (const id of ["#btnGenerate", "#btnRefine", "#btnFix", "#btnValidate", "#btnDelete", "#btnConvert", "#btnOptimize", "#btnImport"]) $(id).disabled = busy;
   $("#phaseLine").classList.toggle("busy", busy);
   renderStatus();
 }
@@ -1119,7 +1157,7 @@ function setBusy(busy) {
 
 const VERSION_LABELS = {
   generate: "Génération", refine: "Modification", fix: "Correction", autofix: "Correction automatique", review: "Relecture",
-  edit: "Édition manuelle", restore: "Restauration", initial: "État de départ",
+  edit: "Édition manuelle", restore: "Restauration", initial: "État de départ", import: "Import", convert: "Conversion", optimize: "Optimisation",
 };
 const fmtBytes = (n) => (n < 1024 ? `${n} o` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} Ko`);
 const fmtNum = (n) => Number(n).toLocaleString("fr-FR");
@@ -1774,7 +1812,7 @@ async function runStream(url, body, { fresh = false, attach = null } = {}) {
 
   const live = createLiveWriter($("#liveText"));
   const appendLive = (t) => live.write(t);
-  const kind = attach?.kind ?? (url.endsWith("/refine") ? "refine" : url.endsWith("/fix") ? "fix" : "generate");
+  const kind = attach?.kind ?? (url.endsWith("/refine") || url.endsWith("/transform") ? "refine" : url.endsWith("/fix") ? "fix" : "generate");
   actStart(kind);
   pipeStart(
     kind,
@@ -2053,6 +2091,86 @@ async function onRefine(e) {
   await runStream(`/api/projects/${state.current.id}/refine`, { instruction });
 }
 
+// Rewrites of the whole resource (mostly imported ones): another framework, or performance.
+function renderTransformTools() {
+  const p = state.current;
+  if (!p) return;
+  $("#convertTarget").innerHTML =
+    '<option value="">Vers…</option>' +
+    state.options.frameworks.filter((f) => f.id !== p.spec.framework).map((f) => `<option value="${f.id}">${escapeHtml(f.label)}</option>`).join("");
+  $("#btnConvert").title = `Réécrit tout le script pour un autre framework · ${plural(state.me.costs.convert, "crédit")}`;
+  $("#btnOptimize").title = `Réduit la consommation (resmon) sans changer le comportement · ${plural(state.me.costs.optimize, "crédit")}`;
+}
+
+async function onTransform(action) {
+  if (state.busy || !state.current) return;
+  const framework = $("#convertTarget").value;
+  if (action === "convert" && !framework) return toast("Choisis d'abord le framework de destination.", "err");
+  const cost = state.me.costs[action];
+  const target = label(state.options.frameworks, framework);
+  const what = action === "convert" ? `Convertir « ${state.current.name} » vers ${target}` : `Optimiser les performances de « ${state.current.name} »`;
+  if (!confirm(`${what} ? Coût : ${plural(cost, "crédit")}. La version actuelle reste dans l'onglet Versions.`)) return;
+  if (state.me.credits < cost) {
+    toast("Crédits insuffisants.", "err");
+    return openRedeem();
+  }
+  if (state.dirty && !confirm("Le fichier ouvert a des modifications non enregistrées. Continuer sans les enregistrer ?")) return;
+  setDirty(false);
+  // instruction: only for the live panel
+  await runStream(`/api/projects/${state.current.id}/transform`, { action, framework, instruction: action === "convert" ? `Conversion vers ${target}` : "Optimisation des performances" });
+}
+
+// ---------- import of an existing resource ----------
+
+async function importZip(file) {
+  if (!file) return;
+  if (state.busy) return toast("Une génération est en cours.", "err");
+  if (!/\.zip$/i.test(file.name)) return toast("Choisis le fichier .zip de ta ressource.", "err");
+  if (file.size > 10 * 1024 * 1024) return toast("Archive trop lourde (10 Mo maximum).", "err");
+  const btn = $("#btnImport");
+  btn.disabled = true;
+  btn.textContent = "Import…";
+  try {
+    // raw upload: the shared api() helper only sends JSON
+    const res = await fetch("/api/import", { method: "POST", headers: { "X-FiveGen": "1", "Content-Type": "application/zip", "X-File-Name": encodeURIComponent(file.name) }, body: file });
+    if (res.status === 401) {
+      location.href = "/login?next=/app";
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    await refreshProjects();
+    await openProject(data.project.id);
+    const n = data.skipped.length;
+    const ignored = n ? ` ${plural(n, "fichier")} non texte (images, sons…) ${n > 1 ? "ont été ignorés" : "a été ignoré"}.` : "";
+    toast(`« ${data.project.name} » importé.${ignored} ${data.project.validation?.ok ? "Aucune erreur détectée." : "Des problèmes ont été détectés : « Corriger » les répare."}`, "ok");
+  } catch (err) {
+    toast(err.message, "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Importer un .zip";
+    $("#importFile").value = "";
+  }
+}
+
+function bindImport() {
+  const box = $("#importBox");
+  $("#btnImport").onclick = () => $("#importFile").click();
+  $("#importFile").onchange = (e) => importZip(e.target.files[0]);
+  box.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    box.classList.add("drag");
+  });
+  box.addEventListener("dragleave", () => box.classList.remove("drag"));
+  box.addEventListener("drop", (e) => {
+    e.preventDefault();
+    box.classList.remove("drag");
+    importZip(e.dataTransfer.files[0]);
+  });
+  $("#btnConvert").onclick = () => onTransform("convert");
+  $("#btnOptimize").onclick = () => onTransform("optimize");
+}
+
 async function onFix() {
   if (state.busy || !state.current) return;
   const v = state.current.validation;
@@ -2298,6 +2416,7 @@ function bind() {
     laTimer = setTimeout(renderLiveAnalysis, 120);
   });
   $("#refineForm").addEventListener("submit", onRefine);
+  bindImport();
   $("#refineInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

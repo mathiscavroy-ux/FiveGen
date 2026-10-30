@@ -2,8 +2,9 @@
 import { $, $$, api, toast, escapeHtml, plural, formatPrice, syncTheme } from "./common.js";
 
 let me = null;
+let packs = null;
 
-const KIND_LABELS = { generate: "Génération", refine: "Modification", fix: "Correction" };
+const KIND_LABELS = { generate: "Génération", refine: "Modification", fix: "Correction", convert: "Conversion", optimize: "Optimisation" };
 const STATUS_LABELS = { ok: "Réussi", error: "Échec (crédit rendu)", cancelled: "Annulé (crédit rendu)" };
 const MODE_LABELS = { dark: "Sombre", light: "Clair" };
 const shortDate = (iso) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
@@ -21,6 +22,85 @@ function renderProfile() {
     : "Adresse pas encore confirmée : clique sur le lien reçu par e-mail (regarde aussi les spams).";
   $("#btnResendVerify").classList.toggle("hidden", me.emailVerified);
   $("#accEmail").value = me.email;
+  $("#discordBadge").classList.toggle("hidden", !me.discord);
+  renderPasswordless();
+  renderSubscription();
+}
+
+// Accounts created with Discord: first password without a current one, address typed to delete.
+function renderPasswordless() {
+  const has = me.hasPassword;
+  $("#passCurrentField").classList.toggle("hidden", !has);
+  $("#accPassCurrent").required = has;
+  $("#passTitle").textContent = has ? "Mot de passe" : "Choisir un mot de passe";
+  $("#passNote").textContent = has
+    ? "Changer le mot de passe déconnecte tes autres appareils."
+    : "Ton compte a été créé avec Discord : ajoute un mot de passe pour pouvoir aussi te connecter avec ton e-mail.";
+  $("#passSubmit").textContent = has ? "Changer le mot de passe" : "Enregistrer le mot de passe";
+  for (const id of ["#accEmail", "#accEmailPass", "#emailForm .btn.primary"]) $(id).disabled = !has;
+  if (!has) $("#emailStatus").textContent = "Pour changer d'adresse, choisis d'abord un mot de passe (section Sécurité).";
+  const input = $("#accDeletePass");
+  input.type = has ? "password" : "email";
+  input.autocomplete = has ? "current-password" : "off";
+  $("#deleteLabel").textContent = has ? "Mot de passe pour confirmer" : "Tape ton adresse e-mail pour confirmer";
+}
+
+// ---------- subscription ----------
+
+const ACTIVE_SUB = new Set(["active", "trialing", "past_due", "incomplete"]);
+const longDate = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+
+function renderSubscription() {
+  const sub = me.subscription;
+  const actions = $("#subActions");
+  actions.innerHTML = "";
+  const button = (text, cls, onclick) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `btn ${cls}`;
+    b.textContent = text;
+    b.onclick = () => onclick(b);
+    actions.append(b);
+  };
+  if (!sub || !ACTIVE_SUB.has(sub.status)) {
+    const cheapest = packs?.enabled ? [...(packs.plans ?? [])].sort((a, b) => a.price - b.price)[0] : null;
+    $("#subTitle").textContent = "Pas d'abonnement";
+    $("#subLine").textContent = cheapest
+      ? `Des crédits chaque mois, moins chers que les packs : ${plural(cheapest.credits, "crédit")} pour ${formatPrice(cheapest.price, packs.currency)} par mois. Sans engagement.`
+      : "Les abonnements ne sont pas encore disponibles.";
+    if (cheapest) {
+      const a = document.createElement("a");
+      a.className = "btn primary";
+      a.href = "/app?buy";
+      a.textContent = "Voir les abonnements";
+      actions.append(a);
+    }
+    return;
+  }
+  const name = sub.plan ? `${sub.plan.name} · ${plural(sub.plan.credits, "crédit")} par mois` : "Abonnement FiveGen";
+  $("#subTitle").textContent = name;
+  const date = sub.periodEnd ? longDate(sub.periodEnd) : null;
+  if (sub.status === "past_due") {
+    $("#subLine").textContent = "Le dernier paiement a échoué : Stripe va réessayer. Mets à jour ta carte depuis l'e-mail reçu de Stripe.";
+  } else if (sub.cancelAtEnd) {
+    $("#subLine").textContent = date ? `Résilié : il reste actif jusqu'au ${date}, sans nouveau prélèvement.` : "Résilié : aucun nouveau prélèvement.";
+  } else {
+    $("#subLine").textContent = date ? `Prochain renouvellement le ${date} : +${plural(sub.plan?.credits ?? 0, "crédit")}.` : "Actif.";
+  }
+  const change = (action, confirmText) => async (b) => {
+    if (confirmText && !confirm(confirmText)) return;
+    b.disabled = true;
+    try {
+      me = await api(`/api/me/subscription/${action}`, { method: "POST" });
+      renderSubscription();
+      toast(action === "cancel" ? "Abonnement résilié : tes crédits restent, aucun nouveau prélèvement." : "Abonnement repris ✓", "ok");
+    } catch (err) {
+      toast(err.message, "err");
+      b.disabled = false;
+    }
+  };
+  if (sub.cancelAtEnd) button("Reprendre l'abonnement", "primary", change("resume"));
+  else button("Résilier", "", change("cancel", `Résilier l'abonnement ?${date ? ` Il reste actif jusqu'au ${date}.` : ""} Tes crédits ne sont pas perdus.`));
 }
 
 // ---------- theme ----------
@@ -102,7 +182,7 @@ async function loadActivity() {
     renderSessions(otherSessions);
     $("#accPayments").innerHTML = payments.length
       ? payments
-          .map((p) => `<tr><td>${shortDate(p.created_at)}</td><td>${escapeHtml(p.pack_id)}</td><td>+${p.credits}</td><td>${formatPrice(p.amount, p.currency)}</td></tr>`)
+          .map((p) => `<tr><td>${shortDate(p.created_at)}</td><td>${escapeHtml(p.pack_id.startsWith("abonnement:") ? `Abonnement (${p.pack_id.slice(11)})` : p.pack_id)}</td><td>+${p.credits}</td><td>${formatPrice(p.amount, p.currency)}</td></tr>`)
           .join("")
       : '<tr><td colspan="4" class="muted">Aucun achat pour l\'instant.</td></tr>';
     $("#accGenerations").innerHTML = generations.length
@@ -153,7 +233,11 @@ function bind() {
       $("#accPassCurrent").value = "";
       $("#accPassNext").value = "";
       renderSessions(0);
-      toast("Mot de passe changé ✓ Tes autres appareils sont déconnectés.", "ok");
+      toast(me.hasPassword ? "Mot de passe changé ✓ Tes autres appareils sont déconnectés." : "Mot de passe enregistré ✓ Tu peux aussi te connecter avec ton e-mail.", "ok");
+      if (!me.hasPassword) {
+        me = { ...me, hasPassword: true };
+        renderProfile();
+      }
     } catch (err) {
       toast(err.message, "err");
     }
@@ -171,7 +255,8 @@ function bind() {
     e.preventDefault();
     if (!confirm("Supprimer définitivement ton compte et tous tes scripts ? Cette action est irréversible.")) return;
     try {
-      await api("/api/me", { method: "DELETE", body: { password: $("#accDeletePass").value } });
+      const typed = $("#accDeletePass").value;
+      await api("/api/me", { method: "DELETE", body: me.hasPassword ? { password: typed } : { confirm: typed } });
       location.href = "/";
     } catch (err) {
       toast(err.message, "err");
@@ -208,7 +293,7 @@ async function boot() {
   bind();
   let options;
   try {
-    [me, options] = await Promise.all([api("/api/me"), api("/api/options")]);
+    [me, options, packs] = await Promise.all([api("/api/me"), api("/api/options"), api("/api/packs").catch(() => null)]);
   } catch (e) {
     if (e.message !== "Session expirée") toast(`Serveur injoignable : ${e.message}`, "err");
     return;

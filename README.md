@@ -60,12 +60,14 @@ Les clients achètent un pack de crédits sur le site (fenêtre « Recharger mes
 
 1. Crée un compte sur https://dashboard.stripe.com (mode **Test** pour commencer).
 2. **Développeurs → Clés API** : copie la clé secrète (`sk_test_...`) dans `STRIPE_SECRET_KEY`.
-3. **Développeurs → Webhooks → Ajouter un endpoint** : URL `https://ton-site/api/stripe/webhook`, événements `checkout.session.completed` et `checkout.session.async_payment_succeeded`. Copie le **secret de signature** (`whsec_...`) dans `STRIPE_WEBHOOK_SECRET`.
+3. **Développeurs → Webhooks → Ajouter un endpoint** : URL `https://ton-site/api/stripe/webhook`, événements `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `customer.subscription.updated` et `customer.subscription.deleted` (les trois derniers servent aux abonnements). Copie le **secret de signature** (`whsec_...`) dans `STRIPE_WEBHOOK_SECRET`.
 4. Redémarre le site. `/admin` doit afficher « Paiement par carte actif (Stripe) ».
 5. Teste un achat avec la carte de test Stripe `4242 4242 4242 4242` (date future, n'importe quel code). Les crédits arrivent en quelques secondes et le paiement apparaît dans `/admin`.
 6. Pour encaisser pour de vrai : active ton compte Stripe (identité, IBAN), puis remplace les deux valeurs par celles du mode **Live** (`sk_live_...` et le secret d'un webhook créé en mode Live).
 
 Packs et prix TTC : variable `CREDIT_PACKS` (voir `.env.example`), sinon Starter 15 crédits / 8,99 €, Pro 45 / 23,99 €, Studio 150 / 71,99 €. La TVA est comprise dans le prix (`tax_behavior: inclusive`) : le client paie exactement le prix affiché. Les prix de l'accueil se mettent à jour automatiquement.
+
+Abonnements mensuels : variable `SUBSCRIPTION_PLANS`, sinon Mensuel 30 crédits / 14,99 € et Mensuel+ 80 crédits / 34,99 € par mois, sans engagement. Les crédits arrivent à chaque facture payée (`invoice.paid`), une seule fois par facture. Le client résilie ou reprend depuis `/parametres` (la résiliation prend effet à la fin du mois payé), et la suppression d'un compte résilie son abonnement tout de suite.
 
 Sécurité : les crédits ne sont ajoutés que par le webhook signé par Stripe (jamais depuis le navigateur), une seule fois par paiement, et le nombre de crédits vient toujours de la configuration du serveur. Le client coche une case de renonciation au délai de rétractation avant de payer (contenu numérique utilisé immédiatement).
 
@@ -185,3 +187,15 @@ server/
 public/           site (accueil, connexion, studio, admin, pages légales)
 test/             tests (npm test)
 ```
+
+## Connexion avec Discord
+
+1. [discord.com/developers/applications](https://discord.com/developers/applications) → **New Application** (nom : FiveGen).
+2. **OAuth2** → **Redirects** → ajoute `https://ton-domaine/api/auth/discord/callback`.
+3. Copie **Client ID** et **Client Secret** dans `DISCORD_CLIENT_ID` et `DISCORD_CLIENT_SECRET`, puis relance le site.
+
+Le bouton « Continuer avec Discord » apparaît alors sur la page de connexion. Un compte Discord dont l'e-mail est vérifié est relié au compte FiveGen de même adresse ; sinon un compte est créé, avec les crédits offerts et sans mot de passe (le client peut en choisir un dans ses paramètres).
+
+## Import de scripts existants
+
+Dans le studio, « Importer un .zip » : la ressource (avec son `fxmanifest.lua`) devient un projet, vérifié gratuitement. Le client peut ensuite la corriger, la convertir vers un autre framework (`COST_CONVERT`, 3 crédits par défaut) ou l'optimiser (`COST_OPTIMIZE`, 2 crédits). Seuls les fichiers texte sont gardés (archive de 10 Mo et 5 Mo de code au plus) ; les images et sons sont ignorés et signalés au client.

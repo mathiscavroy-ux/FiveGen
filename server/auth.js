@@ -119,6 +119,17 @@ export function publicUser(user) {
     email: user.email,
     createdAt: user.created_at,
     prefs: userPrefs(user),
+    // accounts created with Discord have no password until they choose one
+    hasPassword: Boolean(user.pass_hash),
+    discord: Boolean(user.discord_id),
+    subscription: user.sub_status
+      ? {
+          plan: config.plans.find((p) => p.id === user.sub_plan) ?? null,
+          status: user.sub_status,
+          periodEnd: user.sub_period_end,
+          cancelAtEnd: Boolean(user.sub_cancel_at_end),
+        }
+      : null,
     credits: user.credits,
     isAdmin: Boolean(user.is_admin),
     emailVerified: Boolean(user.email_verified),

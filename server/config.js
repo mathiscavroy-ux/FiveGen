@@ -59,6 +59,9 @@ export const config = {
     generate: int(env.COST_GENERATE, 3),
     refine: int(env.COST_REFINE, 1),
     fix: int(env.COST_FIX, 0),
+    // Imported scripts: rewriting for another framework is about a full generation.
+    convert: int(env.COST_CONVERT, 3),
+    optimize: int(env.COST_OPTIMIZE, 2),
   },
   // Modifications included with each script before COST_REFINE applies.
   freeRefines: int(env.FREE_REFINES, 3),
@@ -81,7 +84,22 @@ export const config = {
     // Required by Managed Payments; txcd_10000000 = electronically supplied services.
     taxCode: env.STRIPE_TAX_CODE || "txcd_10000000",
   },
-  packs: loadPacks(env.CREDIT_PACKS),
+  packs: loadOffers(env.CREDIT_PACKS, "CREDIT_PACKS", [
+    { id: "starter", name: "Starter", credits: 15, price: 899 },
+    { id: "pro", name: "Pro", credits: 45, price: 2399, featured: true },
+    { id: "studio", name: "Studio", credits: 150, price: 7199 },
+  ]),
+  // Monthly subscriptions: credits added at each paid renewal. Cheaper per credit than packs.
+  plans: loadOffers(env.SUBSCRIPTION_PLANS, "SUBSCRIPTION_PLANS", [
+    { id: "mensuel", name: "Mensuel", credits: 30, price: 1499 },
+    { id: "mensuel-plus", name: "Mensuel+", credits: 80, price: 3499, featured: true },
+  ]),
+
+  // "Continuer avec Discord" (OAuth2 app from discord.com/developers). Hidden until both are set.
+  discord: {
+    clientId: env.DISCORD_CLIENT_ID || "",
+    clientSecret: env.DISCORD_CLIENT_SECRET || "",
+  },
 
   // Outgoing e-mail (password reset, address check). Without SMTP_HOST the links are
   // written to the server log and accounts are not asked to confirm their address.
@@ -103,22 +121,17 @@ export const config = {
   },
 };
 
-// Credit packs sold on the site. Prices in cents, VAT included (what the buyer pays).
-// Override with CREDIT_PACKS (JSON array).
-function loadPacks(raw) {
-  const defaults = [
-    { id: "starter", name: "Starter", credits: 15, price: 899 },
-    { id: "pro", name: "Pro", credits: 45, price: 2399, featured: true },
-    { id: "studio", name: "Studio", credits: 150, price: 7199 },
-  ];
+// Packs and plans: prices in cents, VAT included (what the buyer pays). Overridden by a
+// JSON array in the environment variable.
+function loadOffers(raw, name, defaults) {
   if (!raw) return defaults;
   try {
-    const packs = JSON.parse(raw).filter(
+    const offers = JSON.parse(raw).filter(
       (p) => /^[a-z0-9_-]{1,32}$/.test(p.id) && Number.isInteger(p.credits) && p.credits > 0 && Number.isInteger(p.price) && p.price >= 50,
     );
-    return packs.length ? packs : defaults;
+    return offers.length ? offers : defaults;
   } catch {
-    console.warn("[fivegen] CREDIT_PACKS invalide, packs par défaut utilisés.");
+    console.warn(`[fivegen] ${name} invalide, valeurs par défaut utilisées.`);
     return defaults;
   }
 }

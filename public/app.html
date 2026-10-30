@@ -85,6 +85,12 @@
               <li><span>2</span><div><b>Réponds</b><small>3 à 6 questions à cocher</small></div></li>
               <li><span>3</span><div><b>Récupère</b><small>ZIP ou déploiement en un clic</small></div></li>
             </ol>
+            <div id="importBox" class="import-box">
+              <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+              <div><b>Tu as déjà un script ?</b><span class="muted">Importe son .zip : FiveGen le vérifie gratuitement, puis le corrige, le convertit (ESX, QBCore, Qbox) ou l&#39;optimise.</span></div>
+              <button type="button" id="btnImport" class="btn">Importer un .zip</button>
+              <input id="importFile" type="file" accept=".zip,application/zip" hidden />
+            </div>
           </form>
 
           <form id="genForm" class="card form wizard hidden" novalidate>
@@ -242,6 +248,11 @@
           </div>
 
           <form id="refineForm" class="refine">
+            <div class="refine-tools">
+              <select id="convertTarget" class="input small" aria-label="Framework de destination"></select>
+              <button type="button" id="btnConvert" class="btn small">Convertir</button>
+              <button type="button" id="btnOptimize" class="btn small" title="Réduit la consommation (resmon) sans changer le comportement">Optimiser</button>
+            </div>
             <div class="refine-head"><b>Demander une modification</b><span id="refineCost" class="refine-cost"></span></div>
             <textarea id="refineInput" class="input" rows="3" placeholder="« ajoute un menu ox_lib pour choisir le véhicule », « traduis en anglais », « ajoute un cooldown de 10 min »…"></textarea>
             <div class="refine-foot"><span class="muted">Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span>
@@ -260,6 +271,11 @@
       <h2>Recharger mes crédits</h2>
       <p class="muted">Un script coûte <b id="costLine">1 crédit</b> et inclut <b id="freeRefinesLine">3</b> modifications offertes ; les corrections sont gratuites. Les crédits n'expirent pas.</p>
       <div id="buySection" class="hidden">
+        <div id="planSection" class="hidden">
+          <h3 class="buy-title">Abonnement mensuel <span class="muted">· le moins cher par crédit, sans engagement</span></h3>
+          <div id="planGrid" class="pack-grid"></div>
+          <h3 class="buy-title">Ou un pack, une fois</h3>
+        </div>
         <div id="packGrid" class="pack-grid"></div>
         <label class="consent">
           <input id="buyConsent" type="checkbox" />

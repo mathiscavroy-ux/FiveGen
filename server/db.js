@@ -70,6 +70,14 @@ if (!userColumns.has("free_granted")) {
 if (!userColumns.has("credits_from_free")) db.exec("ALTER TABLE users ADD COLUMN credits_from_free INTEGER NOT NULL DEFAULT 0");
 // Settings page choices (theme, default framework and language), as JSON.
 if (!userColumns.has("prefs")) db.exec("ALTER TABLE users ADD COLUMN prefs TEXT");
+// "Continuer avec Discord". Accounts created that way have an empty pass_hash until a password is set.
+if (!userColumns.has("discord_id")) db.exec("ALTER TABLE users ADD COLUMN discord_id TEXT");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord ON users(discord_id)");
+// Monthly subscription, as last reported by Stripe webhooks.
+for (const col of ["stripe_customer", "sub_id", "sub_plan", "sub_status", "sub_period_end"]) {
+  if (!userColumns.has(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} TEXT`);
+}
+if (!userColumns.has("sub_cancel_at_end")) db.exec("ALTER TABLE users ADD COLUMN sub_cancel_at_end INTEGER NOT NULL DEFAULT 0");
 db.exec(`
   CREATE TABLE IF NOT EXISTS email_tokens (
     token_hash TEXT PRIMARY KEY,
@@ -156,6 +164,19 @@ export const getUser = (id) => db.prepare("SELECT * FROM users WHERE id = ?").ge
 export const getUserByEmail = (email) => db.prepare("SELECT * FROM users WHERE email = ?").get(email);
 export const setAdmin = (id) => db.prepare("UPDATE users SET is_admin = 1 WHERE id = ?").run(id);
 export const setPassword = (id, hash) => db.prepare("UPDATE users SET pass_hash = ? WHERE id = ?").run(hash, id);
+export const getUserByDiscord = (discordId) => db.prepare("SELECT * FROM users WHERE discord_id = ?").get(String(discordId));
+export const setDiscord = (id, discordId) => db.prepare("UPDATE users SET discord_id = ? WHERE id = ?").run(discordId, id);
+
+const SUB_FIELDS = { customer: "stripe_customer", id: "sub_id", plan: "sub_plan", status: "sub_status", periodEnd: "sub_period_end", cancelAtEnd: "sub_cancel_at_end" };
+// Only the given fields change (undefined ones are left as they are).
+export function setSubscription(userId, fields) {
+  const entries = Object.entries(fields).filter(([k, v]) => SUB_FIELDS[k] && v !== undefined);
+  if (!entries.length) return;
+  const sql = entries.map(([k]) => `${SUB_FIELDS[k]} = ?`).join(", ");
+  db.prepare(`UPDATE users SET ${sql} WHERE id = ?`).run(...entries.map(([k, v]) => (k === "cancelAtEnd" ? (v ? 1 : 0) : v)), userId);
+}
+export const getUserBySubscription = (subId) => db.prepare("SELECT * FROM users WHERE sub_id = ?").get(String(subId));
+
 export const setPrefs = (id, prefs) => db.prepare("UPDATE users SET prefs = ? WHERE id = ?").run(JSON.stringify(prefs), id);
 
 // Atomic: never lets credits go negative. Returns true when charged.
