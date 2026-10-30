@@ -43,15 +43,15 @@
   };
 
   // Mobile browsers colour their status bar from theme-color: keep it on the page background.
+  // A fresh tag each time: Safari can keep the old colour when only the content changes.
   function tintBrowser() {
-    let meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.name = "theme-color";
-      document.head.append(meta);
-    }
     const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
-    if (bg) meta.content = bg;
+    if (!bg) return;
+    document.querySelector('meta[name="theme-color"]')?.remove();
+    const meta = document.createElement("meta");
+    meta.name = "theme-color";
+    meta.content = bg;
+    document.head.append(meta);
   }
 
   apply(current);
@@ -80,7 +80,12 @@
     apply(id);
     store(KEY, id);
     store(`${KEY}.back`, back);
-    if (animate) setTimeout(() => root.classList.remove("theme-switching"), 300);
+    if (animate) {
+      setTimeout(() => {
+        root.classList.remove("theme-switching");
+        tintBrowser();
+      }, 300);
+    }
   }
 
   let chosenHere = false;

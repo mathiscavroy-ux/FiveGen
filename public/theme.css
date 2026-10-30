@@ -184,6 +184,10 @@ html { scroll-padding-top: 84px; background: var(--bg); } /* iOS Safari tints it
 html.theme-switching, html.theme-switching * {
   transition: background-color .25s ease, border-color .25s ease, color .2s ease, fill .2s ease !important;
 }
+/* Safari reads the bar colour from these: fading them leaves it on the old theme */
+html.theme-switching, html.theme-switching body, html.theme-switching .nav, html.theme-switching .topbar {
+  transition: none !important;
+}
 
 /* theme switch button (sun / moon) */
 .theme-toggle {
