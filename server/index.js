@@ -19,6 +19,7 @@ import { repairResource } from "./repair.js";
 import { finishQuality, newQuality, noteCheck, summarizeQuality } from "./quality.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory } from "./deploy.js";
 import { inventoryBlock, inventoryCounts } from "./inventory.js";
+import { spotsBlock, usedSpots } from "./spots.js";
 import { mountSeo } from "./seo.js";
 import * as db from "./db.js";
 import {
@@ -204,7 +205,7 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
 // Static checks plus the dry run of the resource in a fake FiveM.
 function checkProject(userId, projectId) {
   const project = getProject(userId, projectId);
-  return validateProjectFull(getFiles(userId, projectId), { ...project.spec, inventory: serverInventory(userId, projectId) }, { resource: project.name });
+  return validateProjectFull(getFiles(userId, projectId), { ...project.spec, inventory: serverInventory(userId, projectId), usedSpots: usedSpots(userId, projectId) }, { resource: project.name });
 }
 
 // Generation → save → check → review pass → automatic fix rounds (free) while errors
@@ -212,7 +213,8 @@ function checkProject(userId, projectId) {
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
   const inventory = serverInventory(userId, projectId);
-  const spec = inventory ? { ...project.spec, inventory } : project.spec;
+  const spots = usedSpots(userId, projectId);
+  const spec = { ...project.spec, ...(inventory ? { inventory } : {}), usedSpots: spots };
   // a manual fix must not leave the script worse than it found it
   const before = kind === "fix" ? { validation: await checkProject(userId, projectId), version: listVersions(userId, projectId)[0]?.n, notes: project.notes } : null;
   send("phase", { phase: kind, label: LABELS[kind] });
@@ -223,7 +225,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   }
   // a new resource: plan, then groups of files written at the same time (null: single call)
   const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec, send, signal, meta: { userId, projectId }, profile: state.profile }) : null;
-  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
+  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`) + spotsBlock(spots), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }

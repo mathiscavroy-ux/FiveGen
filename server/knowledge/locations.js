@@ -110,12 +110,9 @@ const R2 = (dx, dy) => dx * dx + dy * dy;
 const VEC = /\b(?:vector[34]|vec[34])\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/g;
 const XYZ = /\bx\s*=\s*(-?\d+(?:\.\d+)?)\s*,\s*y\s*=\s*(-?\d+(?:\.\d+)?)\s*,\s*z\s*=\s*(-?\d+(?:\.\d+)?)/g;
 
-/**
- * Coordinates of a generated resource that fall inside a vanilla business unrelated
- * to the request. context: text describing the request (description, name, type).
- */
-export function checkPlacement(files, context = "") {
-  const problems = [];
+// Every coordinate written in the Lua of a resource, comments left out.
+export function coordinates(files) {
+  const found = [];
   for (const f of files) {
     if (!f.path.endsWith(".lua")) continue;
     f.content.split("\n").forEach((line, i) => {
@@ -123,20 +120,48 @@ export function checkPlacement(files, context = "") {
       for (const re of [VEC, XYZ]) {
         re.lastIndex = 0;
         let m;
-        while ((m = re.exec(line))) {
-          const [x, y, z] = [Number(m[1]), Number(m[2]), Number(m[3])];
-          const hit = OCCUPIED.find(([, ox, oy, oz, radius]) => R2(x - ox, y - oy) <= radius * radius && Math.abs(z - oz) < 8);
-          if (!hit || hit[5].test(context)) continue;
-          problems.push({
-            file: f.path,
-            line: i + 1,
-            message: hit[6]
-              ? `Coordonnée (${x}, ${y}, ${z}) dans ${hit[0]} : ce lieu n'a rien à voir avec ce script. Choisis un emplacement de la liste des points vérifiés (parking, place) et indique son nom en commentaire.`
-              : `Coordonnée (${x}, ${y}, ${z}) dans ${hit[0]} : vérifie que ce lieu est voulu (alerte, destination). Pour un PNJ, un comptoir ou un point d'apparition propre au script, choisis plutôt un emplacement libre de la liste des points vérifiés.`,
-            level: hit[6] ? "error" : "warning",
-          });
-        }
+        while ((m = re.exec(line))) found.push({ file: f.path, line: i + 1, x: Number(m[1]), y: Number(m[2]), z: Number(m[3]) });
       }
+    });
+  }
+  return found;
+}
+
+/**
+ * Coordinates of a generated resource that fall inside a vanilla business unrelated
+ * to the request. context: text describing the request (description, name, type).
+ */
+export function checkPlacement(files, context = "") {
+  const problems = [];
+  for (const { file, line, x, y, z } of coordinates(files)) {
+    const hit = OCCUPIED.find(([, ox, oy, oz, radius]) => R2(x - ox, y - oy) <= radius * radius && Math.abs(z - oz) < 8);
+    if (!hit || hit[5].test(context)) continue;
+    problems.push({
+      file,
+      line,
+      message: hit[6]
+        ? `Coordonnée (${x}, ${y}, ${z}) dans ${hit[0]} : ce lieu n'a rien à voir avec ce script. Choisis un emplacement de la liste des points vérifiés (parking, place) et indique son nom en commentaire.`
+        : `Coordonnée (${x}, ${y}, ${z}) dans ${hit[0]} : vérifie que ce lieu est voulu (alerte, destination). Pour un PNJ, un comptoir ou un point d'apparition propre au script, choisis plutôt un emplacement libre de la liste des points vérifiés.`,
+      level: hit[6] ? "error" : "warning",
+    });
+  }
+  return problems;
+}
+
+// Close enough for two NPCs or two zones to overlap in game.
+const OVERLAP_METRES = 3;
+
+// Coordinates already used by another script of the customer (spots.js).
+export function checkSpots(files, spots = []) {
+  const problems = [];
+  for (const { file, line, x, y, z } of coordinates(files)) {
+    const hit = spots.find((s) => R2(x - s.x, y - s.y) <= OVERLAP_METRES ** 2 && Math.abs(z - s.z) < 8);
+    if (!hit) continue;
+    problems.push({
+      file,
+      line,
+      message: `Coordonnée (${x}, ${y}, ${z}) déjà utilisée par ton script « ${hit.script} » : les PNJ ou les zones se superposent en jeu. Choisis un autre emplacement, sauf si ce point est une simple destination.`,
+      level: "warning",
     });
   }
   return problems;
