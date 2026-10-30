@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'FiveGen'
 description 'Pont de déploiement FiveGen : installe les ressources générées en un clic'
-version '1.4.0'
+version '1.5.0'
 
 server_scripts {
   'sql.js',

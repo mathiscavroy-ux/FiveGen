@@ -65,5 +65,12 @@ function checkStatement(sql) {
 // Errors meaning the statement already ran before (redeploying the same resource).
 const ALREADY_DONE = /already exists|Duplicate (column|key|entry)|ER_TABLE_EXISTS|ER_DUP_/i;
 
+// Table a statement writes to (INSERT / REPLACE / UPDATE), lower case, or null. Used to
+// tell ESX to reload its jobs when a resource adds one.
+function writtenTable(sql) {
+  const m = /^(?:INSERT|REPLACE)\s+(?:LOW_PRIORITY\s+|DELAYED\s+|HIGH_PRIORITY\s+)?(?:IGNORE\s+)?(?:INTO\s+)?`?(\w+)`?|^UPDATE\s+(?:LOW_PRIORITY\s+)?(?:IGNORE\s+)?`?(\w+)`?/i.exec(sql.trim());
+  return m ? (m[1] ?? m[2]).toLowerCase() : null;
+}
+
 // server.js (same resource, same global scope) and the tests read it from here.
-globalThis.FiveGenSql = { splitSql, checkStatement, ALREADY_DONE };
+globalThis.FiveGenSql = { splitSql, checkStatement, writtenTable, ALREADY_DONE };

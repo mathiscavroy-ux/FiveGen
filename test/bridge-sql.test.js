@@ -51,3 +51,12 @@ test("errors from a resource deployed twice are recognised", () => {
   assert.match("Duplicate entry 'rope' for key 'PRIMARY'", ALREADY_DONE);
   assert.doesNotMatch("You have an error in your SQL syntax", ALREADY_DONE);
 });
+
+test("the table written by a statement is found (ESX jobs reload)", () => {
+  const { writtenTable } = globalThis.FiveGenSql;
+  assert.equal(writtenTable("INSERT IGNORE INTO `jobs` (name, label) VALUES ('tow', 'Dépanneur')"), "jobs");
+  assert.equal(writtenTable("insert into job_grades (job_name, grade) values ('tow', 0)"), "job_grades");
+  assert.equal(writtenTable("REPLACE INTO items (name) VALUES ('rope')"), "items");
+  assert.equal(writtenTable("UPDATE job_grades SET salary = 50 WHERE job_name = 'tow'"), "job_grades");
+  assert.equal(writtenTable("CREATE TABLE IF NOT EXISTS tow_jobs (id INT)"), null);
+});

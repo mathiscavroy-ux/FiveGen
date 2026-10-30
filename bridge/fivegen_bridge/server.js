@@ -27,7 +27,7 @@ const http = require("http");
 const https = require("https");
 const { execFile } = require("child_process");
 
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 const TOKEN = GetConvar("fivegen_token", "");
 const BASE = GetConvar("fivegen_url", "https://flazehdr.alwaysdata.net").replace(/\/+$/, "");
 const FOLDER = GetConvar("fivegen_folder", "[fivegen]");
@@ -193,12 +193,13 @@ function sqlQuery(statement) {
 }
 
 // The .sql files of the resource, applied before it starts so its tables exist.
-// Returns a line for the studio, or null when the resource has no SQL.
+// Returns { line for the studio, tables written }, or null when the resource has no SQL.
 async function runResourceSql(files) {
   const sqlFiles = files.filter((f) => /\.sql$/i.test(f.path)).sort((a, b) => a.path.localeCompare(b.path));
   if (!sqlFiles.length) return null;
-  if (!AUTO_SQL) return "SQL non exécuté (fivegen_sql 0) : importe le fichier .sql à la main.";
-  if (GetResourceState("oxmysql") !== "started") return "SQL non exécuté : oxmysql n'est pas démarré. Importe le fichier .sql à la main.";
+  const tables = new Set();
+  if (!AUTO_SQL) return { line: "SQL non exécuté (fivegen_sql 0) : importe le fichier .sql à la main.", tables };
+  if (GetResourceState("oxmysql") !== "started") return { line: "SQL non exécuté : oxmysql n'est pas démarré. Importe le fichier .sql à la main.", tables };
   let ran = 0;
   let already = 0;
   const skipped = [];
@@ -213,6 +214,8 @@ async function runResourceSql(files) {
       try {
         await sqlQuery(statement);
         ran++;
+        const table = FiveGenSql.writtenTable(statement);
+        if (table) tables.add(table);
       } catch (err) {
         if (FiveGenSql.ALREADY_DONE.test(err.message)) already++;
         else failed.push(`${f.path} : ${err.message.trim().split("\n").pop().slice(0, 200)}`);
@@ -225,7 +228,29 @@ async function runResourceSql(files) {
   if (already) parts.push(`${already} déjà en place`);
   if (skipped.length) parts.push(`${skipped.length} ignorée(s) par sécurité, à faire à la main si besoin (${skipped[0]})`);
   if (failed.length) parts.push(`${failed.length} en erreur (${failed[0]})`);
-  return parts.join(", ") + ".";
+  return { line: parts.join(", ") + ".", tables };
+}
+
+// ESX keeps jobs and items in memory from server start. After the SQL added some, jobs
+// are reloaded (ESX.RefreshJobs); items cannot be, so the studio says to restart.
+function refreshFramework(tables) {
+  if (GetResourceState("es_extended") !== "started") return null;
+  const notes = [];
+  if (tables.has("jobs") || tables.has("job_grades")) {
+    try {
+      const ESX = exports.es_extended.getSharedObject();
+      if (typeof ESX?.RefreshJobs !== "function") throw new Error("ESX.RefreshJobs absent");
+      ESX.RefreshJobs();
+      notes.push("Jobs ESX rechargés : le nouveau job est utilisable tout de suite.");
+    } catch (err) {
+      fail(`Rechargement des jobs ESX impossible (${err.message}).`);
+      notes.push("Redémarre le serveur pour que ESX charge le nouveau job.");
+    }
+  }
+  if (tables.has("items") && GetResourceState("ox_inventory") !== "started") {
+    notes.push("Nouveaux items ESX : redémarre le serveur pour qu'ils soient chargés.");
+  }
+  return notes.join(" ") || null;
 }
 
 async function startResource(resource) {
@@ -256,10 +281,13 @@ async function deploy(job) {
   try {
     const dest = await writeResource(job.resource, job.files);
     const sql = await runResourceSql(job.files);
-    if (sql) log(sql);
+    // jobs reloaded before the resource starts, so it finds them on its first run
+    const reload = sql ? refreshFramework(sql.tables) : null;
+    const extra = [sql?.line, reload].filter(Boolean).join(" ");
+    if (extra) log(extra);
     const how = await startResource(job.resource);
     log(`^2${job.resource} ${how}^7 depuis ${dest}`);
-    await request("POST", `/api/bridge/deployments/${job.id}`, { status: "started", message: `Ressource ${how} sur le serveur.${sql ? ` ${sql}` : ""}` });
+    await request("POST", `/api/bridge/deployments/${job.id}`, { status: "started", message: `Ressource ${how} sur le serveur.${extra ? ` ${extra}` : ""}` });
   } catch (err) {
     fail(`${job.resource} : ${err.message}`);
     await request("POST", `/api/bridge/deployments/${job.id}`, { status: "error", message: err.message }).catch(() => {});

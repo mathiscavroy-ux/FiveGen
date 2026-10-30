@@ -944,7 +944,7 @@ function installSteps(p) {
   const sql = files.filter((f) => f.path.endsWith(".sql")).map((f) => f.path);
   const text = `${p.notes ?? ""}\n${files.find((f) => /readme/i.test(f.path))?.content ?? ""}`;
   const steps = [{ id: "copy", label: `Copier le dossier « ${name} » dans le dossier resources du serveur`, hint: "ou le bouton « Déployer » pour l'envoyer sur ton serveur en un clic" }];
-  for (const s of sql) steps.push({ id: `sql:${s}`, label: `Importer ${s} dans ta base de données`, hint: "fait tout seul par le bouton « Déployer » (bridge 1.4 ou plus), sinon HeidiSQL, phpMyAdmin ou la console MySQL" });
+  for (const s of sql) steps.push({ id: `sql:${s}`, label: `Importer ${s} dans ta base de données`, hint: "fait tout seul par le bouton « Déployer » (bridge 1.4 ou plus, jobs ESX rechargés avec le 1.5), sinon HeidiSQL, phpMyAdmin ou la console MySQL" });
   if (deps.size) steps.push({ id: "deps", label: `Vérifier que ces ressources sont installées et démarrées : ${[...deps].join(", ")}` });
   if (/add_ace|add_principal/.test(text)) steps.push({ id: "ace", label: "Ajouter les lignes add_ace / add_principal indiquées plus bas dans server.cfg" });
   steps.push({ id: "ensure", label: `Ajouter « ensure ${name} » dans server.cfg, après ses dépendances` });
