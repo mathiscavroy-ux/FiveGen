@@ -275,16 +275,37 @@ function watchSections() {
   const nav = $(".st-nav");
   const links = $$(".st-nav a");
   let active = null;
-  const update = () => {
-    let current = links[0];
-    for (const a of links) if ($(a.hash).getBoundingClientRect().top <= 160) current = a;
-    // at the bottom of the page the last short sections never reach the top
-    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) current = links.at(-1);
+  let clicked = null; // a link just clicked stays lit during the smooth scroll to its section
+  const show = (current) => {
     if (current === active) return;
     active = current;
     for (const a of links) a.classList.toggle("active", a === current);
     nav.scrollTo({ left: current.offsetLeft - 16 }); // phone: the menu is a horizontal strip
   };
+  const update = () => {
+    if (clicked) return;
+    let current = links[0];
+    for (const a of links) if ($(a.hash).getBoundingClientRect().top <= 160) current = a;
+    // at the bottom of the page the last short sections never reach the top
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) current = links.at(-1);
+    show(current);
+  };
+  for (const a of links) {
+    a.addEventListener("click", () => {
+      clicked = a;
+      show(a);
+      // browsers without "scrollend" (older Safari)
+      setTimeout(() => {
+        if (clicked !== a) return;
+        clicked = null;
+        update();
+      }, 1200);
+    });
+  }
+  addEventListener("scrollend", () => {
+    clicked = null;
+    update();
+  });
   addEventListener("scroll", update, { passive: true });
   update();
 }

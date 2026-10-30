@@ -802,7 +802,7 @@ body.settings-page { display: block; height: auto; min-height: 100%; overflow: a
 .st-nav a.danger { color: var(--err-text); }
 .st-logout { margin-top: 12px; border-top: 1px solid var(--border); border-radius: 0 0 10px 10px; padding-top: 14px; color: var(--muted); }
 .st-main { display: flex; flex-direction: column; gap: 44px; min-width: 0; }
-.st-section { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 90px; }
+.st-section { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 16px; } /* added to the 84px scroll-padding of theme.css */
 .st-title { margin: 0 0 2px; font-size: 20px; letter-spacing: -.3px; }
 
 .st-hero {
@@ -866,7 +866,7 @@ body.settings-page { display: block; height: auto; min-height: 100%; overflow: a
   .st-nav { top: 60px; z-index: 30; flex-direction: row; overflow-x: auto; gap: 4px; margin: 0 -16px; padding: 10px 16px; background: rgb(var(--bg-rgb) / .92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
   .st-nav a, .st-logout { flex: none; white-space: nowrap; padding: 7px 11px; }
   .st-logout { margin: 0; border: 0; border-radius: 10px; padding-top: 7px; }
-  .st-section { scroll-margin-top: 130px; }
+  .st-section { scroll-margin-top: 56px; }
   .st-fields { grid-template-columns: minmax(0, 1fr); }
   .st-hero { flex-wrap: wrap; padding: 18px; }
   .st-balance { justify-items: start; text-align: left; grid-auto-flow: column; align-items: center; gap: 10px; width: 100%; }
