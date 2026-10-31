@@ -11,6 +11,31 @@ export class ProviderError extends Error {
   }
 }
 
+// Claude only caches what is marked, and the instructions are by far the biggest part of
+// a call. A provider that refuses the marker gets plain text from then on.
+let markerRefused = false;
+
+function systemMessage(provider, text) {
+  if (markerRefused || !/claude/i.test(provider.model)) return { role: "system", content: text };
+  return { role: "system", content: [{ type: "text", text, cache_control: { type: "ephemeral" } }] };
+}
+
+async function post(provider, body, signal) {
+  const send = (payload) =>
+    request(provider, `${provider.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: headersFor(provider),
+      body: JSON.stringify(payload),
+      signal,
+    });
+  const res = await send(body);
+  const [system, ...others] = body.messages;
+  if (res.ok || ![400, 422].includes(res.status) || typeof system.content === "string") return res;
+  const plain = await send({ ...body, messages: [{ role: "system", content: system.content[0].text }, ...others] });
+  if (plain.ok) markerRefused = true;
+  return plain;
+}
+
 function headersFor(provider) {
   const headers = { "Content-Type": "application/json" };
   if (provider.apiKey) headers.Authorization = `Bearer ${provider.apiKey}`;
@@ -68,7 +93,7 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal }
     stream: true,
     max_tokens: provider.maxTokens,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      systemMessage(provider, SYSTEM_PROMPT),
       { role: "user", content: userContent },
     ],
   };
@@ -108,12 +133,7 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal }
 }
 
 async function streamCompletion(provider, body, onEvent, signal, onActivity) {
-  const res = await request(provider, `${provider.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: headersFor(provider),
-    body: JSON.stringify(body),
-    signal,
-  });
+  const res = await post(provider, body, signal);
   if (!res.ok) throw new ProviderError(httpMessage(provider, res.status, await res.text()), res.status);
   onActivity();
 
@@ -197,7 +217,7 @@ export async function completeOpenAICompat({ provider, system, user, maxTokens =
     model: provider.model,
     max_tokens: maxTokens,
     messages: [
-      { role: "system", content: system },
+      systemMessage(provider, system),
       { role: "user", content: user },
     ],
   };
@@ -208,12 +228,7 @@ export async function completeOpenAICompat({ provider, system, user, maxTokens =
   signal?.addEventListener("abort", forwardAbort, { once: true });
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await request(provider, `${provider.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: headersFor(provider),
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
+    const res = await post(provider, body, ctrl.signal);
     if (!res.ok) throw new ProviderError(httpMessage(provider, res.status, await res.text()), res.status);
     const json = await res.json();
     if (json.error) {
