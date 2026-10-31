@@ -73,6 +73,9 @@ textarea.input { resize: vertical; }
 .checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 14px; }
 .checks label { display: flex; gap: 8px; align-items: center; font-size: 13px; cursor: pointer; }
 .checks input { accent-color: var(--accent); }
+.auto-deploy { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.auto-deploy input { accent-color: var(--accent); }
+.auto-deploy select { width: auto; max-width: 100%; padding: 4px 8px; font-size: 13px; }
 
 /* ---------- layout ---------- */
 .layout { display: grid; grid-template-columns: 250px 1fr; min-height: 0; }

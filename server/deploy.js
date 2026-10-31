@@ -116,6 +116,12 @@ export function queueDeployment(userId, serverId, project) {
   return getDeployment(userId, Number(r.lastInsertRowid));
 }
 
+// After a run, for accounts that ticked the box: never a script that still has errors.
+export function autoDeployment(userId, serverId, project) {
+  if (!project.validation?.ok) throw Object.assign(new Error("le script contient encore des erreurs."), { status: 400 });
+  return queueDeployment(userId, serverId, project);
+}
+
 export function getDeployment(userId, id) {
   const d = db.prepare("SELECT * FROM deployments WHERE id = ? AND user_id = ?").get(id, userId);
   if (!d) return null;

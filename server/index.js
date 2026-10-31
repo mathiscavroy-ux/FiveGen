@@ -18,7 +18,7 @@ import { validateProjectFull } from "./validator.js";
 import { fixRounds, isBetter, newWarnings } from "./autofix.js";
 import { repairResource } from "./repair.js";
 import { finishQuality, newQuality, noteCheck, summarizeQuality } from "./quality.js";
-import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory } from "./deploy.js";
+import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory, autoDeployment, listServers } from "./deploy.js";
 import { inventoryBlock, inventoryCounts } from "./inventory.js";
 import { spotsBlock, usedSpots } from "./spots.js";
 import { placesBlock } from "./places.js";
@@ -345,7 +345,19 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     const fresh = newWarnings(best.validation.warnings, [...known, ...warnings]);
     if (fresh.length) await reviewPass(fresh);
   }
+  autoDeploy(userId, projectId, send);
   send("done", getProject(userId, projectId));
+}
+
+// The server chosen in the studio gets the script as soon as it is ready, even with the page closed.
+function autoDeploy(userId, projectId, send) {
+  const serverId = userPrefs(db.getUser(userId)).autoDeployServer;
+  if (!serverId) return;
+  try {
+    send("deployment", autoDeployment(userId, serverId, getProject(userId, projectId)));
+  } catch (err) {
+    send("status", `Déploiement automatique annulé : ${err.message}`);
+  }
 }
 
 const running = new Set(); // one generation at a time per account
@@ -568,6 +580,11 @@ app.put("/api/me/prefs", requireUser, (req, res) => {
     if (body[key] === null) delete prefs[key];
     else if (list.some((x) => x.id === body[key])) prefs[key] = body[key];
     else return res.status(400).json({ error: "Valeur inconnue." });
+  }
+  if ("autoDeployServer" in body) {
+    if (body.autoDeployServer === null) delete prefs.autoDeployServer;
+    else if (listServers(req.user.id).some((s) => s.id === body.autoDeployServer)) prefs.autoDeployServer = body.autoDeployServer;
+    else return res.status(400).json({ error: "Serveur introuvable." });
   }
   db.setPrefs(req.user.id, prefs);
   res.json(publicUser(db.getUser(req.user.id)));

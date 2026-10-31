@@ -1937,6 +1937,10 @@ async function runStream(url, body, { fresh = false, attach = null } = {}) {
           pipeValidation(v);
           actValidation(v);
         },
+        deployment: (d) => {
+          const server = deploy.servers.find((s) => s.id === d.serverId);
+          if (server) watchDeployment(d, server);
+        },
         done: (project) => {
           state.current = project;
           const v = project.validation;
@@ -2267,6 +2271,7 @@ async function loadServers() {
   } catch (e) {
     return toast(e.message, "err");
   }
+  renderAutoDeploy();
   const canDeploy = Boolean(state.current?.files?.length) && !state.busy;
   $("#serverList").innerHTML = deploy.servers.length
     ? deploy.servers
@@ -2337,33 +2342,60 @@ function renderDeployStatus(d, serverName) {
   el.innerHTML = `<b>${escapeHtml(d.resource)} → ${escapeHtml(serverName)}</b><span>${escapeHtml(text)}</span>${d.message ? `<em>${escapeHtml(d.message)}</em>` : ""}`;
 }
 
+function watchDeployment(deployment, server) {
+  let d = deployment;
+  if (!server.online) toast("Serveur hors ligne : la ressource sera installée dès qu'il sera allumé.");
+  renderDeployStatus(d, server.name);
+  clearInterval(deploy.watch);
+  const started = Date.now();
+  deploy.watch = setInterval(async () => {
+    try {
+      d = await api(`/api/deployments/${d.id}`);
+    } catch {
+      return;
+    }
+    renderDeployStatus(d, server.name);
+    if (["started", "error", "replaced"].includes(d.status) || Date.now() - started > 15 * 60_000) {
+      clearInterval(deploy.watch);
+      if (d.status === "started") toast(`${d.resource} tourne sur « ${server.name} »`, "ok");
+      if (d.status === "error") toast(d.message ?? "Échec du déploiement", "err");
+    }
+  }, 2000);
+}
+
 async function deployTo(serverId) {
   const server = deploy.servers.find((s) => s.id === serverId);
   try {
-    let d = await api(`/api/projects/${state.current.id}/deploy`, { method: "POST", body: { serverId } });
-    if (!server.online) toast("Serveur hors ligne : la ressource sera installée dès qu'il sera allumé.");
-    renderDeployStatus(d, server.name);
-    clearInterval(deploy.watch);
-    const started = Date.now();
-    deploy.watch = setInterval(async () => {
-      try {
-        d = await api(`/api/deployments/${d.id}`);
-      } catch {
-        return;
-      }
-      renderDeployStatus(d, server.name);
-      if (["started", "error", "replaced"].includes(d.status) || Date.now() - started > 15 * 60_000) {
-        clearInterval(deploy.watch);
-        if (d.status === "started") toast(`${d.resource} tourne sur « ${server.name} »`, "ok");
-        if (d.status === "error") toast(d.message ?? "Échec du déploiement", "err");
-      }
-    }, 2000);
+    watchDeployment(await api(`/api/projects/${state.current.id}/deploy`, { method: "POST", body: { serverId } }), server);
   } catch (e) {
     toast(e.message, "err");
   }
 }
 
+// One choice for the account, shown in the wizard and under the editor.
+function renderAutoDeploy() {
+  const chosen = deploy.servers.find((s) => s.id === state.me?.prefs?.autoDeployServer);
+  for (const box of $$(".auto-deploy")) {
+    box.classList.toggle("hidden", !deploy.servers.length);
+    const select = box.querySelector("select");
+    select.innerHTML = deploy.servers.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+    if (chosen) select.value = String(chosen.id);
+    box.querySelector("input").checked = Boolean(chosen);
+  }
+}
+
+async function saveAutoDeploy(box) {
+  const autoDeployServer = box.querySelector("input").checked ? Number(box.querySelector("select").value) : null;
+  try {
+    state.me = { ...state.me, ...(await api("/api/me/prefs", { method: "PUT", body: { autoDeployServer } })) };
+  } catch (e) {
+    toast(e.message, "err");
+  }
+  renderAutoDeploy();
+}
+
 function bindDeploy() {
+  for (const box of $$(".auto-deploy")) box.addEventListener("change", () => saveAutoDeploy(box));
   $("#btnDeploy").onclick = openDeploy;
   $("#btnServers").onclick = openDeploy;
   $("#btnCloseDeploy").onclick = () => $("#deployDialog").close();
@@ -2547,6 +2579,7 @@ async function boot() {
   renderAccount();
   renderPacks();
   handlePaymentReturn();
+  loadServers();
   await refreshProjects();
   // a generation still running on the server (reload, tab closed during the run)
   const job = await api("/api/jobs/current").catch(() => null);

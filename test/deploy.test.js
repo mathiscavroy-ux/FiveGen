@@ -162,6 +162,15 @@ test("console errors of a deployed resource reach its project, deduplicated", as
   assert.deepEqual(deploy.locateRuntimeError(errors[0].message, "err_res"), { file: "server/main.lua", line: 12 });
 });
 
+test("automatic deployment refuses a script with errors, and another account's server", () => {
+  const { server: s } = deploy.createServer(userId, "Auto");
+  const project = { id: "p", name: "auto_script" };
+  assert.throws(() => deploy.autoDeployment(userId, s.id, { ...project, validation: { ok: false } }), /erreurs/);
+  assert.throws(() => deploy.autoDeployment(userId, s.id, project), /erreurs/);
+  assert.throws(() => deploy.autoDeployment(userId + 1000, s.id, { ...project, validation: { ok: true } }), /introuvable/);
+  assert.equal(deploy.autoDeployment(userId, s.id, { ...project, validation: { ok: true } }).status, "pending");
+});
+
 test("the real bridge reads the server and the account sees it, names only", async () => {
   const { server: s, token } = deploy.createServer(userId, "Inventaire");
   const resources = fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-res-"));

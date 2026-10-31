@@ -148,6 +148,8 @@
                   <p class="muted small-note">Mémorisé pour tes prochains scripts.</p>
                 </details>
 
+                <label class="auto-deploy hidden"><input type="checkbox" /><span>Déployer automatiquement sur</span><select class="input" aria-label="Serveur du déploiement automatique"></select></label>
+
                 <div class="form-actions">
                   <span id="genCostHint" class="muted cost-hint"></span>
                   <button type="submit" id="btnGenerate" class="btn primary big">Générer le script <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
@@ -258,6 +260,7 @@
             </div>
             <div class="refine-head"><b>Demander une modification</b><span id="refineCost" class="refine-cost"></span></div>
             <textarea id="refineInput" class="input" rows="3" placeholder="« ajoute un menu ox_lib pour choisir le véhicule », « traduis en anglais », « ajoute un cooldown de 10 min »…"></textarea>
+            <label class="auto-deploy hidden"><input type="checkbox" /><span>Déployer automatiquement sur</span><select class="input" aria-label="Serveur du déploiement automatique"></select></label>
             <div class="refine-foot"><span class="muted">Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne</span>
               <button id="btnRefine" class="btn primary">Appliquer <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
             </div>
