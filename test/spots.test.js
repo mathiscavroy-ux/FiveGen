@@ -52,7 +52,19 @@ test("the spots of a script are bounded and the config comes first", async () =>
   assert.equal(spots.length, 20);
   assert.equal(spots[0].x, 0);
   assert.ok(!spots.some((s) => s.x === 999));
-  assert.equal(readSpots("twice", [config("vector3(1.1, 2.1, 3.0)\nvector3(1.2, 2.2, 3.0)")]).length, 1);
+  assert.equal(readSpots("twice", [config("vector3(501.1, 2.1, 3.0)\nvector3(501.2, 2.2, 3.0)")]).length, 1);
+});
+
+test("an offset is not a place: no false overlap between two scripts", async () => {
+  const { readSpots } = await import("../server/spots.js");
+  const offsets = "AttachEntityToEntity(a, b, 0, vector3(0.0, 0.0, 1.0))\nlocal up = vector3(0.0, 0.5, 1.05)\n";
+  assert.deepEqual(readSpots("hud", [config(offsets)]), []);
+  assert.deepEqual(checkSpots([config(offsets)], [spot(0, 0, 1, "hud")]), []);
+});
+
+test("the place closest to the middle of the map still counts", async () => {
+  const { readSpots } = await import("../server/spots.js");
+  assert.equal(readSpots("x", [config("vector4(69.84, 12.6, 68.96, 0.0)")]).length, 1);
 });
 
 test("a script reads the spots of the others, never its own", async () => {

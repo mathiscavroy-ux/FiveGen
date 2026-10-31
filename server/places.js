@@ -2,7 +2,7 @@
 // them instead of inventing coordinates, and what the customer's other scripts already
 // use is left out, so the customer has nothing to place by hand.
 import fs from "node:fs";
-import { coordinates, LOCATIONS, OCCUPIED } from "./knowledge/locations.js";
+import { coordinates, isOffset, LOCATIONS, OCCUPIED } from "./knowledge/locations.js";
 
 const data = JSON.parse(fs.readFileSync(new URL("./knowledge/places.json", import.meta.url), "utf8"));
 
@@ -94,7 +94,6 @@ Règles :
 
 // ---------- check ----------
 const KNOWN_METRES = 60;
-const OFFSET_METRES = 100; // vector3(0.0, 0.5, 1.0) is an offset, not a place
 const MAX_UNKNOWN = 6;
 
 const known = [
@@ -112,7 +111,7 @@ export function checkKnownPlaces(files, spec = {}) {
   const given = [spec.description, spec.understood, ...(spec.answers ?? []).map((a) => a.answer)].filter(Boolean).join(" ");
   const problems = [];
   for (const { file, line, x, y, z } of coordinates(files)) {
-    if (Math.hypot(x, y) < OFFSET_METRES || given.includes(String(x))) continue;
+    if (isOffset({ x, y, z }) || given.includes(String(x))) continue;
     if (known.some((k) => close([x, y, z], k, KNOWN_METRES))) continue;
     problems.push({ file, line, message: `Coordonnée (${x}, ${y}, ${z}) loin de tout lieu vérifié : elle peut tomber dans un mur ou sous la carte. Remplace-la par un emplacement de <lieux_conseilles>.`, level: "warning" });
     if (problems.length === MAX_UNKNOWN) break;

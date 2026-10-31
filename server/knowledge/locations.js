@@ -154,7 +154,7 @@ const OVERLAP_METRES = 3;
 // Coordinates already used by another script of the customer (spots.js).
 export function checkSpots(files, spots = []) {
   const problems = [];
-  for (const { file, line, x, y, z } of coordinates(files)) {
+  for (const { file, line, x, y, z } of coordinates(files).filter((c) => !isOffset(c))) {
     const hit = spots.find((s) => R2(x - s.x, y - s.y) <= OVERLAP_METRES ** 2 && Math.abs(z - s.z) < 8);
     if (!hit) continue;
     problems.push({

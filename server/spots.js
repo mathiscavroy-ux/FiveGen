@@ -13,7 +13,7 @@ const key = (s) => `${Math.round(s.x)},${Math.round(s.y)}`;
 export function readSpots(script, files) {
   const ordered = [...files].sort((a, b) => /(^|\/)config\.lua$/.test(b.path) - /(^|\/)config\.lua$/.test(a.path));
   const spots = new Map();
-  for (const { x, y, z } of coordinates(ordered)) if (!spots.has(key({ x, y }))) spots.set(key({ x, y }), { script, x, y, z });
+  for (const { x, y, z } of coordinates(ordered).filter((c) => !isOffset(c))) if (!spots.has(key({ x, y }))) spots.set(key({ x, y }), { script, x, y, z });
   return [...spots.values()].slice(0, MAX_PER_SCRIPT);
 }
 
