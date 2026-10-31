@@ -2,7 +2,8 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { completeOpenAICompat, ProviderError } from "../server/openai-compat.js";
+import { completeOpenAICompat, ProviderError, runOpenAICompat } from "../server/openai-compat.js";
+import { buildPartMessage, SHARED_END, SYSTEM_PROMPT, systemFor } from "../server/prompts.js";
 
 const seen = [];
 let refuse = () => false;
@@ -40,6 +41,42 @@ test("Claude gets the instructions marked for its cache", async () => {
   await ask("anthropic/claude-opus-5.5");
   assert.deepEqual(seen.at(-1).messages[0].content, [{ type: "text", text: "instructions", cache_control: { type: "ephemeral" } }]);
   assert.equal(seen.at(-1).messages[1].content, "demande");
+});
+
+test("what groups of files share is marked, what differs is not", async () => {
+  const run = (model) => runOpenAICompat({ provider: provider(model), userContent: `commun${SHARED_END}propre`, onEvent: () => {} });
+  await run("anthropic/claude-opus-5.5");
+  assert.deepEqual(seen.at(-1).messages[1].content, [{ type: "text", text: "commun", cache_control: { type: "ephemeral" } }, { type: "text", text: "propre" }]);
+  await run("qwen/qwen3.8-max:free");
+  assert.equal(seen.at(-1).messages[1].content, "communpropre");
+});
+
+test("the shared part ends before the files of each group", () => {
+  const spec = { name: "x", framework: "esx", type: "job", description: "d" };
+  const plan = { files: [{ path: "client/a.lua" }, { path: "client/b.lua" }] };
+  const head = (paths) => buildPartMessage(spec, plan, paths, { shared: true }).split(SHARED_END)[0];
+  assert.equal(head(["client/a.lua"]), head(["client/b.lua"]));
+  assert.ok(!buildPartMessage(spec, plan, ["client/a.lua"]).includes(SHARED_END));
+});
+
+test("a script gets the instructions of its framework only", () => {
+  const esx = systemFor("esx");
+  assert.match(esx, /# ESX Legacy/);
+  assert.match(esx, /## ESX Legacy/);
+  assert.doesNotMatch(esx, /^#+ QBCore/m);
+  assert.doesNotMatch(esx, /^#+ Qbox/m);
+  assert.doesNotMatch(esx, /^# Standalone/m);
+  assert.match(esx, /## Signatures exactes des natives courantes/);
+  assert.match(esx, /## ox_lib/);
+  assert.ok(esx.length < SYSTEM_PROMPT.length);
+  assert.equal(systemFor("esx"), esx);
+
+  assert.match(systemFor("qbox"), /^#+ QBCore/m);
+  assert.match(systemFor("qbox"), /^#+ Qbox/m);
+  assert.doesNotMatch(systemFor("qbox"), /^#+ ESX/m);
+  assert.doesNotMatch(systemFor("standalone"), /^#+ (ESX|QBCore|Qbox)/m);
+  assert.equal(systemFor("bridge"), SYSTEM_PROMPT);
+  assert.equal(systemFor(null), SYSTEM_PROMPT);
 });
 
 test("a provider that refuses the marker gets plain text, at once and for a while", async () => {

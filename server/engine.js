@@ -103,7 +103,7 @@ const modelsFor = (profile, preferred) => {
 
 // meta: { userId, projectId, purpose } for the usage log.
 // model: optional model tried first (then the profile's, so a failure still delivers).
-export async function runEngine({ userContent, onEvent, signal, meta, model: preferred, profile }) {
+export async function runEngine({ userContent, onEvent, signal, meta, model: preferred, profile, system }) {
   let emitted = false;
   // Reasoning text never leaves the server: the studio only gets a throttled counter
   // so it can show that the engine is thinking.
@@ -134,7 +134,7 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
     try {
       const r = mockRun
         ? await mockRun({ userContent, onEvent: forward, signal })
-        : await runOpenAICompat({ provider: await withEffort(attempt.provider, meta?.purpose, profile), userContent, onEvent: forward, signal });
+        : await runOpenAICompat({ provider: await withEffort(attempt.provider, meta?.purpose, profile), userContent, onEvent: forward, signal, system });
       await report(meta, { model: r.model ?? model, usage: r.usage, started, ok: true });
       return {
         files: r.files,
@@ -213,7 +213,7 @@ export async function runBrief({ description, server, signal, meta, profile }) {
 
 // Plan of a resource for the parallel generation: short JSON, same system prompt as the
 // generation (served from the cache). Throws when no usable plan comes back.
-export async function runPlan({ userContent, signal, meta, profile }) {
+export async function runPlan({ userContent, signal, meta, profile, system = SYSTEM_PROMPT }) {
   if (mock?.mockPlan) {
     await wait(1500, signal).catch((err) => {
       throw toPublic(err);
@@ -226,7 +226,7 @@ export async function runPlan({ userContent, signal, meta, profile }) {
   for (const provider of providers) {
     const started = Date.now();
     try {
-      const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "generate", profile), system: SYSTEM_PROMPT, user: userContent, maxTokens: 16000, timeoutMs: 240000, signal });
+      const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "generate", profile), system, user: userContent, maxTokens: 16000, timeoutMs: 240000, signal });
       await report(meta && { ...meta, purpose: "plan" }, { model, usage, started, ok: true });
       const s = String(text);
       const plan = JSON.parse(s.slice(s.indexOf("{"), s.lastIndexOf("}") + 1));

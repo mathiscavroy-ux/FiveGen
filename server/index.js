@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import express from "express";
 import { ZipArchive } from "archiver";
 import { config, ROOT } from "./config.js";
-import { CATALOG, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage, buildReviewMessage } from "./prompts.js";
+import { CATALOG, systemFor, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage, buildReviewMessage } from "./prompts.js";
 import { applyEdits } from "./patch.js";
 import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from "./engine.js";
 import { providerUsage, modelPricing, modelAvailable } from "./provider.js";
@@ -183,7 +183,7 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
     const paths = [...new Set(failures.map((f) => f.path))];
     send("status", `${failures.length} remplacement(s) sans emplacement trouvé : réécriture de ${paths.join(", ")}.`);
     try {
-      const redo = await runEngine({ userContent: buildRewriteMessage(spec, getFiles(userId, projectId), failures), onEvent: send, signal, meta: { userId, projectId, purpose: "rewrite" }, profile: state.profile });
+      const redo = await runEngine({ userContent: buildRewriteMessage(spec, getFiles(userId, projectId), failures), onEvent: send, signal, meta: { userId, projectId, purpose: "rewrite" }, profile: state.profile, system: state.system });
       writeFiles(userId, projectId, redo.files, []);
       state.outputTokens += redo.outputTokens ?? 0;
       touched.push(...redo.files.map((f) => f.path));
@@ -218,6 +218,8 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   const spots = usedSpots(userId, projectId);
   const pastErrors = frequentErrors(db.qualityRuns());
   const spec = { ...project.spec, ...(inventory ? { inventory } : {}), usedSpots: spots, pastErrors };
+  // a conversion reads one framework and writes another
+  state.system = systemFor(kind === "convert" ? null : spec.framework);
   // a manual fix must not leave the script worse than it found it
   const before = kind === "fix" ? { validation: await checkProject(userId, projectId), version: listVersions(userId, projectId)[0]?.n, notes: project.notes } : null;
   send("phase", { phase: kind, label: LABELS[kind] });
@@ -227,8 +229,8 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     send("status", `Serveur « ${inventory.server} » lu : ${count(n.resources, "ressource")}, ${count(n.jobs, "job")}, ${count(n.items, "item")}.`);
   }
   // a new resource: plan, then groups of files written at the same time (null: single call)
-  const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec, send, signal, meta: { userId, projectId }, profile: state.profile }) : null;
-  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`) + spotsBlock(spots) + placesBlock({ name: project.name, type: project.spec.type, text: `${project.spec.description ?? ""} ${instruction ?? ""}`, spots }) + errorsBlock(pastErrors), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
+  const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec, send, signal, meta: { userId, projectId }, profile: state.profile, system: state.system }) : null;
+  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`) + spotsBlock(spots) + placesBlock({ name: project.name, type: project.spec.type, text: `${project.spec.description ?? ""} ${instruction ?? ""}`, spots }) + errorsBlock(pastErrors), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile, system: state.system }));
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }
@@ -274,7 +276,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
         meta: { userId, projectId, purpose: "review" },
         // the review reads more than it writes: the account's review model, its main models as fallback
         model: (await modelAvailable(state.profile.review)) ? state.profile.review : undefined,
-        profile: state.profile,
+        profile: state.profile, system: state.system,
       });
       state.outputTokens += review.outputTokens ?? 0;
       if (review.files.length || review.edits.length || review.deletes.length) {
@@ -318,7 +320,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
           meta: { userId, projectId, purpose: "autofix" },
           // a checked error is a small job: the cheaper model first, the main one as last try
           model: round < rounds && (await modelAvailable(state.profile.review)) ? state.profile.review : undefined,
-          profile: state.profile,
+          profile: state.profile, system: state.system,
         });
       } catch (err) {
         // The script is already saved: an engine hiccup here must not turn it into a failure.

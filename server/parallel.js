@@ -19,6 +19,7 @@ export const isFirstStep = (p) => !isLightFile(p) && !/^client\//.test(p) && !/^
 // A step lasts as long as its slowest group: up to 6 calls, split by expected size.
 const MAX_GROUPS = 6;
 const STEP_GROUPS = 4;
+const HEAD_START_MS = 15000;
 const MIN_SPLIT_WEIGHT = 6; // below this a group is quick enough on its own
 const clean = (p) => String(p ?? "").trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
 
@@ -51,16 +52,31 @@ export function groupFiles(paths, max = MAX_GROUPS) {
   return groups;
 }
 
+// Claude's cache opens once a first answer has started: the other groups then read what
+// they share with it instead of paying for it. A slow start never holds them for long.
+async function inTurn(count, lead, run) {
+  if (lead < 0) return Promise.all(Array.from({ length: count }, (_, i) => run(i)));
+  let open;
+  const opened = new Promise((resolve) => {
+    open = resolve;
+  });
+  const timer = setTimeout(open, HEAD_START_MS);
+  const first = run(lead, open).finally(open);
+  await opened;
+  clearTimeout(timer);
+  return Promise.all(Array.from({ length: count }, (_, i) => (i === lead ? first : run(i))));
+}
+
 /**
  * Plan, then groups written in parallel. Resolves to the same shape as runEngine
  * ({ files, deletes, edits, notes, stopReason, outputTokens }), or null when no usable
  * plan came back (the caller then generates in a single call).
  */
-export async function generateParallel({ spec, send, signal, meta, profile }) {
+export async function generateParallel({ spec, send, signal, meta, profile, system }) {
   send("phase", { phase: "plan", label: "Plan de la ressource" });
   let plan;
   try {
-    plan = await runPlan({ userContent: buildPlanMessage(spec), signal, meta, profile });
+    plan = await runPlan({ userContent: buildPlanMessage(spec), signal, meta, profile, system });
   } catch (err) {
     if (signal?.aborted) throw err;
     send("status", "Plan indisponible : génération en un seul passage.");
@@ -84,15 +100,20 @@ export async function generateParallel({ spec, send, signal, meta, profile }) {
   // the account's cheaper model for light files (a free one for free accounts)
   const lightModel = profile ? profile.light : config.engine.lightModel;
   const light = (await modelAvailable(lightModel)) ? lightModel : null;
-  const runGroup = (files, i, notes, written) =>
+  const caches = /claude/i.test(profile ? profile.models[0] : config.engine.model);
+  const runGroup = (files, i, notes, written, { onStart, shared } = {}) =>
     runEngine({
-      userContent: buildPartMessage(spec, plan, files, { notes, written, example: !files.every(isLightFile) }),
+      userContent: buildPartMessage(spec, plan, files, { notes, written, example: !files.every(isLightFile), shared }),
       // deltas of the groups interleave: each carries its group so the studio can tell them apart
-      onEvent: (type, payload) => (type === "delta" ? send("pdelta", { g: i, t: payload }) : send(type, payload)),
+      onEvent: (type, payload) => {
+        onStart?.();
+        return type === "delta" ? send("pdelta", { g: i, t: payload }) : send(type, payload);
+      },
       signal,
       meta: { ...meta, purpose: "generate" },
       model: light && files.every(isLightFile) ? light : undefined,
       profile,
+      system,
     });
   const settle = (p) => p.then((value) => ({ status: "fulfilled", value }), (reason) => ({ status: "rejected", reason }));
 
@@ -104,8 +125,11 @@ export async function generateParallel({ spec, send, signal, meta, profile }) {
     const groups = groupFiles(step.paths, STEP_GROUPS);
     send("phase", { phase: "write", label: `${step.label} · ${groups.length} groupe${groups.length > 1 ? "s" : ""}` });
     const written = [...byPath.values()];
-    const run = (i) => settle(runGroup(groups[i], offset + i, step === steps.at(-1) && i === 0, written));
-    let settled = await Promise.all(groups.map((_, i) => run(i)));
+    // with one logic group nothing is shared, and marking it would only cost a cache write
+    const logic = groups.flatMap((g, i) => (g.every(isLightFile) ? [] : [i]));
+    const sharing = caches && logic.length > 1;
+    const run = (i, onStart) => settle(runGroup(groups[i], offset + i, step === steps.at(-1) && i === 0, written, { onStart, shared: sharing && logic.includes(i) }));
+    let settled = await inTurn(groups.length, sharing ? logic[0] : -1, run);
     if (signal?.aborted) throw settled.find((s) => s.status === "rejected")?.reason ?? new Error("aborted");
     // a group that failed (overload…) gets one more try
     settled = await Promise.all(settled.map((s, i) => (s.status === "fulfilled" ? s : run(i))));

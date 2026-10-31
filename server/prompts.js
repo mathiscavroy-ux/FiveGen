@@ -67,6 +67,29 @@ export const CATALOG = {
 // Byte-identical across requests so the upstream cache can reuse it.
 export const SYSTEM_PROMPT = [CORE, FRAMEWORKS, LIBS, SCRIPTS, PITFALLS, LOCATIONS, API_REFERENCE].filter(Boolean).join("\n\n");
 
+// A script of one framework has no use for the others: fewer instructions on every call.
+// Each variant stays byte-identical, so the upstream cache reuses it too.
+const FRAMEWORK_HEADING = /^#+ (QBCore|Qbox|ESX|Multi-framework|Standalone)/;
+const WANTED = { esx: ["ESX"], qbcore: ["QBCore"], qbox: ["QBCore", "Qbox"], standalone: ["Standalone"] };
+const keep = (text, wanted) =>
+  text
+    .split(/\n(?=#+ )/)
+    .filter((section) => {
+      const heading = FRAMEWORK_HEADING.exec(section);
+      return !heading || wanted.includes(heading[1]);
+    })
+    .join("\n");
+
+const variants = new Map();
+
+// null, or the multi-framework mode: everything.
+export function systemFor(framework) {
+  const wanted = WANTED[framework];
+  if (!wanted) return SYSTEM_PROMPT;
+  if (!variants.has(framework)) variants.set(framework, [CORE, keep(FRAMEWORKS, wanted), LIBS, SCRIPTS, PITFALLS, LOCATIONS, keep(API_REFERENCE, wanted)].filter(Boolean).join("\n\n"));
+  return variants.get(framework);
+}
+
 const label = (list, id) => list.find((x) => x.id === id)?.label ?? id;
 
 // spec.inventory, spec.usedSpots and spec.pastErrors are added for the run by the pipeline, never saved with the project.
@@ -158,8 +181,11 @@ Règles :
 </plan_demande>`;
 }
 
+// Everything before this line is the same for the logic groups of a step: it can be cached.
+export const SHARED_END = "\n<!-- fin de la partie commune -->\n";
+
 // Step 2: one group of files, written alongside the others from the same plan.
-export function buildPartMessage(spec, plan, paths, { notes = false, written = [], example = true } = {}) {
+export function buildPartMessage(spec, plan, paths, { notes = false, written = [], example = true, shared = false } = {}) {
   const shown = pickWritten(written);
   const done = new Set(shown.map((f) => f.path));
   const others = (plan.files ?? []).filter((f) => !paths.includes(f.path) && !done.has(f.path));
@@ -186,7 +212,7 @@ Ces fichiers sont terminés et ne changeront plus. Ils font foi : si le plan dif
 
 ${filesBlock(shown)}
 </deja_ecrits>
-` : ""}
+` : ""}${shared ? SHARED_END : ""}
 <fichiers_a_ecrire>
 ${paths.map((p) => `- ${p}`).join("\n")}
 </fichiers_a_ecrire>

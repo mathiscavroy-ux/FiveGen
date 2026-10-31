@@ -1,6 +1,6 @@
 // Streaming client for OpenAI-compatible /chat/completions endpoints
 // (Google Gemini, Mistral, OpenRouter, Ollama, any custom service).
-import { SYSTEM_PROMPT } from "./prompts.js";
+import { SHARED_END, SYSTEM_PROMPT } from "./prompts.js";
 import { StreamParser } from "./parser.js";
 
 export class ProviderError extends Error {
@@ -17,10 +17,22 @@ export class ProviderError extends Error {
 const MARKER_RETRY_MS = 3600000;
 let markerRefusedUntil = 0;
 
+const usesMarker = (provider) => Date.now() >= markerRefusedUntil && /claude/i.test(provider.model);
+const marked = (text) => ({ type: "text", text, cache_control: { type: "ephemeral" } });
+
 function systemMessage(provider, text) {
-  if (Date.now() < markerRefusedUntil || !/claude/i.test(provider.model)) return { role: "system", content: text };
-  return { role: "system", content: [{ type: "text", text, cache_control: { type: "ephemeral" } }] };
+  return { role: "system", content: usesMarker(provider) ? [marked(text)] : text };
 }
+
+// The part several groups of files have in common gets a mark of its own.
+function userMessage(provider, text) {
+  const at = text.indexOf(SHARED_END);
+  if (at < 0) return { role: "user", content: text };
+  const [head, tail] = [text.slice(0, at), text.slice(at + SHARED_END.length)];
+  return { role: "user", content: usesMarker(provider) ? [marked(head), { type: "text", text: tail }] : head + tail };
+}
+
+const plainText = (content) => (typeof content === "string" ? content : content.map((part) => part.text).join(""));
 
 async function post(provider, body, signal) {
   const send = (payload) =>
@@ -31,9 +43,8 @@ async function post(provider, body, signal) {
       signal,
     });
   const res = await send(body);
-  const [system, ...others] = body.messages;
-  if (res.ok || ![400, 422].includes(res.status) || typeof system.content === "string") return res;
-  const plain = await send({ ...body, messages: [{ role: "system", content: system.content[0].text }, ...others] });
+  if (res.ok || ![400, 422].includes(res.status) || body.messages.every((m) => typeof m.content === "string")) return res;
+  const plain = await send({ ...body, messages: body.messages.map((m) => ({ ...m, content: plainText(m.content) })) });
   if (plain.ok) markerRefusedUntil = Date.now() + MARKER_RETRY_MS;
   return plain;
 }
@@ -88,15 +99,15 @@ async function request(provider, url, init) {
   }
 }
 
-export async function runOpenAICompat({ provider, userContent, onEvent, signal }) {
+export async function runOpenAICompat({ provider, userContent, onEvent, signal, system = SYSTEM_PROMPT }) {
   assertUsable(provider);
   const body = {
     model: provider.model,
     stream: true,
     max_tokens: provider.maxTokens,
     messages: [
-      systemMessage(provider, SYSTEM_PROMPT),
-      { role: "user", content: userContent },
+      systemMessage(provider, system),
+      userMessage(provider, userContent),
     ],
   };
   // token counts in the last chunk, used to price the call (admin panel)
