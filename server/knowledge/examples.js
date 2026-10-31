@@ -145,11 +145,18 @@ local function startRound()
   })
 end
 
-CreateThread(function()
+local function removeDepotPed()
+  if depotPed then DeleteEntity(depotPed) end
+  depotPed = nil
+end
+
+local function spawnDepotPed()
   local model = joaat(Config.Depot.model)
-  if not lib.requestModel(model, 5000) then return end
+  if depotPed or not lib.requestModel(model, 5000) then return end
   local c = Config.Depot.coords
-  depotPed = CreatePed(4, model, c.x, c.y, c.z - 1.0, c.w, false, true)
+  -- created near the player: collisions are loaded, so the ground is exact
+  local found, z = GetGroundZFor_3dCoord(c.x, c.y, c.z + 0.5, false)
+  depotPed = CreatePed(4, model, c.x, c.y, found and z or c.z - 1.0, c.w, false, true)
   SetModelAsNoLongerNeeded(model)
   SetEntityInvincible(depotPed, true)
   FreezeEntityPosition(depotPed, true)
@@ -160,12 +167,19 @@ CreateThread(function()
     canInteract = isCourier,
     onSelect = startRound,
   } })
-end)
+end
+
+lib.points.new({
+  coords = vector3(Config.Depot.coords.x, Config.Depot.coords.y, Config.Depot.coords.z),
+  distance = 40.0,
+  onEnter = spawnDepotPed,
+  onExit = removeDepotPed,
+})
 
 AddEventHandler('onResourceStop', function(resource)
   if resource ~= GetCurrentResourceName() then return end
   clearRoute()
-  if depotPed then DeleteEntity(depotPed) end
+  removeDepotPed()
 end)
 `,
   },
@@ -255,20 +269,34 @@ local function openShop()
   lib.showContext('example_shop')
 end
 
-CreateThread(function()
+local function removeShopPed()
+  if shopPed then DeleteEntity(shopPed) end
+  shopPed = nil
+end
+
+local function spawnShopPed()
   local model = joaat(Config.Shop.model)
-  if not lib.requestModel(model, 5000) then return end
+  if shopPed or not lib.requestModel(model, 5000) then return end
   local c = Config.Shop.coords
-  shopPed = CreatePed(4, model, c.x, c.y, c.z - 1.0, c.w, false, true)
+  -- created near the player: collisions are loaded, so the ground is exact
+  local found, z = GetGroundZFor_3dCoord(c.x, c.y, c.z + 0.5, false)
+  shopPed = CreatePed(4, model, c.x, c.y, found and z or c.z - 1.0, c.w, false, true)
   SetModelAsNoLongerNeeded(model)
   SetEntityInvincible(shopPed, true)
   FreezeEntityPosition(shopPed, true)
   SetBlockingOfNonTemporaryEvents(shopPed, true)
   exports.ox_target:addLocalEntity(shopPed, { { label = 'Ouvrir le magasin', icon = 'fa-solid fa-store', onSelect = openShop } })
-end)
+end
+
+lib.points.new({
+  coords = vector3(Config.Shop.coords.x, Config.Shop.coords.y, Config.Shop.coords.z),
+  distance = 40.0,
+  onEnter = spawnShopPed,
+  onExit = removeShopPed,
+})
 
 AddEventHandler('onResourceStop', function(resource)
-  if resource == GetCurrentResourceName() and shopPed then DeleteEntity(shopPed) end
+  if resource == GetCurrentResourceName() then removeShopPed() end
 end)
 `,
   },

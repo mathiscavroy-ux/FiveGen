@@ -10,6 +10,7 @@ import { API_REFERENCE } from "./knowledge/api-reference.js";
 import { LOCATIONS } from "./knowledge/locations.js";
 import { inventoryBlock } from "./inventory.js";
 import { spotsBlock } from "./spots.js";
+import { placesBlock } from "./places.js";
 import { errorsBlock } from "./quality.js";
 import { exampleFor } from "./knowledge/examples.js";
 
@@ -78,7 +79,7 @@ export function describeSpec(spec) {
     `Interface : ${label(CATALOG.ui, spec.ui ?? "auto")}`,
     `Dépendances à utiliser : ${deps.length ? deps.join(", ") : "aucune imposée (choisis le minimum nécessaire)"}`,
     `Langue des textes joueur : ${label(CATALOG.languages, spec.language ?? "fr")}`,
-  ].join("\n") + inventoryBlock(spec.inventory, `${spec.description ?? ""} ${spec.understood ?? ""}`) + spotsBlock(spec.usedSpots);
+  ].join("\n") + inventoryBlock(spec.inventory, `${spec.description ?? ""} ${spec.understood ?? ""}`) + spotsBlock(spec.usedSpots) + (spec.usedSpots ? placesBlock({ name: spec.name, type: spec.type, text: `${spec.description ?? ""} ${spec.understood ?? ""}`, spots: spec.usedSpots }) : "");
 }
 
 function recipe(spec) {

@@ -4,6 +4,7 @@ import { checkApiCalls } from "./apicheck.js";
 import { checkConsistency } from "./consistency.js";
 import { smokeTest } from "./smoketest.js";
 import { checkPlacement, checkSpots } from "./knowledge/locations.js";
+import { checkKnownPlaces } from "./places.js";
 import { checkInventory } from "./inventory.js";
 
 // CfxLua accepts a few extensions a stock Lua parser rejects. The prompt asks the
@@ -458,7 +459,7 @@ export function validateProject(files, spec = {}) {
     if (p) problems.push(p);
     if (f.truncated) problems.push({ file: f.path, message: "Fichier tronqué (la génération s'est arrêtée au milieu)", level: "error" });
   }
-  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkNuiQuality(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkJobAccess(files), ...checkApi(files, spec), ...checkConsistency(files, { codeOnly, normalise: normaliseCfxLua }), ...checkPlacement(files, specContext(spec)), ...checkSpots(files, spec.usedSpots), ...checkInventory(files, spec.inventory));
+  problems.push(...checkManifest(files), ...checkHtmlRefs(files), ...checkNuiQuality(files), ...checkEvents(files), ...checkSides(files), ...checkSql(files, spec), ...checkEsxApi(files, spec), ...checkJobAccess(files), ...checkApi(files, spec), ...checkConsistency(files, { codeOnly, normalise: normaliseCfxLua }), ...checkPlacement(files, specContext(spec)), ...checkSpots(files, spec.usedSpots), ...checkKnownPlaces(files, spec), ...checkInventory(files, spec.inventory));
   const errors = problems.filter((p) => p.level === "error");
   const warnings = problems.filter((p) => p.level !== "error");
   return { ok: errors.length === 0, errors, warnings, checkedAt: new Date().toISOString() };

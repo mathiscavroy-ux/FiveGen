@@ -11,7 +11,8 @@
     "test": "node --test",
     "backup": "node scripts/backup.js",
     "api-catalog": "node scripts/build-api-catalog.mjs",
-    "api-signatures": "node scripts/build-native-signatures.mjs"
+    "api-signatures": "node scripts/build-native-signatures.mjs",
+    "places": "node scripts/build-places.mjs"
   },
   "engines": {
     "node": ">=22.13"

@@ -19,7 +19,7 @@ for (const [family, files] of Object.entries(EXAMPLES)) {
   });
 
   test(`the ${family} example stays short and has no marker of the file format inside`, () => {
-    assert.ok(files.reduce((n, f) => n + f.content.length, 0) < 9000);
+    assert.ok(files.reduce((n, f) => n + f.content.length, 0) < 10000);
     assert.ok(files.every((f) => !/^===/m.test(f.content)));
   });
 }

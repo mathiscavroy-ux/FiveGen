@@ -21,6 +21,7 @@ import { finishQuality, newQuality, noteCheck, summarizeQuality } from "./qualit
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory } from "./deploy.js";
 import { inventoryBlock, inventoryCounts } from "./inventory.js";
 import { spotsBlock, usedSpots } from "./spots.js";
+import { placesBlock } from "./places.js";
 import { mountSeo } from "./seo.js";
 import * as db from "./db.js";
 import {
@@ -227,7 +228,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   }
   // a new resource: plan, then groups of files written at the same time (null: single call)
   const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec, send, signal, meta: { userId, projectId }, profile: state.profile }) : null;
-  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`) + spotsBlock(spots) + errorsBlock(pastErrors), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
+  const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`) + spotsBlock(spots) + placesBlock({ name: project.name, type: project.spec.type, text: `${project.spec.description ?? ""} ${instruction ?? ""}`, spots }) + errorsBlock(pastErrors), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile }));
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
   }
