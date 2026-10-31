@@ -110,6 +110,10 @@ const R2 = (dx, dy) => dx * dx + dy * dy;
 const VEC = /\b(?:vector[34]|vec[34])\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/g;
 const XYZ = /\bx\s*=\s*(-?\d+(?:\.\d+)?)\s*,\s*y\s*=\s*(-?\d+(?:\.\d+)?)\s*,\s*z\s*=\s*(-?\d+(?:\.\d+)?)/g;
 
+// vector3(0.0, 0.0, 1.0) moves something, it is not a place. The ground around the middle
+// of the map sits at 70 m, so no real place is this close to (0, 0, 0).
+export const isOffset = ({ x, y, z }) => Math.hypot(x, y, z) < 50;
+
 // Every coordinate written in the Lua of a resource, comments left out.
 export function coordinates(files) {
   const found = [];

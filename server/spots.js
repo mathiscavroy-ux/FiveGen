@@ -1,7 +1,7 @@
 // Positions the customer's other scripts already use. The engine picks from a short list
 // of verified points and sees one script at a time, so without this two scripts end up
 // with their NPCs on the same spot. Read for the run only, never saved on the project.
-import { coordinates } from "./knowledge/locations.js";
+import { coordinates, isOffset } from "./knowledge/locations.js";
 import { getFiles, listProjects } from "./projects.js";
 
 const MAX_PER_SCRIPT = 20;

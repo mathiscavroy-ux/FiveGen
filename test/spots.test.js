@@ -47,7 +47,7 @@ test("the prompt lists the spots by script, and nothing when there are none", as
 
 test("the spots of a script are bounded and the config comes first", async () => {
   const { readSpots } = await import("../server/spots.js");
-  const many = Array.from({ length: 30 }, (_, i) => `vector3(${i * 10}.0, 0.0, 30.0)`).join("\n");
+  const many = Array.from({ length: 30 }, (_, i) => `vector3(${i * 10}.0, 500.0, 30.0)`).join("\n");
   const spots = readSpots("big", [{ path: "client/main.lua", content: "vector3(999.0, 999.0, 30.0)" }, config(many)]);
   assert.equal(spots.length, 20);
   assert.equal(spots[0].x, 0);
