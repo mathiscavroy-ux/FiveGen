@@ -42,7 +42,7 @@ test("Claude gets the instructions marked for its cache", async () => {
   assert.equal(seen.at(-1).messages[1].content, "demande");
 });
 
-test("a provider that refuses the marker gets plain text, at once and from then on", async () => {
+test("a provider that refuses the marker gets plain text, at once and for a while", async () => {
   refuse = marked;
   const { text } = await ask("anthropic/claude-opus-5.5");
   assert.equal(text, "ok");
@@ -51,4 +51,14 @@ test("a provider that refuses the marker gets plain text, at once and from then 
   await ask("anthropic/claude-opus-5.5");
   assert.equal(seen.length, calls + 1);
   assert.equal(seen.at(-1).messages[0].content, "instructions");
+
+  const now = Date.now;
+  Date.now = () => now() + 3600001;
+  try {
+    refuse = () => false;
+    await ask("anthropic/claude-opus-5.5");
+    assert.ok(marked(seen.at(-1)), "tried again after an hour");
+  } finally {
+    Date.now = now;
+  }
 });

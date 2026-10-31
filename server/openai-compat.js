@@ -12,11 +12,13 @@ export class ProviderError extends Error {
 }
 
 // Claude only caches what is marked, and the instructions are by far the biggest part of
-// a call. A provider that refuses the marker gets plain text from then on.
-let markerRefused = false;
+// a call. A provider that refuses the marker gets plain text for an hour: that 400 may
+// have been a passing one, and without the cache every call costs far more.
+const MARKER_RETRY_MS = 3600000;
+let markerRefusedUntil = 0;
 
 function systemMessage(provider, text) {
-  if (markerRefused || !/claude/i.test(provider.model)) return { role: "system", content: text };
+  if (Date.now() < markerRefusedUntil || !/claude/i.test(provider.model)) return { role: "system", content: text };
   return { role: "system", content: [{ type: "text", text, cache_control: { type: "ephemeral" } }] };
 }
 
@@ -32,7 +34,7 @@ async function post(provider, body, signal) {
   const [system, ...others] = body.messages;
   if (res.ok || ![400, 422].includes(res.status) || typeof system.content === "string") return res;
   const plain = await send({ ...body, messages: [{ role: "system", content: system.content[0].text }, ...others] });
-  if (plain.ok) markerRefused = true;
+  if (plain.ok) markerRefusedUntil = Date.now() + MARKER_RETRY_MS;
   return plain;
 }
 
