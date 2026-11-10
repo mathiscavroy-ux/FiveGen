@@ -132,6 +132,18 @@ export const config = {
   // Fix rounds: when a round does not improve the script, other models of the account
   // try the same round before giving up (0: stop at the first round that fails).
   fixEscalation: int(env.FIX_ESCALATION, 1),
+
+  // FiveGen's FiveM memory (lessons.js): a rule is written each time an automatic fix
+  // makes an error of the checks disappear, switched on after autoApprove scripts
+  // confirmed it (0: only by hand in /admin), and given to the next generations.
+  lessons: {
+    enabled: env.LESSONS !== "0",
+    autoApprove: Math.max(0, int(env.LESSONS_AUTO_APPROVE, 3)),
+    perDay: Math.max(0, int(env.LESSONS_PER_DAY, 20)),
+    max: Math.max(0, int(env.LESSONS_MAX, 15)),
+    // who writes the rules: the best models first (a rule is short), the free ones after
+    models: (env.LESSONS_MODELS ?? "").split(",").map((m) => m.trim()).filter(Boolean),
+  },
 };
 
 function loadProviders(raw) {

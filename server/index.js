@@ -5,9 +5,11 @@ import { ZipArchive } from "archiver";
 import { config, ROOT, modelLabel } from "./config.js";
 import { CATALOG, systemFor, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage, buildReviewMessage } from "./prompts.js";
 import { applyEdits } from "./patch.js";
-import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from "./engine.js";
+import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage, completeText } from "./engine.js";
+import { LESSON_SYSTEM, buildLessonMessage, cleanRule, fixedFamilies, lessonEffect, namesIn, snippetAround } from "./lessons.js";
 import { providerUsage, modelPricing, modelAvailable } from "./provider.js";
 import { generateParallel } from "./parallel.js";
+import { coolingList } from "./cooldown.js";
 import { errorsBlock, frequentErrors } from "./quality.js";
 import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook, createSubscriptionCheckout, setCancelAtPeriodEnd, cancelNow, changePlan } from "./payments.js";
@@ -210,6 +212,52 @@ function checkProject(userId, projectId) {
   return validateProjectFull(getFiles(userId, projectId), { ...project.spec, inventory: serverInventory(userId, projectId), usedSpots: usedSpots(userId, projectId) }, { resource: project.name });
 }
 
+// FiveGen's FiveM memory: an error of the checks that a fix made disappear becomes a general
+// rule (lessons.js). It runs after the fix, in the background: the client never waits on
+// it, and a failure only means one lesson less.
+let learning = Promise.resolve();
+function learnFrom({ userId, projectId, spec, resource, errors, validation, before, after }) {
+  if (!config.lessons.enabled || config.mock) return;
+  if (!isBetter(validation, { ok: errors.length === 0, errors })) return;
+  const fixed = fixedFamilies(errors, validation.errors).slice(0, 2);
+  if (!fixed.length) return;
+  const framework = spec.framework ?? "";
+  // one at a time: two scripts fixing the same error must not write two rules for it
+  learning = learning.then(async () => {
+    for (const { family, error } of fixed) {
+      try {
+        const known = db.findLesson(family, framework);
+        if (known) {
+          if (known.status !== "rejected") {
+            const now = db.confirmLesson(known.id, config.lessons.autoApprove);
+            if (now.status === "approved" && known.status !== "approved") console.log(`[fivegen] leçon activée : ${family}`);
+          }
+          continue;
+        }
+        if (db.lessonsSince(new Date(Date.now() - 86400000).toISOString()) >= config.lessons.perDay) return;
+        const file = (list) => list.find((f) => f.path === error.file)?.content;
+        const shownBefore = snippetAround(file(before), error.line);
+        const shownAfter = snippetAround(file(after), error.line);
+        const text = await completeText({
+          system: LESSON_SYSTEM,
+          user: buildLessonMessage({ framework, error, before: shownBefore, after: shownAfter }),
+          models: config.lessons.models,
+          profile: config.tiers.pro,
+          meta: { userId, projectId, purpose: "lesson" },
+          maxTokens: 600,
+        });
+        const rule = cleanRule(text, [resource, ...namesIn(shownBefore, shownAfter)]);
+        if (rule) {
+          db.addLesson({ family, framework, rule });
+          console.log(`[fivegen] nouvelle leçon (${framework || "tous"}) : ${family}`);
+        }
+      } catch (err) {
+        console.warn("[fivegen] leçon non apprise :", err.detail ?? err.message);
+      }
+    }
+  });
+}
+
 // Generation → save → check → review pass → automatic fix rounds (free) while errors
 // remain → one more review if the fixes brought new warnings.
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
@@ -217,11 +265,13 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   const inventory = serverInventory(userId, projectId);
   const spots = usedSpots(userId, projectId);
   const pastErrors = frequentErrors(db.qualityRuns());
-  const spec = { ...project.spec, ...(inventory ? { inventory } : {}), usedSpots: spots, pastErrors };
+  // the rules FiveGen learned from earlier fixes, for this framework
+  const lessons = config.lessons.enabled ? db.activeLessons(project.spec.framework, config.lessons.max) : [];
+  const spec = { ...project.spec, ...(inventory ? { inventory } : {}), usedSpots: spots, pastErrors, lessons };
   // a conversion reads one framework and writes another
   state.system = systemFor(kind === "convert" ? null : spec.framework);
   // a manual fix must not leave the script worse than it found it
-  const before = kind === "fix" ? { validation: await checkProject(userId, projectId), version: listVersions(userId, projectId)[0]?.n, notes: project.notes } : null;
+  const before = kind === "fix" ? { validation: await checkProject(userId, projectId), version: listVersions(userId, projectId)[0]?.n, notes: project.notes, files: getFiles(userId, projectId) } : null;
   send("phase", { phase: kind, label: LABELS[kind] });
   if (inventory) {
     const n = inventoryCounts(inventory);
@@ -318,6 +368,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     retries: config.fixEscalation,
     fixRound: async (round, errors, attempt = 0) => {
       const model = fixModel(round, attempt);
+      const filesBefore = getFiles(userId, projectId);
       if (attempt > 0 && !model) return null; // no other model to ask
       send("phase", { phase: "fix", label: `Correction automatique ${round}/${rounds}${attempt ? ` · autre moteur (${modelLabel(model)})` : ""}` });
       state.quality.rounds += 1;
@@ -344,11 +395,15 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       const current = getProject(userId, projectId);
       updateMeta(userId, projectId, { notes: mergeNotes(current.notes, fix.notes, `Correction automatique ${round}`) });
       addHistory(userId, projectId, { type: "autofix", instruction: `${errors.length} erreur(s)`, files: fixed, outputTokens: fix.outputTokens });
-      return kept(await recheck(), fixVersion);
+      const after = kept(await recheck(), fixVersion);
+      learnFrom({ userId, projectId, spec, resource: project.name, errors, validation: after.validation, before: filesBefore, after: getFiles(userId, projectId) });
+      return after;
     },
     rollback: (target, round, attempt) => rollback(target, `La correction automatique ${round}${attempt ? " (autre moteur)" : ""} n'améliore pas le script.`),
   });
   if (before && isBetter(before.validation, best.validation)) await rollback(before, "La correction laisse le script moins bon qu'avant.");
+  // a fix asked by the client teaches too, from the errors it started with
+  else if (before) learnFrom({ userId, projectId, spec, resource: project.name, errors: before.validation.errors, validation: best.validation, before: before.files, after: getFiles(userId, projectId) });
   // only what the first review did not see: what it left, it left on purpose
   if (reviewed && best.validation.ok) {
     const fresh = newWarnings(best.validation.warnings, [...known, ...warnings]);
@@ -1054,11 +1109,33 @@ app.get("/api/admin/usage", requireUser, requireAdmin, async (req, res) => {
       smokeTest: process.env.SMOKE_TEST !== "0",
       maxTokens: config.engine.maxTokens,
     },
+    // models set aside until their limit resets (free quotas of the day, per-minute limits)
+    cooling: coolingList(),
     revenue30d: db.stats().revenue30d,
   });
 });
 
 app.get("/api/admin/quality", requireUser, requireAdmin, (_req, res) => res.json(summarizeQuality(db.qualityRuns())));
+
+// What FiveGen learned: each rule with its error, how many scripts confirmed it and, once
+// switched on, how often that error still shows up in new scripts.
+app.get("/api/admin/lessons", requireUser, requireAdmin, (_req, res) => {
+  const runs = db.qualityRuns(90);
+  res.json({
+    enabled: config.lessons.enabled,
+    autoApprove: config.lessons.autoApprove,
+    lessons: db.listLessons().map((l) => ({ ...l, effect: lessonEffect(l, runs) })),
+  });
+});
+
+app.post("/api/admin/lessons/:id", requireUser, requireAdmin, (req, res) => {
+  const { status, rule } = req.body ?? {};
+  if (status !== undefined && !["pending", "approved", "rejected"].includes(status)) return res.status(400).json({ error: "Statut invalide." });
+  if (rule !== undefined && (typeof rule !== "string" || rule.trim().length < 10 || rule.length > 600)) return res.status(400).json({ error: "Règle trop courte ou trop longue." });
+  const lesson = db.setLesson(Number(req.params.id), { status, rule });
+  if (!lesson) return res.status(404).json({ error: "Leçon introuvable." });
+  res.json(lesson);
+});
 
 app.get("/api/admin/generations", requireUser, requireAdmin, (req, res) => {
   const status = ["ok", "error", "cancelled"].includes(req.query.status) ? req.query.status : undefined;

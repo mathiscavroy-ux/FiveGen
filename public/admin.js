@@ -25,7 +25,7 @@ const windowName = (sec) => (sec < 172800 ? `${Math.round(sec / 3600)} heures` :
 const USD_EUR = 0.92; // indicative rate, only for the margin estimate
 const VAT = 0.2; // pack prices include VAT (French rate): the margin is counted without it
 
-const PURPOSES = { generate: "Génération", candidate: "Version concurrente", plan: "Plan", review: "Relecture", autofix: "Correction auto", fix: "Correction", refine: "Modification", rewrite: "Réécriture", brief: "Questions" };
+const PURPOSES = { generate: "Génération", candidate: "Version concurrente", lesson: "Leçon apprise", plan: "Plan", review: "Relecture", autofix: "Correction auto", fix: "Correction", refine: "Modification", rewrite: "Réécriture", brief: "Questions" };
 const KINDS = { generate: "Génération", refine: "Modification", fix: "Correction", convert: "Conversion", optimize: "Optimisation" };
 const REPAIRS = { install: "Tables et job installés au démarrage", manifest: "Lignes du fxmanifest", boss: "job.isboss sur ESX", job: "Job du joueur tenu à jour" };
 
@@ -89,6 +89,7 @@ function renderQuota() {
   if (ok && p.freeRequests) extra.push(`Requêtes gratuites aujourd'hui : <b>${p.freeRequests.remaining ?? "?"}</b> restantes sur ${p.freeRequests.limit ?? "?"}`);
   if (ok && p.freeTokens) extra.push(`Tokens gratuits aujourd'hui : <b>${tokens(p.freeTokens.remaining)}</b> restants sur ${tokens(p.freeTokens.limit)}`);
   if (ok && p.wallet) extra.push(`Portefeuille : <b>${usd(p.wallet.balance)}</b>${p.wallet.held ? ` (${usd(p.wallet.held)} réservés)` : ""}`);
+  for (const c of usage?.cooling ?? []) extra.push(`En pause jusqu'à ${new Date(c.until).toLocaleTimeString("fr-FR")} : <b>${esc(c.model)}</b> (limite atteinte)`);
   if (ok && p.fetchedAt) extra.push(`Relevé à ${new Date(p.fetchedAt).toLocaleTimeString("fr-FR")}`);
   $("#quotaExtra").innerHTML = extra.map((e) => `<span>${e}</span>`).join("");
   $("#quotaExtra").classList.toggle("hidden", !extra.length);
@@ -271,6 +272,24 @@ async function loadQuality() {
   $("#qualityRepairs").innerHTML = q.repairs.length
     ? q.repairs.map((r) => `<tr><td>${esc(REPAIRS[r.kind] ?? r.kind)}</td><td>${int(r.runs)}</td></tr>`).join("")
     : emptyRow(2, "Aucune réparation.");
+  await loadLessons();
+}
+
+const LESSON_STATES = { pending: '<span class="tag">en attente</span>', approved: '<span class="tag ok">active</span>', rejected: '<span class="tag err">refusée</span>' };
+const share = (v) => (v === null || v === undefined ? "—" : `${Math.round(v * 100)} %`);
+
+async function loadLessons() {
+  const { enabled, autoApprove, lessons } = await api("/api/admin/lessons");
+  $("#lessonsMode").textContent = !enabled ? "désactivées (LESSONS=0)" : autoApprove ? `activées seules après ${autoApprove} scripts` : "activées à la main";
+  $("#lessonsList").innerHTML = lessons.length
+    ? lessons
+        .map((l) => {
+          const effect = l.effect && l.effect.runsAfter ? `${share(l.effect.before)} → ${share(l.effect.after)} des scripts` : "—";
+          const actions = [l.status !== "approved" && `<button class="btn small" data-lesson="${l.id}" data-state="approved">Activer</button>`, l.status !== "rejected" && `<button class="btn small" data-lesson="${l.id}" data-state="rejected">Refuser</button>`].filter(Boolean).join(" ");
+          return `<tr><td class="family">${esc(l.family)}</td><td>${esc(l.rule)}</td><td>${esc(l.framework || "tous")}</td><td>${int(l.learned)}</td><td>${effect}</td><td>${LESSON_STATES[l.status] ?? esc(l.status)}</td><td><div class="row">${actions}</div></td></tr>`;
+        })
+        .join("")
+    : emptyRow(7, "Rien d'appris pour l'instant : chaque erreur corrigée automatiquement devient une règle.");
 }
 
 let users = [];
@@ -473,7 +492,13 @@ document.addEventListener("click", async (e) => {
   const del = e.target.closest("[data-del]");
   const add = e.target.closest("[data-add]");
   const detail = e.target.closest("[data-user]");
+  const lesson = e.target.closest("[data-lesson]");
   try {
+    if (lesson) {
+      await api(`/api/admin/lessons/${lesson.dataset.lesson}`, { method: "POST", body: { status: lesson.dataset.state } });
+      toast(lesson.dataset.state === "approved" ? "Leçon activée" : "Leçon refusée", "ok");
+      await loadLessons();
+    }
     if (del && confirm(`Supprimer le code ${del.dataset.del} ?`)) {
       await api(`/api/admin/codes/${encodeURIComponent(del.dataset.del)}`, { method: "DELETE" });
       loadCodes();

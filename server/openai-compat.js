@@ -82,6 +82,28 @@ function httpMessage(provider, status, text) {
   return `Erreur ${status} de ${provider.label} : ${detail}`;
 }
 
+// An HTTP failure, with what the provider said raw and when its limit resets (Retry-After,
+// X-RateLimit-Reset, or OpenRouter's copy of that header inside the error body).
+async function httpError(provider, res) {
+  const text = await res.text();
+  const err = new ProviderError(httpMessage(provider, res.status, text), res.status);
+  err.raw = extractError(text).slice(0, 500);
+  const retryAfter = Number(res.headers.get("retry-after"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) err.retryAfterMs = retryAfter * 1000;
+  let reset = Number(res.headers.get("x-ratelimit-reset"));
+  if (!Number.isFinite(reset) || reset <= 0) {
+    try {
+      const meta = JSON.parse(text)?.error?.metadata?.headers ?? {};
+      reset = Number(meta["X-RateLimit-Reset"] ?? meta["x-ratelimit-reset"]);
+    } catch {
+      reset = NaN;
+    }
+  }
+  // seconds or milliseconds since 1970, depending on the provider
+  if (Number.isFinite(reset) && reset > 0) err.resetAt = reset < 1e12 ? reset * 1000 : reset;
+  return err;
+}
+
 function assertUsable(provider) {
   if (!provider.baseUrl) throw new ProviderError("URL de l'API manquante : renseigne-la dans ⚙ Paramètres.");
   if (provider.needsKey && !provider.apiKey) {
@@ -148,7 +170,7 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal, 
 
 async function streamCompletion(provider, body, onEvent, signal, onActivity) {
   const res = await post(provider, body, signal);
-  if (!res.ok) throw new ProviderError(httpMessage(provider, res.status, await res.text()), res.status);
+  if (!res.ok) throw await httpError(provider, res);
   onActivity();
 
   const parser = new StreamParser({
@@ -243,7 +265,7 @@ export async function completeOpenAICompat({ provider, system, user, maxTokens =
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await post(provider, body, ctrl.signal);
-    if (!res.ok) throw new ProviderError(httpMessage(provider, res.status, await res.text()), res.status);
+    if (!res.ok) throw await httpError(provider, res);
     const json = await res.json();
     if (json.error) {
       // same reading as the stream: "service_unavailable" and the like are worth a retry
