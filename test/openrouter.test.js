@@ -99,5 +99,8 @@ test("a paid model without credit (402) hands over to the free model", async () 
 
 test("the engine name shown to clients follows the model in use", async () => {
   const { config } = await import("../server/config.js");
-  assert.equal(config.tiers.premium.engineName, "Glm 5.3");
+  assert.equal(config.tiers.premium.engineName, "GLM 5.3");
+  const { modelLabel } = await import("../server/config.js");
+  assert.equal(modelLabel("nvidia/nemotron-3-ultra-550b-a55b:free"), "Nemotron 3 Ultra");
+  assert.equal(modelLabel("deepseek-ai/deepseek-v4.1-flash@nim"), "Deepseek V4.1 Flash");
 });

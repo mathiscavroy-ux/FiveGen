@@ -1303,3 +1303,22 @@ dialog::backdrop { background: rgb(0 0 0 / .55); backdrop-filter: blur(4px); }
   .bridge-row .btn { width: 100%; justify-content: center; }
   .srv-info { flex-basis: calc(100% - 24px); }
 }
+
+/* ---------- Console design (2026-11): flat signal green, the file mark, mono labels ---------- */
+.logo, .adm-brand .logo {
+  width: 22px; height: 22px; border-radius: 5px; position: relative; overflow: hidden;
+  background: none; border: 2px solid var(--accent); color: transparent; font-size: 0; box-shadow: none;
+}
+.logo::after, .adm-brand .logo::after { content: ""; position: absolute; inset: 3px 3px 3px 8px; background: var(--accent); border-radius: 1px; }
+[data-theme="light"] .logo, [data-theme="light"] .adm-brand .logo { border-color: var(--text); }
+[data-theme="light"] .logo::after, [data-theme="light"] .adm-brand .logo::after { background: var(--accent-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: none; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); filter: none; }
+[data-theme="light"] .btn.primary:hover:not(:disabled) { background: #b5e61d; border-color: #b5e61d; }
+.sidebar-head, .panel-head, .an-table th, .understood .u-label, .wz-kicker, .pv-side > b {
+  font-family: var(--mono); font-weight: 500; text-transform: none; letter-spacing: 0;
+}
+.wz-kicker, .understood .u-label { color: var(--muted); }
+.pack .tagline { background: var(--accent); border-radius: 4px; font-family: var(--mono); font-weight: 500; }
+.pill.tier.premium, .pill.tier.pro { background: var(--accent); }
+.activity.thinking .act-orb::after, .activity.review .act-orb::after { box-shadow: none; }

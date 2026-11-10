@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FiveGen · Direction C · Los Santos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --night: #100d1f;
+    --night-2: #18142d;
+    --night-3: #221c3d;
+    --line: #2f2850;
+    --text: #f3eefc;
+    --muted: #b3a9cc;
+    --amber: #ffb547;
+    --coral: #ff6b4a;
+    --magenta: #c2367a;
+    --display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+    --sans: "Barlow", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--night); color: var(--text); font: 17px/1.55 var(--sans); }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+
+  .nav { position: absolute; inset: 0 0 auto; z-index: 5; }
+  .nav .wrap { display: flex; align-items: center; height: 72px; gap: 32px; }
+  .logo { font: 900 26px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; }
+  .logo span { color: var(--amber); }
+  .nav nav { display: flex; gap: 26px; font-weight: 500; color: var(--muted); }
+  .nav nav a:hover { color: var(--text); }
+  .nav .r { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 22px; font: 700 15px var(--sans); text-transform: uppercase; letter-spacing: .06em; border-radius: 4px; border: 2px solid var(--text); }
+  .btn.hot { background: var(--amber); border-color: var(--amber); color: #1b1206; }
+  .btn.hot:hover { background: #ffc66e; }
+  .btn.out:hover { background: var(--text); color: var(--night); }
+  .nav .btn { min-height: 40px; font-size: 13px; }
+
+  /* city hero */
+  .city { position: relative; height: min(100vh, 860px); min-height: 640px; overflow: hidden; }
+  .city svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .city .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(16,13,31,.5) 0%, rgba(16,13,31,0) 16%, rgba(16,13,31,0) 58%, rgba(16,13,31,.88) 84%, var(--night) 100%); }
+  .city .copy { position: absolute; left: 0; right: 0; bottom: 64px; }
+  h1 { font: 900 clamp(64px, 10vw, 148px)/.86 var(--display); text-transform: uppercase; letter-spacing: -.005em; max-width: 9em; }
+  h1 em { font-style: normal; color: var(--amber); }
+  .copy .row { display: flex; justify-content: space-between; align-items: end; gap: 40px; margin-top: 28px; flex-wrap: wrap; }
+  .copy p { max-width: 34em; font-size: 19px; color: #e4dcf5; }
+  .copy .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .copy small { display: block; margin-top: 12px; font-size: 14px; color: var(--muted); }
+  .pin { position: absolute; transform: translate(-50%, -100%); font: 500 12px var(--mono); color: #1b1206; background: var(--amber); padding: 4px 8px; border-radius: 3px; white-space: nowrap; }
+  .pin::after { content: ""; position: absolute; left: 50%; top: 100%; width: 2px; height: 26px; background: var(--amber); transform: translateX(-50%); }
+  .pin.c { background: var(--coral); color: #fff; } .pin.c::after { background: var(--coral); }
+
+  .plates { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--night-2); }
+  .plates .wrap { display: flex; gap: 14px; padding-top: 18px; padding-bottom: 18px; flex-wrap: wrap; align-items: center; }
+  .plates b { font: 800 15px var(--display); text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-right: 10px; }
+  .plate { font: 600 14px var(--sans); letter-spacing: .08em; text-transform: uppercase; padding: 6px 12px; border: 1.5px solid var(--line); border-radius: 4px; }
+
+  section { padding: 112px 0; }
+  h2 { font: 800 clamp(40px, 5.4vw, 76px)/.92 var(--display); text-transform: uppercase; max-width: 12em; }
+  h2 em { font-style: normal; color: var(--amber); }
+  .sub { margin-top: 18px; color: var(--muted); font-size: 19px; max-width: 32em; }
+
+  /* route */
+  .route { margin-top: 64px; position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
+  .route::before { content: ""; position: absolute; left: 0; right: 0; top: 18px; height: 6px; background: repeating-linear-gradient(90deg, var(--amber) 0 26px, transparent 26px 44px); opacity: .7; }
+  .stop { position: relative; padding-top: 52px; }
+  .stop .dot { position: absolute; top: 6px; left: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--night); border: 4px solid var(--amber); }
+  .stop h3 { font: 800 28px/1 var(--display); text-transform: uppercase; }
+  .stop p { margin-top: 10px; color: var(--muted); }
+
+  /* districts */
+  .districts { margin-top: 56px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--line); border: 2px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .d { background: var(--night-2); padding: 28px; min-height: 190px; display: flex; flex-direction: column; }
+  .d .kind { font: 500 12px var(--mono); color: var(--amber); }
+  .d h3 { margin-top: 14px; font: 800 34px/1 var(--display); text-transform: uppercase; }
+  .d p { margin-top: auto; padding-top: 18px; color: var(--muted); font-size: 16px; }
+  .d:hover { background: var(--night-3); }
+
+  /* terminal proof */
+  .proof { display: grid; grid-template-columns: 5fr 7fr; gap: 56px; align-items: center; }
+  .term { background: #0b0916; border: 2px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .term .hd { display: flex; justify-content: space-between; padding: 12px 16px; border-bottom: 2px solid var(--line); font: 500 13px var(--mono); color: var(--muted); }
+  .term .hd b { color: #7ef0a6; font-weight: 500; }
+  .term pre { font: 14px/1.85 var(--mono); padding: 16px 18px; color: #ddd3f0; overflow-x: auto; }
+  .term .k { color: var(--coral); } .term .s { color: var(--amber); } .term .ok { color: #7ef0a6; }
+  .facts { margin-top: 32px; display: grid; gap: 16px; }
+  .facts div { padding-left: 16px; border-left: 3px solid var(--magenta); }
+  .facts b { display: block; font-weight: 700; }
+  .facts span { color: var(--muted); font-size: 16px; }
+
+  /* pricing */
+  .tiers { margin-top: 56px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .tier { background: var(--night-2); border: 2px solid var(--line); border-radius: 6px; padding: 30px; display: flex; flex-direction: column; }
+  .tier.hl { border-color: var(--amber); }
+  .tier h3 { font: 800 30px/1 var(--display); text-transform: uppercase; display: flex; justify-content: space-between; align-items: baseline; }
+  .tier h3 small { font: 600 12px var(--sans); letter-spacing: .1em; color: var(--amber); }
+  .tier .amt { font: 900 64px/1 var(--display); margin: 22px 0 6px; }
+  .tier .per { color: var(--muted); font-size: 15px; }
+  .tier ul { list-style: none; margin: 22px 0 28px; display: grid; gap: 8px; }
+  .tier ul li { padding-left: 18px; position: relative; }
+  .tier ul li::before { content: ""; position: absolute; left: 0; top: .62em; width: 8px; height: 3px; background: var(--amber); }
+  .tier .btn { margin-top: auto; }
+
+  details { border-bottom: 2px solid var(--line); padding: 22px 0; }
+  details summary { cursor: pointer; font: 700 20px var(--sans); list-style: none; display: flex; justify-content: space-between; gap: 24px; }
+  details summary::after { content: "+"; color: var(--amber); font-size: 26px; line-height: 1; }
+  details[open] summary::after { content: "−"; }
+  details p { margin-top: 10px; color: var(--muted); max-width: 44em; }
+  .faq { margin-top: 40px; border-top: 2px solid var(--line); }
+
+  .finale { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--night) 0%, #2a1240 55%, #5b1c45 100%); }
+  .finale h2 { font-size: clamp(56px, 8vw, 120px); max-width: 10em; }
+  .finale .cta { margin-top: 36px; }
+  footer { background: #0a0814; padding: 36px 0 56px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+
+  @media (max-width: 900px) {
+    .wrap { padding: 0 16px; }
+    .nav nav { display: none; }
+    .city { height: 760px; }
+    .route { grid-template-columns: 1fr; }
+    .route::before { left: 13px; right: auto; top: 0; bottom: 0; width: 6px; height: auto; background: repeating-linear-gradient(180deg, var(--amber) 0 26px, transparent 26px 44px); }
+    .stop { padding: 0 0 0 52px; }
+    .stop .dot { top: 0; }
+    .districts, .tiers, .proof { grid-template-columns: 1fr; }
+    section { padding: 72px 0; }
+    .pin.hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="logo" href="#">Five<span>Gen</span></a>
+    <nav><a href="#route">Fonctionnement</a><a href="#quartiers">Scripts</a><a href="#code">Code</a><a href="#tarifs">Tarifs</a></nav>
+    <div class="r"><a href="#">Connexion</a><a class="btn hot" href="#">Commencer</a></div>
+  </div>
+</header>
+
+<div class="city" id="city">
+  <svg id="sky" viewBox="0 0 1440 860" preserveAspectRatio="xMidYMax slice" aria-hidden="true"></svg>
+  <div class="shade"></div>
+  <span class="pin" style="left:22%;top:44%">police_job</span>
+  <span class="pin c hide-sm" style="left:47%;top:38%">ems</span>
+  <span class="pin hide-sm" style="left:71%;top:47%">garage</span>
+  <span class="pin c" style="left:86%;top:36%">heist_bank</span>
+  <div class="copy">
+    <div class="wrap">
+      <h1>Ton serveur RP, <em>écrit en une phrase.</em></h1>
+      <div class="row">
+        <div><p>Décris ton idée. FiveGen pose les bonnes questions, écrit la ressource complète pour ton framework, la vérifie, la corrige, puis l'installe sur ton serveur.</p><small>3 crédits offerts · sans carte bancaire · crédit rendu en cas d'échec</small></div>
+        <div class="cta"><a class="btn hot" href="#">Créer mon premier script</a><a class="btn out" href="#route">Comment ça marche</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="plates"><div class="wrap"><b>Roule sur</b><span class="plate">QBCore</span><span class="plate">Qbox</span><span class="plate">ESX Legacy</span><span class="plate">Standalone</span><span class="plate">ox_lib</span><span class="plate">ox_inventory</span><span class="plate">oxmysql</span></div></div>
+
+<section id="route">
+  <div class="wrap">
+    <h2>De l'idée au serveur, <em>quatre arrêts.</em></h2>
+    <p class="sub">Aucune configuration, aucun outil à installer.</p>
+    <div class="route">
+      <div class="stop"><span class="dot"></span><h3>Décris</h3><p>Avec tes mots : « un job police », « un HUD minimaliste ».</p></div>
+      <div class="stop"><span class="dot"></span><h3>Précise</h3><p>3 à 6 questions à cocher : fonctionnalités, grades, prix.</p></div>
+      <div class="stop"><span class="dot"></span><h3>Vérifie</h3><p>Les fichiers s'écrivent en direct, puis passent la vérification et la correction.</p></div>
+      <div class="stop"><span class="dot"></span><h3>Installe</h3><p>ZIP ou déploiement direct sur ton serveur FiveM, même sur ton PC.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="quartiers" style="background:var(--night-2)">
+  <div class="wrap">
+    <h2>Chaque script, <em>un lieu de ta ville.</em></h2>
+    <p class="sub">Jobs, interfaces, systèmes complets : tout ce dont un serveur RP a besoin.</p>
+    <div class="districts">
+      <div class="d"><span class="kind">job</span><h3>Commissariat</h3><p>Vestiaire, garage, armurerie par grade, menottes, fouille et amendes.</p></div>
+      <div class="d"><span class="kind">job</span><h3>Hôpital</h3><p>Réanimation, soins avec objets, appels d'urgence et factures.</p></div>
+      <div class="d"><span class="kind">job</span><h3>Garage</h3><p>Réparations, dépannage, fourrière et menu patron.</p></div>
+      <div class="d"><span class="kind">interface</span><h3>HUD</h3><p>Vie, armure, faim, soif, voix, vitesse et ceinture.</p></div>
+      <div class="d"><span class="kind">activité</span><h3>Braquages</h3><p>Supérette, bijouterie, banque, avec alerte police et cooldowns.</p></div>
+      <div class="d"><span class="kind">système</span><h3>Concession</h3><p>Garages publics, fourrière et concessionnaire avec essai.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="code">
+  <div class="wrap proof">
+    <div>
+      <h2>Pas de failles <em>pour les tricheurs.</em></h2>
+      <p class="sub">Argent, items et récompenses sont validés sur le serveur. Chaque ressource est vérifiée avant de partir.</p>
+      <div class="facts">
+        <div><b>Vérifié et corrigé</b><span>Syntaxe Lua, manifest, NUI, événements client et serveur.</span></div>
+        <div><b>APIs à jour</b><span>QBCore, Qbox, ESX et ox_* lus dans leur code officiel.</span></div>
+        <div><b>Léger sur le resmon</b><span>Boucles à sommeil dynamique, zones, nettoyage à l'arrêt.</span></div>
+      </div>
+    </div>
+    <div class="term">
+      <div class="hd"><span>server/main.lua</span><b>● vérifié</b></div>
+<pre><span class="k">RegisterNetEvent</span>(<span class="s">'police_job:server:cuff'</span>, <span class="k">function</span>(target)
+    <span class="k">local</span> src = source
+    <span class="k">local</span> xPlayer = ESX.GetPlayerFromId(src)
+    <span class="k">if not</span> xPlayer <span class="k">or</span> xPlayer.job.name ~= <span class="s">'police'</span> <span class="k">then return end</span>
+    <span class="k">if</span> Distance(src, target) > 3.0 <span class="k">then return end</span>
+    TriggerClientEvent(<span class="s">'police_job:client:cuffed'</span>, target)
+<span class="k">end</span>)
+
+<span class="ok">✓ syntaxe  ✓ manifest 7/7  ✓ client ↔ serveur  ✓ test d'exécution</span></pre>
+    </div>
+  </div>
+</section>
+
+<section id="tarifs" style="background:var(--night-2)">
+  <div class="wrap">
+    <h2>Paie seulement <em>ce que tu génères.</em></h2>
+    <p class="sub">1 script = 3 crédits, 3 modifications offertes par script. Corrections gratuites, crédits sans expiration. Prix TTC.</p>
+    <div class="tiers">
+      <div class="tier"><h3>Starter</h3><div class="amt">8,99 €</div><div class="per">15 crédits · 1,80 € le script</div><ul><li>5 scripts</li><li>Tous les frameworks</li><li>Export ZIP et déploiement</li></ul><a class="btn out" href="#">Choisir Starter</a></div>
+      <div class="tier hl"><h3>Créateur <small>Le plus choisi</small></h3><div class="amt">23,99 €</div><div class="per">45 crédits · 1,60 € le script</div><ul><li>15 scripts</li><li>Idéal pour monter un serveur</li><li>Support prioritaire</li></ul><a class="btn hot" href="#">Choisir Créateur</a></div>
+      <div class="tier"><h3>Studio</h3><div class="amt">71,99 €</div><div class="per">150 crédits · 1,44 € le script</div><ul><li>50 scripts</li><li>Pour les développeurs et équipes</li><li>Support prioritaire</li></ul><a class="btn out" href="#">Choisir Studio</a></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Questions <em>fréquentes.</em></h2>
+    <div class="faq">
+      <details><summary>Les scripts fonctionnent-ils directement sur mon serveur ?</summary><p>Oui : chaque ressource est vérifiée puis testée dans un FiveM simulé avant livraison. Les erreurs en jeu remontent dans le studio.</p></details>
+      <details><summary>Que se passe-t-il si une génération échoue ?</summary><p>Si rien n'est produit, tes crédits sont rendus automatiquement.</p></details>
+      <details><summary>FiveGen crée-t-il des cheats ?</summary><p>Non. Les demandes de triche ou de contenu interdit sont refusées.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="finale">
+  <div class="wrap">
+    <h2>Ton prochain script <em>est à une phrase.</em></h2>
+    <div class="cta"><a class="btn hot" href="#">Essayer FiveGen</a></div>
+  </div>
+</section>
+<footer><div class="wrap"><span>© 2026 FiveGen</span><span>Non affilié à Rockstar Games, Take-Two Interactive ou Cfx.re.</span></div></footer>
+
+<script>
+  // A city at dusk, drawn once from a fixed seed: sky, low sun, three layers of towers with lit windows.
+  const svg = document.getElementById("sky");
+  const NS = "http://www.w3.org/2000/svg";
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const el = (name, attrs, parent = svg) => { const e = document.createElementNS(NS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  const defs = el("defs", {});
+  const sky = el("linearGradient", { id: "g", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+  [["0", "#140f2b"], [".22", "#2c1448"], [".42", "#8a2f68"], [".56", "#ff6b4a"], [".66", "#ffb547"], ["1", "#ffb547"]].forEach(([o, c]) => el("stop", { offset: o, "stop-color": c }, sky));
+  el("rect", { x: 0, y: 0, width: 1440, height: 860, fill: "url(#g)" });
+  el("circle", { cx: 1030, cy: 470, r: 130, fill: "#ffe0a0", opacity: .95 });
+  for (let i = 0; i < 6; i++) el("rect", { x: 880, y: 455 + i * 17, width: 300, height: 3 + i * 1.6, fill: "#e0557a", opacity: .9 });
+  const layers = [
+    { base: 860, minH: 300, maxH: 420, color: "#5a2357", win: 0 },
+    { base: 860, minH: 230, maxH: 480, color: "#2e1742", win: .05 },
+    { base: 860, minH: 150, maxH: 360, color: "#140f24", win: .13 },
+  ];
+  for (const L of layers) {
+    let x = -20;
+    while (x < 1460) {
+      const w = 34 + rnd() * 90, h = L.minH + rnd() * (L.maxH - L.minH), y = L.base - h;
+      el("rect", { x, y, width: w, height: h, fill: L.color });
+      if (rnd() > .8) el("rect", { x: x + w * .45, y: y - 40, width: 3, height: 40, fill: L.color });
+      if (L.win) for (let wy = y + 12; wy < L.base - 10; wy += 14) for (let wx = x + 6; wx < x + w - 8; wx += 10) if (rnd() < L.win) el("rect", { x: wx, y: wy, width: 4, height: 6, fill: rnd() > .5 ? "#ffb547" : "#ffd9a0", opacity: .85 });
+      x += w + rnd() * 6;
+    }
+  }
+  // palms on the front edge
+  // palms: a thin leaning trunk and drooping fronds, on the front edge
+  for (const [px, top, lean] of []) {
+    const g = el("g", { stroke: "#0b0817", fill: "none", "stroke-linecap": "round" });
+    el("path", { d: `M${px} 860 Q ${px + lean} ${(860 + top) / 2} ${px + lean * 1.6} ${top}`, "stroke-width": 8 }, g);
+    const cx = px + lean * 1.6;
+    for (const [dx, dy] of [[-95, 40], [-70, 62], [-40, 70], [40, 70], [72, 60], [98, 38], [-60, 10], [62, 8]]) {
+      el("path", { d: `M${cx} ${top} q ${dx * 0.5} ${-26} ${dx} ${dy}`, "stroke-width": 5 }, g);
+    }
+  }
+</script>
+</body>
+</html>

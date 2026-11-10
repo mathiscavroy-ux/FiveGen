@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FiveGen · Direction B · Suisse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #ffffff;
+    --ink: #0a0a0a;
+    --gray: #5f5f5f;
+    --rule: #e4e4e4;
+    --tint: #f4f4f3;
+    --signal: #ff3b00;
+    --mono: "Geist Mono", ui-monospace, monospace;
+    --sans: "Geist", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font: 16px/1.55 var(--sans); }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 40px; }
+  .grid { display: grid; grid-template-columns: repeat(12, 1fr); column-gap: 24px; }
+  .mono { font-family: var(--mono); }
+
+  .top { border-bottom: 1px solid var(--ink); }
+  .top .wrap { display: flex; align-items: center; height: 64px; gap: 40px; font-size: 14px; }
+  .logo { font-weight: 800; font-size: 18px; letter-spacing: -.03em; }
+  .logo i { font-style: normal; color: var(--signal); }
+  .top nav { display: flex; gap: 28px; color: var(--gray); }
+  .top nav a:hover { color: var(--ink); }
+  .top .r { margin-left: auto; display: flex; gap: 24px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; font-weight: 600; font-size: 15px; border: 1.5px solid var(--ink); border-radius: 0; }
+  .btn.solid { background: var(--ink); color: var(--paper); }
+  .btn.solid:hover { background: var(--signal); border-color: var(--signal); }
+  .btn.line:hover { background: var(--ink); color: var(--paper); }
+  .top .btn { min-height: 38px; }
+
+  .hero { padding: 56px 0 0; }
+  .hero h1 { font-size: clamp(56px, 10.4vw, 156px); line-height: .9; letter-spacing: -.055em; font-weight: 800; }
+  .hero h1 .dot { color: var(--signal); }
+  .hero-foot { margin-top: 56px; padding: 28px 0 64px; border-top: 1px solid var(--ink); }
+  .facts { grid-column: 1 / span 5; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .fact b { display: block; font-size: 40px; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+  .fact span { display: block; margin-top: 8px; font-size: 13px; color: var(--gray); }
+  .intro { grid-column: 7 / span 6; }
+  .intro p { font-size: 21px; line-height: 1.45; letter-spacing: -.01em; }
+  .intro .cta { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+  .intro small { display: block; margin-top: 16px; font: 13px var(--mono); color: var(--gray); }
+
+  .band { background: var(--tint); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .band .wrap { display: flex; gap: 36px; flex-wrap: wrap; padding: 18px 40px; font: 14px var(--mono); color: var(--gray); }
+
+  section { padding: 112px 0; border-bottom: 1px solid var(--rule); }
+  .label { grid-column: 1 / span 3; font: 13px var(--mono); color: var(--gray); padding-top: 10px; }
+  .body { grid-column: 4 / span 9; }
+  h2 { font-size: clamp(34px, 4.4vw, 64px); line-height: 1; letter-spacing: -.045em; font-weight: 700; }
+  .sub { margin-top: 20px; font-size: 19px; color: var(--gray); max-width: 32em; }
+
+  .steps { margin-top: 64px; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1.5px solid var(--ink); }
+  .step { padding: 20px 24px 0 0; }
+  .step .n { font: 600 56px/1 var(--sans); letter-spacing: -.05em; color: var(--signal); }
+  .step h3 { margin-top: 18px; font-size: 19px; font-weight: 600; }
+  .step p { margin-top: 8px; color: var(--gray); font-size: 15px; }
+
+  .listing { margin-top: 56px; display: grid; grid-template-columns: 1fr 260px; border-top: 1.5px solid var(--ink); }
+  .src { font: 15px/2 var(--mono); padding: 18px 0; overflow-x: auto; }
+  .src div { white-space: pre; }
+  .src .n { display: inline-block; width: 36px; color: #a3a3a3; }
+  .src .hl { background: #fff0ea; }
+  .notes { border-left: 1px solid var(--rule); padding: 18px 0 18px 20px; font-size: 14px; color: var(--gray); }
+  .notes p { margin-bottom: 18px; }
+  .notes b { color: var(--signal); font: 500 13px var(--mono); display: block; margin-bottom: 2px; }
+
+  .index { margin-top: 56px; border-top: 1.5px solid var(--ink); }
+  .item { display: grid; grid-template-columns: 5fr 6fr 2fr; gap: 24px; align-items: baseline; padding: 22px 0; border-bottom: 1px solid var(--rule); }
+  .item h3 { font-size: clamp(26px, 3vw, 40px); font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+  .item p { color: var(--gray); }
+  .item span { font: 13px var(--mono); color: var(--gray); text-align: right; }
+  .item:hover h3 { color: var(--signal); }
+
+  .vs { margin-top: 56px; width: 100%; border-collapse: collapse; }
+  .vs th, .vs td { text-align: left; padding: 18px 12px 18px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .vs thead th { font: 13px var(--mono); color: var(--gray); font-weight: 400; border-bottom: 1.5px solid var(--ink); }
+  .vs td:nth-child(2) { font-weight: 600; }
+  .vs td:nth-child(3) { color: var(--gray); }
+
+  .tiers { margin-top: 56px; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1.5px solid var(--ink); }
+  .tier { padding: 24px 24px 0 0; }
+  .tier + .tier { border-left: 1px solid var(--rule); padding-left: 24px; }
+  .tier h3 { font-size: 19px; font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+  .tier h3 small { font: 12px var(--mono); color: var(--signal); }
+  .tier .amt { font-size: 64px; font-weight: 700; letter-spacing: -.05em; line-height: 1; margin: 20px 0 6px; }
+  .tier .per { font: 13px var(--mono); color: var(--gray); }
+  .tier ul { list-style: none; margin: 22px 0 28px; display: grid; gap: 6px; font-size: 15px; }
+  .tier ul li::before { content: "— "; color: var(--gray); }
+
+  details { border-bottom: 1px solid var(--rule); padding: 22px 0; }
+  details summary { cursor: pointer; font-size: 20px; font-weight: 600; letter-spacing: -.02em; list-style: none; display: flex; justify-content: space-between; gap: 24px; }
+  details summary::after { content: "+"; font-weight: 400; }
+  details[open] summary::after { content: "−"; }
+  details p { margin-top: 10px; color: var(--gray); max-width: 44em; }
+  .faq { margin-top: 48px; border-top: 1.5px solid var(--ink); }
+
+  .end { padding: 120px 0 0; border: 0; }
+  .end h2 { font-size: clamp(48px, 8vw, 120px); line-height: .92; }
+  .end .cta { margin-top: 40px; }
+  footer { margin-top: 120px; border-top: 1px solid var(--ink); }
+  footer .wrap { display: flex; justify-content: space-between; padding: 24px 40px 48px; font-size: 13px; color: var(--gray); gap: 24px; flex-wrap: wrap; }
+
+  @media (max-width: 900px) {
+    .wrap, .band .wrap, footer .wrap { padding-left: 16px; padding-right: 16px; }
+    .grid { grid-template-columns: 1fr; }
+    .facts, .intro, .label, .body { grid-column: 1; }
+    .intro { margin-top: 36px; }
+    .label { padding: 0 0 12px; }
+    .steps, .tiers { grid-template-columns: 1fr; }
+    .step { padding: 20px 0; border-bottom: 1px solid var(--rule); }
+    .tier + .tier { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); }
+    .tier { padding: 24px 0; }
+    .listing { grid-template-columns: 1fr; }
+    .notes { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
+    .item { grid-template-columns: 1fr; gap: 6px; }
+    .item span { text-align: left; }
+    .top nav { display: none; }
+    section { padding: 72px 0; }
+    .vs td:nth-child(3), .vs th:nth-child(3) { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#">FiveGen<i>.</i></a>
+    <nav><a href="#methode">Méthode</a><a href="#code">Code</a><a href="#exemples">Exemples</a><a href="#tarifs">Tarifs</a></nav>
+    <div class="r"><a href="#">Connexion</a><a class="btn solid" href="#">Commencer</a></div>
+  </div>
+</header>
+
+<section class="hero" style="border:0;padding-bottom:0">
+  <div class="wrap">
+    <h1>Une phrase<span class="dot">.</span><br />Un script FiveM<br />qui démarre<span class="dot">.</span></h1>
+    <div class="hero-foot grid">
+      <div class="facts">
+        <div class="fact"><b>3–6</b><span>questions pour viser juste</span></div>
+        <div class="fact"><b>5</b><span>cibles : QBCore, Qbox, ESX, multi, standalone</span></div>
+        <div class="fact"><b>1 clic</b><span>pour installer sur ton serveur</span></div>
+      </div>
+      <div class="intro">
+        <p>Décris ton idée. FiveGen pose les bonnes questions, écrit la ressource complète pour ton framework, la vérifie, la corrige, puis l'installe sur ton serveur.</p>
+        <div class="cta"><a class="btn solid" href="#">Créer mon premier script</a><a class="btn line" href="#methode">Voir la méthode</a></div>
+        <small>3 crédits offerts · sans carte bancaire · crédit rendu en cas d'échec</small>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="band"><div class="wrap"><span>QBCore</span><span>Qbox</span><span>ESX Legacy</span><span>Standalone</span><span>ox_lib</span><span>ox_target</span><span>ox_inventory</span><span>oxmysql</span><span>pma-voice</span></div></div>
+
+<section id="methode">
+  <div class="wrap grid">
+    <div class="label">Méthode</div>
+    <div class="body">
+      <h2>De l'idée au serveur en quatre étapes.</h2>
+      <p class="sub">Aucune configuration, aucun outil à installer.</p>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><h3>Décris ton idée</h3><p>Avec tes mots, même en une phrase : « un job police », « un HUD minimaliste ».</p></div>
+        <div class="step"><div class="n">2</div><h3>Réponds au questionnaire</h3><p>3 à 6 questions à cocher : fonctionnalités, grades, prix.</p></div>
+        <div class="step"><div class="n">3</div><h3>FiveGen écrit et vérifie</h3><p>Les fichiers s'écrivent en direct, puis passent la vérification et la correction.</p></div>
+        <div class="step"><div class="n">4</div><h3>Installe en un clic</h3><p>ZIP ou déploiement direct sur ton serveur FiveM, même sur ton PC.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="code">
+  <div class="wrap grid">
+    <div class="label">Code livré</div>
+    <div class="body">
+      <h2>Sécurisé côté serveur, par défaut.</h2>
+      <p class="sub">Argent, items et récompenses sont validés sur le serveur : distances, jobs, cooldowns. Aucun événement exploitable par un tricheur.</p>
+      <div class="listing">
+        <div class="src">
+<div><span class="n">1</span>RegisterNetEvent('police_job:server:cuff', function(target)</div>
+<div><span class="n">2</span>    local src = source</div>
+<div><span class="n">3</span>    local xPlayer = ESX.GetPlayerFromId(src)</div>
+<div class="hl"><span class="n">4</span>    if not xPlayer or xPlayer.job.name ~= 'police' then return end</div>
+<div class="hl"><span class="n">5</span>    if Distance(src, target) > 3.0 then return end</div>
+<div><span class="n">6</span>    TriggerClientEvent('police_job:client:cuffed', target)</div>
+<div><span class="n">7</span>end)</div>
+        </div>
+        <div class="notes">
+          <p><b>ligne 4</b>Le job est relu sur le serveur, jamais cru depuis le client.</p>
+          <p><b>ligne 5</b>La distance entre les deux joueurs est contrôlée.</p>
+          <p><b>tout le fichier</b>Syntaxe, manifest et événements vérifiés, puis testés dans un FiveM simulé.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="exemples">
+  <div class="wrap grid">
+    <div class="label">Exemples</div>
+    <div class="body">
+      <h2>Une phrase suffit.</h2>
+      <div class="index">
+        <div class="item"><h3>Job police</h3><p>Vestiaire, garage, armurerie par grade, menottes, fouille et amendes.</p><span>job</span></div>
+        <div class="item"><h3>Ambulance</h3><p>Réanimation, soins avec objets, appels d'urgence et factures.</p><span>job</span></div>
+        <div class="item"><h3>Mécanicien</h3><p>Réparations, dépannage, fourrière et menu patron.</p><span>job</span></div>
+        <div class="item"><h3>HUD</h3><p>Vie, armure, faim, soif, voix, vitesse et ceinture.</p><span>interface</span></div>
+        <div class="item"><h3>Braquages</h3><p>Supérette, bijouterie, banque, avec alerte police et cooldowns.</p><span>activité</span></div>
+        <div class="item"><h3>Garages</h3><p>Garages publics, fourrière et concessionnaire avec essai.</p><span>système</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap grid">
+    <div class="label">Comparaison</div>
+    <div class="body">
+      <h2>Un outil pensé uniquement pour FiveM.</h2>
+      <table class="vs">
+        <thead><tr><th></th><th>FiveGen</th><th>Outil généraliste</th></tr></thead>
+        <tbody>
+          <tr><td>Ressource complète (manifest, config, client, serveur, NUI, SQL)</td><td>Toujours</td><td>Morceaux à assembler</td></tr>
+          <tr><td>APIs QBCore, Qbox, ESX et ox_* à jour</td><td>Intégrées</td><td>Souvent obsolètes</td></tr>
+          <tr><td>Vérification Lua, manifest et événements</td><td>Automatique</td><td>À faire soi-même</td></tr>
+          <tr><td>Installation sur le serveur</td><td>En un clic</td><td>Copier-coller</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="tarifs">
+  <div class="wrap grid">
+    <div class="label">Tarifs</div>
+    <div class="body">
+      <h2>Paie seulement ce que tu génères.</h2>
+      <p class="sub">1 script = 3 crédits, 3 modifications offertes par script. Corrections gratuites, crédits sans expiration. Prix TTC.</p>
+      <div class="tiers">
+        <div class="tier"><h3>Starter</h3><div class="amt">8,99 €</div><div class="per">15 crédits · 1,80 € le script</div><ul><li>5 scripts</li><li>Tous les frameworks</li><li>Export ZIP et déploiement</li></ul><a class="btn line" href="#">Choisir Starter</a></div>
+        <div class="tier"><h3>Créateur <small>le plus choisi</small></h3><div class="amt">23,99 €</div><div class="per">45 crédits · 1,60 € le script</div><ul><li>15 scripts</li><li>Idéal pour monter un serveur</li><li>Support prioritaire</li></ul><a class="btn solid" href="#">Choisir Créateur</a></div>
+        <div class="tier"><h3>Studio</h3><div class="amt">71,99 €</div><div class="per">150 crédits · 1,44 € le script</div><ul><li>50 scripts</li><li>Pour les développeurs et équipes</li><li>Support prioritaire</li></ul><a class="btn line" href="#">Choisir Studio</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap grid">
+    <div class="label">Questions</div>
+    <div class="body">
+      <h2>Questions fréquentes.</h2>
+      <div class="faq">
+        <details><summary>Les scripts fonctionnent-ils directement sur mon serveur ?</summary><p>Oui : chaque ressource est vérifiée puis testée dans un FiveM simulé avant livraison. Les erreurs en jeu remontent dans le studio.</p></details>
+        <details><summary>Que se passe-t-il si une génération échoue ?</summary><p>Si rien n'est produit, tes crédits sont rendus automatiquement.</p></details>
+        <details><summary>FiveGen crée-t-il des cheats ?</summary><p>Non. Les demandes de triche ou de contenu interdit sont refusées.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="end">
+  <div class="wrap">
+    <h2>Ton prochain script<br />est à une phrase<span style="color:var(--signal)">.</span></h2>
+    <div class="cta"><a class="btn solid" href="#">Essayer FiveGen</a></div>
+  </div>
+  <footer><div class="wrap"><span>© 2026 FiveGen</span><span>Non affilié à Rockstar Games, Take-Two Interactive ou Cfx.re.</span></div></footer>
+</section>
+</body>
+</html>
