@@ -43,6 +43,9 @@ before(async () => {
           contract: { events: [], callbacks: [], config: ["Config.Price"], locales: [], nui: { messages: [], callbacks: [] }, sql: [], exports: [], commands: [], items: [] },
         };
         if (body.includes("PLAN_CONTRACT_FALLBACK") && payload.model === "main-model") delete plan.contract;
+        if (body.includes("PLAN_TOO_LARGE") && payload.model === "main-model") {
+          plan.files = Array.from({ length: 17 }, (_, i) => ({ path: `client/file-${i}.lua`, role: "test" }));
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
         return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(plan) }, finish_reason: "stop" }] }));
       }
@@ -108,6 +111,20 @@ test("a plan without a client/server contract is rejected and the next model is 
   assert.ok(Array.isArray(plan.contract.events));
   assert.ok(Array.isArray(plan.contract.callbacks));
   assert.ok(Array.isArray(plan.contract.config));
+});
+
+test("an oversized plan is rejected and the next model provides a bounded one", async () => {
+  const { runPlan } = await import("../server/engine.js");
+  calls.length = 0;
+  const plan = await runPlan({ userContent: "PLAN_TOO_LARGE", signal: new AbortController().signal, meta: {}, profile });
+  assert.deepEqual(calls, ["main-model", "rival-model"]);
+  assert.ok(plan.files.length <= 16);
+});
+
+test("a slow rival can add at most 45 seconds to a finished group", async () => {
+  const { rivalWaitMs } = await import("../server/parallel.js");
+  assert.equal(rivalWaitMs(10000), 30000);
+  assert.equal(rivalWaitMs(228000), 45000);
 });
 
 test("with a single version nothing else is asked", async () => {

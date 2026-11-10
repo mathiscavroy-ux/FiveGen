@@ -284,8 +284,9 @@ export async function runPlan({ userContent, signal, meta, profile, system = SYS
       const s = String(text);
       const plan = JSON.parse(s.slice(s.indexOf("{"), s.lastIndexOf("}") + 1));
       if (!Array.isArray(plan.files) || !plan.files.length) throw new Error("plan sans fichiers");
-      if (!plan.contract || !Array.isArray(plan.contract.events) || !Array.isArray(plan.contract.callbacks) || !Array.isArray(plan.contract.config)) {
-        throw new Error("plan sans contrat client/serveur exploitable");
+      if (plan.files.length > 16) throw new Error(`plan trop volumineux (${plan.files.length} fichiers, 16 maximum)`);
+      if (!plan.contract || !Array.isArray(plan.contract.events) || !Array.isArray(plan.contract.callbacks) || !Array.isArray(plan.contract.config) || !Array.isArray(plan.contract.locales) || !Array.isArray(plan.contract.nui?.messages) || !Array.isArray(plan.contract.nui?.callbacks)) {
+        throw new Error("plan sans contrat client/serveur, locales et NUI exploitable");
       }
       return plan;
     } catch (err) {

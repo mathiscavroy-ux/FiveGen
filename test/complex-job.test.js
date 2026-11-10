@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fixBatch, fixRounds } from "../server/autofix.js";
-import { buildGenerateMessage, buildPlanMessage } from "../server/prompts.js";
+import { buildFixMessage, buildGenerateMessage, buildPlanMessage } from "../server/prompts.js";
 
 const police = {
   name: "lspd_job",
@@ -60,4 +60,22 @@ test("111 errors can be cleaned progressively without accepting a regression", a
   });
   assert.equal(kept.validation.ok, true);
   assert.equal(calls, 7);
+});
+
+test("targeted fixes include the locale and NUI counterparts without the whole resource", () => {
+  const files = [
+    { path: "config.lua", content: "Config = {}\n" },
+    { path: "client/duty.lua", content: "lib.notify({ description = locale('duty_on') })\n" },
+    { path: "locales/fr.lua", content: "LOCALES_FR_MARKER = true\n" },
+    { path: "html/script.js", content: "const NUI_CONTRACT_MARKER = true;\n" },
+    { path: "server/unrelated.lua", content: "-- UNRELATED_CODE\n" + "x".repeat(45000) },
+  ];
+  const prompt = buildFixMessage(police, files, [
+    { file: "client/duty.lua", message: "Clé de traduction « duty_on » utilisée mais absente des fichiers de langue" },
+    { file: "client/armory.lua", message: "SendNUIMessage envoie une action que l'interface ne traite pas" },
+  ]);
+  assert.match(prompt, /LOCALES_FR_MARKER/);
+  assert.match(prompt, /NUI_CONTRACT_MARKER/);
+  assert.doesNotMatch(prompt, /UNRELATED_CODE/);
+  assert.match(prompt, /server\/unrelated\.lua/);
 });

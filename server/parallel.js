@@ -24,6 +24,9 @@ const STEP_GROUPS = 4;
 const HEAD_START_MS = 15000;
 const MIN_SPLIT_WEIGHT = 6; // below this a group is quick enough on its own
 const RIVAL_GRACE_MS = Math.max(0, Number(process.env.RIVAL_GRACE_MS) || 30000);
+// A competing answer must never add minutes to an already finished generation.
+const RIVAL_MAX_WAIT_MS = Math.max(RIVAL_GRACE_MS, Number(process.env.RIVAL_MAX_WAIT_MS) || 45000);
+export const rivalWaitMs = (elapsedMs) => Math.min(RIVAL_MAX_WAIT_MS, Math.max(RIVAL_GRACE_MS, elapsedMs / 2));
 const clean = (p) => String(p ?? "").trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
 
 // Rough size of a file to write: client/server scripts are the long ones.
@@ -157,7 +160,7 @@ export async function generateParallel({ spec, send, signal, meta, profile, syst
     const started = Date.now();
     let timer;
     const first = settle(runVersion(files, i, notes, written, opts)).then((v) => {
-      timer = setTimeout(() => stop.abort(), Math.max(RIVAL_GRACE_MS, (Date.now() - started) / 2));
+      timer = setTimeout(() => stop.abort(), rivalWaitMs(Date.now() - started));
       return v;
     });
     const versions = await Promise.all([first, ...ready.map((rival) => settle(runVersion(files, i, notes, written, { rival, stop: stop.signal })))]);

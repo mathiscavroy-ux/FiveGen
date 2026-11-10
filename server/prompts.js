@@ -108,7 +108,7 @@ export function describeSpec(spec) {
 
 const POLICE_JOB = `Job police / LSPD / BCSO :
 - N'utilise aucun export ou événement de esx_policejob, qb-policejob ou d'une autre ressource police externe sauf si le client l'a explicitement demandée et qu'elle est présente dans l'inventaire du serveur. Implémente les fonctions demandées dans cette ressource avec le framework choisi.
-- Découpe par responsabilités : client/main.lua (service, zones et menus), client/interactions.lua (menottes, escorte, fouille), client/garage.lua si garage, server/main.lua (état et callbacks), server/interactions.lua, server/garage.lua si garage. Reste sous 12 fichiers, locales et README compris si possible.
+- Découpe par responsabilités : client/main.lua (service, zones et menus), client/interactions.lua (menottes, escorte, fouille), client/garage.lua si garage, server/main.lua (état et callbacks), server/interactions.lua, server/garage.lua si garage. 12 fichiers maximum, locales et README compris : regroupe les petites fonctions au lieu de multiplier les fichiers.
 - Le serveur possède l'état des menottes, escortes, amendes, véhicules et actions en cours. Chaque action réseau valide joueur, job, service, grade, cible, arguments et distance ; nettoie les états à la déconnexion et à l'arrêt.
 - Menottes et fouille : cible par serverId, jamais par ped ou nom fourni comme preuve ; aucun retrait d'item ou d'argent sans confirmation et résultat serveur. Une fouille lit l'inventaire par les API réellement disponibles, sans inventer d'export.
 - Amendes : utilise esx_billing uniquement s'il est sélectionné ou présent ; sinon utilise le compte bancaire du framework avec solde vérifié et transaction serveur. Ne mélange pas les deux flux.
@@ -351,6 +351,14 @@ function fixContext(files, problems) {
   const total = files.reduce((n, f) => n + f.content.length, 0);
   if (total <= FULL_CONTEXT_CHARS) return { shown: files, others: [] };
   const wanted = new Set(["fxmanifest.lua", "config.lua", "shared/config.lua", ...problems.map((p) => p.file)]);
+  // A missing translation or NUI action is fixed in its counterpart too, not by removing
+  // every use from the file named by the validator. Give the model both sides of the contract.
+  if (problems.some((p) => /clé de traduction/i.test(p.message))) {
+    for (const f of files) if (/^locales?\//i.test(f.path)) wanted.add(f.path);
+  }
+  if (problems.some((p) => /NUI|interface/i.test(p.message))) {
+    for (const f of files) if (/^(?:html|web|ui|nui)\//i.test(f.path)) wanted.add(f.path);
+  }
   return { shown: files.filter((f) => wanted.has(f.path)), others: files.filter((f) => !wanted.has(f.path)).map((f) => f.path) };
 }
 

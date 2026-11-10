@@ -258,8 +258,8 @@ function learnFrom({ userId, projectId, spec, resource, errors, validation, befo
   });
 }
 
-// Generation → save → check → review pass → automatic fix rounds (free) while errors
-// remain → one more review if the fixes brought new warnings.
+// Generation → save → check → automatic fix rounds (free) while errors remain →
+// one review of the clean resource. Broken code never gets a slow review pass first.
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
   const inventory = serverInventory(userId, projectId);
@@ -352,7 +352,6 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   const known = kind === "generate" ? [] : (project.validation?.warnings ?? []);
   const warnings = newWarnings(best.validation.warnings, known);
   const reviewed = config.reviewPass && (kind === "generate" || (kind !== "fix" && config.reviewChanges && warnings.length > 0));
-  if (reviewed) await reviewPass(warnings);
 
   const rounds = state.profile.autoFixRounds;
   const reviewModel = (await modelAvailable(state.profile.review)) ? state.profile.review : null;
@@ -406,10 +405,11 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   if (before && isBetter(before.validation, best.validation)) await rollback(before, "La correction laisse le script moins bon qu'avant.");
   // a fix asked by the client teaches too, from the errors it started with
   else if (before) learnFrom({ userId, projectId, spec, resource: project.name, errors: before.validation.errors, validation: best.validation, before: before.files, after: getFiles(userId, projectId) });
-  // only what the first review did not see: what it left, it left on purpose
+  // Review only code that passes the checks. Reviewing a broken resource first used to
+  // add a long model call, then the fixes often required a second review anyway.
   if (reviewed && best.validation.ok) {
     const fresh = newWarnings(best.validation.warnings, [...known, ...warnings]);
-    if (fresh.length) await reviewPass(fresh);
+    if (kind === "generate" || fresh.length) await reviewPass(fresh);
   }
   autoDeploy(userId, projectId, send);
   send("done", getProject(userId, projectId));
