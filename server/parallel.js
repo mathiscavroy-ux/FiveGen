@@ -7,7 +7,8 @@
 import { buildPlanMessage, buildPartMessage } from "./prompts.js";
 import { runEngine, runPlan } from "./engine.js";
 import { modelAvailable } from "./provider.js";
-import { config } from "./config.js";
+import { config, modelLabel } from "./config.js";
+import { validateProject } from "./validator.js";
 
 // Files written from the plan without deep reasoning: they go to the cheaper model.
 // The logic (config, client, server, interface script) stays on the main model.
@@ -21,6 +22,7 @@ const MAX_GROUPS = 6;
 const STEP_GROUPS = 4;
 const HEAD_START_MS = 15000;
 const MIN_SPLIT_WEIGHT = 6; // below this a group is quick enough on its own
+const RIVAL_GRACE_MS = Math.max(0, Number(process.env.RIVAL_GRACE_MS) || 30000);
 const clean = (p) => String(p ?? "").trim().replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/^\/+/, "");
 
 // Rough size of a file to write: client/server scripts are the long ones.
@@ -50,6 +52,23 @@ export function groupFiles(paths, max = MAX_GROUPS) {
     groups.splice(groups.indexOf(heaviest), 1, ...halves.map((h) => heaviest.filter((p) => h.includes(p))));
   }
   return groups;
+}
+
+/**
+ * How bad one version of a group is, lower is better: what the checks find in its own
+ * files once put next to the code already written, then the planned files it left out,
+ * a cut answer, and its warnings last. Versions are only compared with each other, so
+ * a problem that comes from a group not written yet weighs the same on all of them.
+ */
+export function scoreVersion(result, paths, written, spec) {
+  const files = new Map(written.map((f) => [f.path, f]));
+  for (const f of result.files) files.set(clean(f.path), { ...f, path: clean(f.path) });
+  const own = new Set(paths);
+  const mine = (p) => own.has(clean(p.file));
+  const { errors, warnings } = validateProject([...files.values()], spec);
+  const missing = paths.filter((p) => !result.files.some((f) => clean(f.path) === p)).length;
+  const cut = result.files.filter((f) => f.truncated).length + (result.stopReason === "max_tokens" ? 1 : 0);
+  return (errors.filter(mine).length + 3 * missing + 2 * cut) * 1000 + warnings.filter(mine).length;
 }
 
 // Claude's cache opens once a first answer has started: the other groups then read what
@@ -101,21 +120,58 @@ export async function generateParallel({ spec, send, signal, meta, profile, syst
   const lightModel = profile ? profile.light : config.engine.lightModel;
   const light = (await modelAvailable(lightModel)) ? lightModel : null;
   const caches = /claude/i.test(profile ? profile.models[0] : config.engine.model);
-  const runGroup = (files, i, notes, written, { onStart, shared } = {}) =>
+  // One version of a group. A competing version (rival: its model) writes in silence on
+  // that model alone: only the version kept reaches the studio.
+  const runVersion = (files, i, notes, written, { onStart, shared, rival, stop } = {}) =>
     runEngine({
       userContent: buildPartMessage(spec, plan, files, { notes, written, example: !files.every(isLightFile), shared }),
       // deltas of the groups interleave: each carries its group so the studio can tell them apart
-      onEvent: (type, payload) => {
-        onStart?.();
-        return type === "delta" ? send("pdelta", { g: i, t: payload }) : send(type, payload);
-      },
-      signal,
-      meta: { ...meta, purpose: "generate" },
-      model: light && files.every(isLightFile) ? light : undefined,
-      profile,
+      onEvent: rival
+        ? () => {}
+        : (type, payload) => {
+            onStart?.();
+            return type === "delta" ? send("pdelta", { g: i, t: payload }) : send(type, payload);
+          },
+      signal: stop ? AbortSignal.any([signal, stop].filter(Boolean)) : signal,
+      meta: { ...meta, purpose: rival ? "candidate" : "generate" },
+      model: rival ?? (light && files.every(isLightFile) ? light : undefined),
+      // a rival that fails is simply left out: no other model, no backup engine
+      profile: rival ? { ...profile, models: [rival], noBackup: true } : profile,
       system,
     });
   const settle = (p) => p.then((value) => ({ status: "fulfilled", value }), (reason) => ({ status: "rejected", reason }));
+
+  // Best of N: the logic (config, client, server) is also written by the account's other
+  // models at the same time, and the checks keep the version with the fewest problems.
+  // Weaker models make different mistakes: picking among them beats any one of them.
+  const pool = [...new Set(profile ? profile.models : [config.engine.model, ...config.engine.fallbackModels])];
+  const rivals = config.mock ? [] : pool.slice(1, profile?.candidates ?? 1);
+  const runGroup = async (files, i, notes, written, opts = {}) => {
+    if (!rivals.length || files.every(isLightFile)) return runVersion(files, i, notes, written, opts);
+    // A slow rival never holds the group for long: once the first version is in, the others
+    // get half its time again (RIVAL_GRACE_MS at least) and are dropped after that.
+    const stop = new AbortController();
+    const started = Date.now();
+    let timer;
+    const first = settle(runVersion(files, i, notes, written, opts)).then((v) => {
+      timer = setTimeout(() => stop.abort(), Math.max(RIVAL_GRACE_MS, (Date.now() - started) / 2));
+      return v;
+    });
+    const versions = await Promise.all([first, ...rivals.map((rival) => settle(runVersion(files, i, notes, written, { rival, stop: stop.signal })))]);
+    clearTimeout(timer);
+    if (signal?.aborted) throw versions[0].reason ?? new Error("aborted");
+    const done = versions.flatMap((v) => (v.status === "fulfilled" && v.value.files.length ? [v.value] : []));
+    if (!done.length) throw versions.find((v) => v.status === "rejected")?.reason ?? new Error("aucune version");
+    const scored = done.map((r) => ({ r, score: scoreVersion(r, files, written, spec) }));
+    const best = scored.reduce((a, b) => (b.score < a.score ? b : a));
+    if (best.r !== versions[0].value) {
+      // the studio showed the first version: it gets the files of the one kept
+      for (const f of best.r.files) send("file", { ...f, path: clean(f.path) });
+      const of = scored.find((s) => s.r === versions[0].value);
+      send("status", `${files.join(", ")} : version de ${modelLabel(best.r.model)} retenue${of ? ` (${Math.floor(best.score / 1000)} problème(s) contre ${Math.floor(of.score / 1000)})` : ""}.`);
+    }
+    return best.r;
+  };
 
   const byPath = new Map();
   const ok = [];

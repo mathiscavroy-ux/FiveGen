@@ -137,6 +137,8 @@ export function publicUser(user) {
     emailVerified: Boolean(user.email_verified),
     // the plan the account runs on, and what it changes
     tier: { id: tier.id, label: tier.label, engineName: tier.engineName, maxServers: tier.maxServers },
+    // what a subscription would run on, shown to free accounts
+    premiumEngineName: config.tiers.premium.engineName,
     costs: { ...config.cost, ...tier.cost },
     freeRefines: tier.freeRefines,
     shopUrl: config.shopUrl,

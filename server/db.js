@@ -362,7 +362,7 @@ const ISO = "%Y-%m-%dT%H:%M:%fZ"; // same text format as now(), so dates compare
 // Cost of one delivered script: its plan and generation plus the review, fixes and rewrites
 // made on the same project in the hour before it was logged as finished.
 const SCRIPT_COST = `(SELECT COALESCE(SUM(c.cost_usd), 0) FROM engine_calls c
-  WHERE c.project_id = g.project_id AND c.purpose IN ('plan', 'generate', 'review', 'autofix', 'rewrite')
+  WHERE c.project_id = g.project_id AND c.purpose IN ('plan', 'generate', 'candidate', 'review', 'autofix', 'rewrite')
     AND c.created_at BETWEEN strftime('${ISO}', g.created_at, '-1 hour') AND strftime('${ISO}', g.created_at, '+1 minute'))`;
 
 export function usageSummary() {

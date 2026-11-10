@@ -2,7 +2,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import express from "express";
 import { ZipArchive } from "archiver";
-import { config, ROOT } from "./config.js";
+import { config, ROOT, modelLabel } from "./config.js";
 import { CATALOG, systemFor, buildGenerateMessage, buildRefineMessage, buildFixMessage, buildRewriteMessage, buildReviewMessage } from "./prompts.js";
 import { applyEdits } from "./patch.js";
 import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage } from "./engine.js";
@@ -305,11 +305,21 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   if (reviewed) await reviewPass(warnings);
 
   const rounds = state.profile.autoFixRounds;
+  const reviewModel = (await modelAvailable(state.profile.review)) ? state.profile.review : null;
+  // a checked error is a small job: the cheaper model first, the main one as last try;
+  // a round that did not help is tried again by the account's next model
+  const fixModel = (round, attempt) => {
+    const first = round < rounds && reviewModel ? reviewModel : undefined;
+    return attempt === 0 ? first : [...new Set([first ?? state.profile.models[0], ...state.profile.models])][attempt];
+  };
   best = await fixRounds({
     rounds,
     best,
-    fixRound: async (round, errors) => {
-      send("phase", { phase: "fix", label: `Correction automatique ${round}/${rounds}` });
+    retries: config.fixEscalation,
+    fixRound: async (round, errors, attempt = 0) => {
+      const model = fixModel(round, attempt);
+      if (attempt > 0 && !model) return null; // no other model to ask
+      send("phase", { phase: "fix", label: `Correction automatique ${round}/${rounds}${attempt ? ` · autre moteur (${modelLabel(model)})` : ""}` });
       state.quality.rounds += 1;
       let fix;
       try {
@@ -318,8 +328,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
           onEvent: send,
           signal,
           meta: { userId, projectId, purpose: "autofix" },
-          // a checked error is a small job: the cheaper model first, the main one as last try
-          model: round < rounds && (await modelAvailable(state.profile.review)) ? state.profile.review : undefined,
+          model,
           profile: state.profile, system: state.system,
         });
       } catch (err) {
@@ -337,7 +346,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
       addHistory(userId, projectId, { type: "autofix", instruction: `${errors.length} erreur(s)`, files: fixed, outputTokens: fix.outputTokens });
       return kept(await recheck(), fixVersion);
     },
-    rollback: (target, round) => rollback(target, `La correction automatique ${round} n'améliore pas le script.`),
+    rollback: (target, round, attempt) => rollback(target, `La correction automatique ${round}${attempt ? " (autre moteur)" : ""} n'améliore pas le script.`),
   });
   if (before && isBetter(before.validation, best.validation)) await rollback(before, "La correction laisse le script moins bon qu'avant.");
   // only what the first review did not see: what it left, it left on purpose
@@ -380,7 +389,7 @@ async function streamPipeline(res, { userId, projectId, kind, instruction, userC
   watchJob(job, res);
   const send = job.emit;
   const { signal } = job.controller;
-  // engine profile of the account (free models, or Opus for subscribers), read once per run
+  // engine profile of the account (free models, or the main model for subscribers), read once per run
   const state = { produced: false, outputTokens: 0, profile: tierOf(db.getUser(userId)), quality: newQuality() };
   console.log(`[fivegen] ${LABELS[kind]} pour l'utilisateur ${userId} · offre ${state.profile.label} · modèle ${state.profile.models[0]}`);
   send("project", { id: projectId });

@@ -40,9 +40,10 @@ export const config = {
     effort: env.ENGINE_EFFORT || "low",
     effortEdits: env.ENGINE_EFFORT_EDITS || "low",
     // Cheaper model for files that need no deep reasoning (README, locales, SQL, manifest,
-    // HTML/CSS) and for the review. Used only when the provider lists it; "" disables.
-    lightModel: (env.ENGINE_LIGHT_MODEL ?? "anthropic/claude-sonnet-5.5").trim(),
-    reviewModel: (env.ENGINE_REVIEW_MODEL ?? env.ENGINE_LIGHT_MODEL ?? "anthropic/claude-sonnet-5.5").trim(),
+    // HTML/CSS) and for the review. Used only when the provider lists it; "" (default) disables:
+    // a model named here by default could be a paid one at a provider that also has free ones.
+    lightModel: (env.ENGINE_LIGHT_MODEL ?? "").trim(),
+    reviewModel: (env.ENGINE_REVIEW_MODEL ?? env.ENGINE_LIGHT_MODEL ?? "").trim(),
     // A generation silent for this long is abandoned (then retried or refunded).
     stallSeconds: int(env.ENGINE_STALL_SECONDS, 90),
     // Optional faster model for the questions step (same provider as ENGINE_MODEL).
@@ -122,7 +123,30 @@ export const config = {
     model: env.FALLBACK_MODEL || "",
     maxTokens: int(env.FALLBACK_MAX_TOKENS, 32000),
   },
+
+  // More OpenAI-compatible providers, named in PROVIDERS ("nim,groq"), each with
+  // PROVIDER_<NAME>_URL, _KEY and _MAX_TOKENS. A model of one of them is written
+  // "model@name" in any model list: "deepseek-ai/deepseek-v4.1-flash@nim".
+  providers: loadProviders(env.PROVIDERS),
+
+  // Fix rounds: when a round does not improve the script, other models of the account
+  // try the same round before giving up (0: stop at the first round that fails).
+  fixEscalation: int(env.FIX_ESCALATION, 1),
 };
+
+function loadProviders(raw) {
+  const providers = {};
+  for (const name of String(raw ?? "").split(",").map((n) => n.trim().toLowerCase()).filter(Boolean)) {
+    const key = name.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+    const baseUrl = (env[`PROVIDER_${key}_URL`] || "").replace(/\/+$/, "");
+    if (!/^[a-z0-9_-]+$/.test(name) || !baseUrl) {
+      console.warn(`[fivegen] fournisseur « ${name} » ignoré : PROVIDER_${key}_URL manquante ou nom invalide.`);
+      continue;
+    }
+    providers[name] = { name, baseUrl, apiKey: env[`PROVIDER_${key}_KEY`] || "", maxTokens: int(env[`PROVIDER_${key}_MAX_TOKENS`], 0) };
+  }
+  return providers;
+}
 
 // Packs and plans: prices in cents, VAT included (what the buyer pays). Overridden by a
 // JSON array in the environment variable.
@@ -143,10 +167,32 @@ function loadOffers(raw, name, defaults) {
 // (no paid quota, never the backup engine); subscribers get the main model. Every
 // generation still costs credits.
 const models = (v, d) => (v ?? d).split(",").map((m) => m.trim()).filter(Boolean);
+
+// "anthropic/claude-sonnet-5.5" -> "Sonnet 5.5", "z-ai/glm-5.3:free" -> "Glm 5.3". The name
+// shown to clients defaults to the model really in use, so changing provider never leaves
+// the site advertising an engine it no longer runs.
+export const modelLabel = (id) =>
+  String(id ?? "")
+    .replace(/@[\w-]+$/, "")
+    .split("/")
+    .pop()
+    .replace(/:free$/, "")
+    .replace(/^claude-/, "")
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+// Free accounts: free models at OpenRouter (checked November 2026 on openrouter.ai/api/v1/models),
+// strongest first and each able to write 64k tokens: Nemotron 3 Ultra (55B active), then two
+// small coding models as a last resort.
+const FREE_MODELS = "nvidia/nemotron-3-ultra-550b-a55b:free,cohere/north-mini-code:free,recursive/flint-v1.0:free";
+const FREE_FAST_MODEL = "nvidia/nemotron-3.5-lightning:free";
+const freeModels = models(env.FREE_MODELS, FREE_MODELS);
+
 const premium = {
   id: "premium",
   label: "Premium",
-  engineName: env.PREMIUM_ENGINE_NAME || "Opus 5.5",
+  engineName: env.PREMIUM_ENGINE_NAME || modelLabel(config.engine.model),
   models: [config.engine.model, ...config.engine.fallbackModels.filter((m) => m !== config.engine.model)],
   light: config.engine.lightModel,
   review: config.engine.reviewModel,
@@ -154,6 +200,9 @@ const premium = {
   effort: config.engine.effort,
   effortEdits: config.engine.effortEdits,
   autoFixRounds: config.autoFixRounds,
+  // Versions of each client/server group written by different models at the same time;
+  // the checks keep the best one. 1: a single version.
+  candidates: Math.max(1, int(env.ENGINE_CANDIDATES, 2)),
   freeRefines: int(env.PREMIUM_FREE_REFINES, 5),
   cost: { convert: config.cost.convert, optimize: config.cost.optimize },
   maxServers: int(env.PREMIUM_MAX_SERVERS, 5),
@@ -162,14 +211,16 @@ config.tiers = {
   free: {
     id: "free",
     label: "Gratuit",
-    engineName: env.FREE_ENGINE_NAME || "Qwen3.8 Max",
-    models: models(env.FREE_MODELS, "qwen/qwen3.8-max:free,qwen/qwen3-coder-plus:free,mistralai/devstral-medium,qwen/qwen3.7-max:free,mistralai/mistral-large-2512"),
-    light: (env.FREE_LIGHT_MODEL ?? "qwen/qwen3.7-flash:free").trim(),
-    review: (env.FREE_REVIEW_MODEL ?? "qwen/qwen3.8-max:free").trim(),
-    brief: (env.FREE_BRIEF_MODEL ?? "qwen/qwen3.7-flash:free").trim(),
+    engineName: env.FREE_ENGINE_NAME || modelLabel(freeModels[0]),
+    models: freeModels,
+    light: (env.FREE_LIGHT_MODEL ?? FREE_FAST_MODEL).trim(),
+    review: (env.FREE_REVIEW_MODEL ?? freeModels[0] ?? "").trim(),
+    brief: (env.FREE_BRIEF_MODEL ?? FREE_FAST_MODEL).trim(),
     effort: "",
     effortEdits: "",
     autoFixRounds: config.autoFixRounds,
+    // free requests are counted per day: one version unless asked otherwise
+    candidates: Math.max(1, int(env.FREE_CANDIDATES, 1)),
     freeRefines: config.freeRefines,
     cost: { convert: config.cost.convert, optimize: config.cost.optimize },
     maxServers: int(env.FREE_MAX_SERVERS, 2),

@@ -1,7 +1,7 @@
 // Card payments with Stripe Checkout: the buyer pays on Stripe's hosted page and a
 // signed webhook credits the account. Credits are never granted from the browser.
 import Stripe from "stripe";
-import { config } from "./config.js";
+import { config, modelLabel } from "./config.js";
 import { recordPayment, getUser, getUserBySubscription, setSubscription } from "./db.js";
 
 const stripe = config.stripe.secretKey ? new Stripe(config.stripe.secretKey) : null;
@@ -19,17 +19,6 @@ export function publicPacks() {
     free: { engineName: config.tiers.free.engineName, perks: planPerks("free") },
   };
 }
-
-// "anthropic/claude-sonnet-5.5" -> "Sonnet 5.5", "qwen/qwen3.8-max:free" -> "Qwen3.8 Max".
-const modelLabel = (id) =>
-  String(id ?? "")
-    .split("/")
-    .pop()
-    .replace(/:free$/, "")
-    .replace(/^claude-/, "")
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 
 // What a plan brings, shown on the plan cards, from its engine profile (config.tiers).
 export function planPerks(id) {
