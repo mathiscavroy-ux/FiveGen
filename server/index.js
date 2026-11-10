@@ -17,7 +17,7 @@ import { importResource } from "./importer.js";
 import { mountDiscord, discordEnabled } from "./discord.js";
 import { tierOf } from "./tiers.js";
 import { validateProjectFull } from "./validator.js";
-import { fixRounds, isBetter, newWarnings } from "./autofix.js";
+import { fixBatch, fixRounds, isBetter, newWarnings } from "./autofix.js";
 import { repairResource } from "./repair.js";
 import { finishQuality, newQuality, noteCheck, summarizeQuality } from "./quality.js";
 import { mountDeploy, listRuntimeErrors, locateRuntimeError, clearRuntimeErrors, serverInventory, autoDeployment, listServers } from "./deploy.js";
@@ -368,14 +368,16 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     retries: config.fixEscalation,
     fixRound: async (round, errors, attempt = 0) => {
       const model = fixModel(round, attempt);
+      const batch = fixBatch(errors);
       const filesBefore = getFiles(userId, projectId);
       if (attempt > 0 && !model) return null; // no other model to ask
       send("phase", { phase: "fix", label: `Correction automatique ${round}/${rounds}${attempt ? ` · autre moteur (${modelLabel(model)})` : ""}` });
+      if (batch.length < errors.length) send("status", `Correction ciblée sur ${batch[0].file} (${batch.length} erreur(s) à la fois, ${errors.length} restantes avant ce tour).`);
       state.quality.rounds += 1;
       let fix;
       try {
         fix = await runEngine({
-          userContent: buildFixMessage(spec, getFiles(userId, projectId), errors),
+          userContent: buildFixMessage(spec, getFiles(userId, projectId), batch),
           onEvent: send,
           signal,
           meta: { userId, projectId, purpose: "autofix" },

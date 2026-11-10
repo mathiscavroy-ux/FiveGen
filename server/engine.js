@@ -284,6 +284,9 @@ export async function runPlan({ userContent, signal, meta, profile, system = SYS
       const s = String(text);
       const plan = JSON.parse(s.slice(s.indexOf("{"), s.lastIndexOf("}") + 1));
       if (!Array.isArray(plan.files) || !plan.files.length) throw new Error("plan sans fichiers");
+      if (!plan.contract || !Array.isArray(plan.contract.events) || !Array.isArray(plan.contract.callbacks) || !Array.isArray(plan.contract.config)) {
+        throw new Error("plan sans contrat client/serveur exploitable");
+      }
       return plan;
     } catch (err) {
       lastError = err;

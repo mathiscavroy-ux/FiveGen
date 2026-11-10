@@ -13,6 +13,15 @@ export function isBetter(a, b) {
 
 const warningKey = (w) => `${w.file}:${w.message}`; // no line: edits above it move it
 
+// A large resource can produce more errors than a small model can reliably fix in one
+// answer. Work on one file at a time, syntax first, while the global check still decides
+// whether the whole resource improved.
+export function fixBatch(errors, limit = 16) {
+  if (errors.length <= limit) return errors;
+  const first = errors.find((e) => /syntaxe|tronqué/i.test(e.message)) ?? errors[0];
+  return errors.filter((e) => e.file === first.file).slice(0, limit);
+}
+
 // The warnings that are not already in known.
 export function newWarnings(warnings, known) {
   const seen = new Set(known.map(warningKey));

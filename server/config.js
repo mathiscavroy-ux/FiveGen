@@ -232,9 +232,9 @@ config.tiers = {
     brief: (env.FREE_BRIEF_MODEL ?? FREE_FAST_MODEL).trim(),
     effort: "",
     effortEdits: "",
-    autoFixRounds: config.autoFixRounds,
-    // free requests are counted per day: one version unless asked otherwise
-    candidates: Math.max(1, int(env.FREE_CANDIDATES, 1)),
+    autoFixRounds: Math.max(config.autoFixRounds, int(env.FREE_AUTO_FIX_ROUNDS, 8)),
+    // Two free candidates catch each other's mistakes; the validator keeps the better one.
+    candidates: Math.max(1, int(env.FREE_CANDIDATES, 2)),
     freeRefines: config.freeRefines,
     cost: { convert: config.cost.convert, optimize: config.cost.optimize },
     maxServers: int(env.FREE_MAX_SERVERS, 2),

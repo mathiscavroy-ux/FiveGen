@@ -106,8 +106,20 @@ export function describeSpec(spec) {
   ].join("\n") + inventoryBlock(spec.inventory, `${spec.description ?? ""} ${spec.understood ?? ""}`) + spotsBlock(spec.usedSpots) + (spec.usedSpots ? placesBlock({ name: spec.name, type: spec.type, text: `${spec.description ?? ""} ${spec.understood ?? ""}`, spots: spec.usedSpots }) : "");
 }
 
+const POLICE_JOB = `Job police / LSPD / BCSO :
+- N'utilise aucun export ou événement de esx_policejob, qb-policejob ou d'une autre ressource police externe sauf si le client l'a explicitement demandée et qu'elle est présente dans l'inventaire du serveur. Implémente les fonctions demandées dans cette ressource avec le framework choisi.
+- Découpe par responsabilités : client/main.lua (service, zones et menus), client/interactions.lua (menottes, escorte, fouille), client/garage.lua si garage, server/main.lua (état et callbacks), server/interactions.lua, server/garage.lua si garage. Reste sous 12 fichiers, locales et README compris si possible.
+- Le serveur possède l'état des menottes, escortes, amendes, véhicules et actions en cours. Chaque action réseau valide joueur, job, service, grade, cible, arguments et distance ; nettoie les états à la déconnexion et à l'arrêt.
+- Menottes et fouille : cible par serverId, jamais par ped ou nom fourni comme preuve ; aucun retrait d'item ou d'argent sans confirmation et résultat serveur. Une fouille lit l'inventaire par les API réellement disponibles, sans inventer d'export.
+- Amendes : utilise esx_billing uniquement s'il est sélectionné ou présent ; sinon utilise le compte bancaire du framework avec solde vérifié et transaction serveur. Ne mélange pas les deux flux.
+- Armurerie : catalogue et grades dans Config, prix recalculés serveur, retrait d'argent et ajout d'item avec compensation si l'ajout échoue.
+- Garage : modèle, grade et spawn dans Config ; plaque unique, clés et carburant par les ressources configurées seulement ; restitution et nettoyage sans duplication.
+- Le contrat du plan doit énumérer chaque événement/callback partagé, ses arguments dans l'ordre et ses retours. Les fonctions locales ne sont jamais appelées depuis un autre fichier.`;
+
 function recipe(spec) {
-  return RECIPES[spec.type] ?? RECIPES.other;
+  const base = RECIPES[spec.type] ?? RECIPES.other;
+  const context = [spec.name, spec.description, spec.understood, ...(spec.answers ?? []).map((a) => `${a.question} ${a.answer}`)].filter(Boolean).join(" ");
+  return spec.type === "job" && /police|lspd|bcso|gendarmerie|sheriff/i.test(context) ? `${base}\n\n${POLICE_JOB}` : base;
 }
 
 // A short resource that passes every check, for the family of the request.
@@ -362,7 +374,7 @@ ${othersBlock}
 ${list}
 </erreurs_detectees>
 ${lessonsBlock(spec.lessons)}
-Corrige toutes ces erreurs sans changer le comportement voulu.
+Corrige toutes ces erreurs sans changer le comportement voulu. Traite leur cause, pas seulement la ligne signalée. Si la liste est concentrée sur un fichier, ne modifie les autres fichiers que lorsque le contrat partagé l'exige (config, manifest ou événement correspondant). Avant de terminer, vérifie la syntaxe Lua, les end, les arguments et chaque nom utilisé entre fichiers.
 
 ${EDIT_RULES}`;
 }

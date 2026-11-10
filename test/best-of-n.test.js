@@ -38,7 +38,11 @@ before(async () => {
       const payload = JSON.parse(body);
       calls.push(payload.model);
       if (!payload.stream) {
-        const plan = { files: Object.keys(FILES).concat("server/main.lua").map((p) => ({ path: p, role: "test" })) };
+        const plan = {
+          files: Object.keys(FILES).concat("server/main.lua").map((p) => ({ path: p, role: "test" })),
+          contract: { events: [], callbacks: [], config: ["Config.Price"], locales: [], nui: { messages: [], callbacks: [] }, sql: [], exports: [], commands: [], items: [] },
+        };
+        if (body.includes("PLAN_CONTRACT_FALLBACK") && payload.model === "main-model") delete plan.contract;
         res.writeHead(200, { "Content-Type": "application/json" });
         return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(plan) }, finish_reason: "stop" }] }));
       }
@@ -65,7 +69,7 @@ after(() => {
   server.close();
 });
 
-const profile = { id: "premium", models: ["main-model", "rival-model"], candidates: 2, light: "", review: "", effort: "", effortEdits: "" };
+const profile = { id: "free", models: ["main-model", "rival-model"], candidates: 2, light: "", review: "", effort: "", effortEdits: "" };
 const spec = { name: "demo", framework: "standalone", type: "other", description: "payer avec une commande" };
 
 test("the version with fewer problems in its own files wins", async () => {
@@ -89,6 +93,21 @@ test("a logic group written by two models keeps the rival's clean code", async (
   assert.ok(calls.includes("rival-model"), "the rival was asked");
   // light files (manifest) are written once, by the main model only
   assert.ok(events.some(([type, msg]) => type === "status" && /server\/main\.lua : version de Rival Model retenue/.test(msg)), JSON.stringify(events.filter(([t]) => t === "status")));
+});
+
+test("a plan without a client/server contract is rejected and the next model is used", async () => {
+  const { runPlan } = await import("../server/engine.js");
+  calls.length = 0;
+  const plan = await runPlan({
+    userContent: "PLAN_CONTRACT_FALLBACK",
+    signal: new AbortController().signal,
+    meta: {},
+    profile,
+  });
+  assert.deepEqual(calls, ["main-model", "rival-model"]);
+  assert.ok(Array.isArray(plan.contract.events));
+  assert.ok(Array.isArray(plan.contract.callbacks));
+  assert.ok(Array.isArray(plan.contract.config));
 });
 
 test("with a single version nothing else is asked", async () => {
