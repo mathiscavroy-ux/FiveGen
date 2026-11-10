@@ -80,10 +80,15 @@
           <a href="/login?register=1" class="btn primary big">Créer mon premier script</a>
           <a href="#how" class="btn big">Voir comment ça marche</a>
         </div>
-        <p class="c-fine"><b><span id="freeCredits">3</span> crédits offerts (<span id="freeScripts">1 script</span>)</b> · sans carte bancaire · crédit rendu en cas d'échec</p>
+        <ul class="c-fine">
+          <li><svg aria-hidden="true"><use href="#i-check" /></svg><span><b><span id="freeCredits">3</span> crédits offerts</b> (<span id="freeScripts">1 script</span>)</span></li>
+          <li><svg aria-hidden="true"><use href="#i-check" /></svg>Sans carte bancaire</li>
+          <li><svg aria-hidden="true"><use href="#i-check" /></svg>Crédit rendu en cas d'échec</li>
+        </ul>
       </div>
       <div class="c-studio l-preview" aria-label="Aperçu du studio FiveGen en train d'écrire un job police">
         <div class="c-bar"><span class="c-dots"><i></i><i></i><i></i></span><span>fivegen · police_job · ESX</span><span class="c-state" id="demoState">analyse…</span></div>
+        <div class="c-progress" aria-hidden="true"><i></i></div>
         <div class="c-studio-body">
           <div class="c-files" aria-hidden="true">
             <div class="c-lbl">fichiers</div>
@@ -124,7 +129,7 @@
     </div>
   </section>
 
-  <section class="c-sec" id="features">
+  <section class="c-sec c-alt" id="features">
     <div class="wrap c-proof">
       <div>
         <h2>Sécurisé côté serveur, par défaut.</h2>
@@ -139,10 +144,10 @@
         <div class="c-bar"><span class="c-dots"><i></i><i></i><i></i></span><span>server/main.lua</span><span class="c-state">vérifié</span></div>
         <div class="c-lines">
           <div class="c-ln"><span class="n">1</span><code>RegisterNetEvent('police_job:server:cuff', function(target)</code></div>
-          <div class="c-ln"><span class="n">2</span><code>    local src = source</code></div>
-          <div class="c-ln"><span class="n">3</span><code>    local xPlayer = ESX.GetPlayerFromId(src)</code></div>
-          <div class="c-ln hot"><span class="n">4</span><code>    if not xPlayer or xPlayer.job.name ~= 'police' then return end</code><span class="tag">job contrôlé</span></div>
-          <div class="c-ln hot"><span class="n">5</span><code>    if Distance(src, target) > 3.0 then return end</code><span class="tag">distance</span></div>
+          <div class="c-ln"><span class="n">2</span><code>    local xPlayer = ESX.GetPlayerFromId(source)</code></div>
+          <div class="c-ln"><span class="n">3</span><code>    if not xPlayer then return end</code></div>
+          <div class="c-ln hot"><span class="n">4</span><code>    if xPlayer.job.name ~= 'police' then return end</code><span class="tag">job contrôlé</span></div>
+          <div class="c-ln hot"><span class="n">5</span><code>    if Distance(source, target) > 3.0 then return end</code><span class="tag">distance</span></div>
           <div class="c-ln"><span class="n">6</span><code>    TriggerClientEvent('police_job:client:cuffed', target)</code></div>
           <div class="c-ln"><span class="n">7</span><code>end)</code></div>
         </div>
@@ -154,17 +159,17 @@
     <div class="wrap">
       <h2>Tout ce qu'un développeur FiveM expérimenté livrerait.</h2>
       <div class="c-feats">
-        <div><h3>Tous les frameworks</h3><p>QBCore, Qbox, ESX Legacy, standalone, ou un bridge multi-framework détecté au démarrage.</p></div>
-        <div><h3>Modifie en une phrase</h3><p>« Ajoute un cooldown de 10 min » : seules les lignes concernées sont réécrites.</p></div>
-        <div><h3>Déploiement en un clic</h3><p>La ressource s'installe et démarre sur ton serveur. Les erreurs en jeu remontent dans le studio.</p></div>
-        <div><h3>Interfaces NUI soignées</h3><p>HUD, menus, boutiques, tablettes : HTML, CSS et JS propres, du 1080p au 4K.</p></div>
-        <div><h3>Ton serveur, lu</h3><p>Jobs, items et ressources de ton serveur réutilisés tels quels, sans doublon.</p></div>
-        <div><h3>Historique et éditeur</h3><p>Chaque version est gardée ; retour en arrière en un clic, édition directe dans le studio.</p></div>
+        <div><svg class="c-ico" aria-hidden="true"><use href="#i-layers" /></svg><h3>Tous les frameworks</h3><p>QBCore, Qbox, ESX Legacy, standalone, ou un bridge multi-framework détecté au démarrage.</p></div>
+        <div><svg class="c-ico" aria-hidden="true"><use href="#i-pencil" /></svg><h3>Modifie en une phrase</h3><p>« Ajoute un cooldown de 10 min » : seules les lignes concernées sont réécrites.</p></div>
+        <div><svg class="c-ico" aria-hidden="true"><use href="#i-server" /></svg><h3>Déploiement en un clic</h3><p>La ressource s'installe et démarre sur ton serveur. Les erreurs en jeu remontent dans le studio.</p></div>
+        <div><svg class="c-ico" aria-hidden="true"><use href="#i-layout" /></svg><h3>Interfaces NUI soignées</h3><p>HUD, menus, boutiques, tablettes : HTML, CSS et JS propres, du 1080p au 4K.</p></div>
+        <div><svg class="c-ico" aria-hidden="true"><use href="#i-list" /></svg><h3>Ton serveur, lu</h3><p>Jobs, items et ressources de ton serveur réutilisés tels quels, sans doublon.</p></div>
+        <div><svg class="c-ico" aria-hidden="true"><use href="#i-file" /></svg><h3>Historique et éditeur</h3><p>Chaque version est gardée ; retour en arrière en un clic, édition directe dans le studio.</p></div>
       </div>
     </div>
   </section>
 
-  <section class="c-sec" id="showcase">
+  <section class="c-sec c-alt" id="showcase">
     <div class="wrap">
       <h2>Une phrase suffit.</h2>
       <p class="c-sub">Jobs, interfaces, systèmes complets : tout ce dont un serveur RP a besoin.</p>
@@ -202,7 +207,7 @@
     </div>
   </section>
 
-  <section class="c-sec" id="pricing">
+  <section class="c-sec c-alt" id="pricing">
     <div class="wrap">
       <h2>Paie seulement ce que tu génères.</h2>
       <p class="c-sub">1 script = <span class="cost-generate">3</span> crédits, avec <span class="free-refines">3</span> modifications offertes sur chaque script. Corrections gratuites, crédits sans expiration. Prix TTC.</p>
@@ -295,9 +300,14 @@
 
   <section class="c-sec c-final">
     <div class="wrap">
-      <h2>Ton prochain script est à une phrase.</h2>
-      <p class="c-sub">Crée ton compte et génère ta première ressource gratuitement.</p>
-      <div class="c-cta"><a href="/login?register=1" class="btn primary big">Essayer FiveGen</a></div>
+      <div class="c-final-box">
+        <h2>Ton prochain script est à une phrase.</h2>
+        <p class="c-sub">Crée ton compte et génère ta première ressource gratuitement.</p>
+        <a class="c-prompt" href="/login?register=1">
+          <span class="c-prompt-text" aria-hidden="true">un job mécano avec dépannage et fourrière</span>
+          <span class="btn primary big">Essayer FiveGen</span>
+        </a>
+      </div>
     </div>
   </section>
 
@@ -344,29 +354,32 @@
       const files = [...box.querySelectorAll(".c-file")], opts = [...box.querySelectorAll(".c-opt")], checks = [...box.querySelectorAll(".c-checks span")];
       const state = document.getElementById("demoState"), code = document.getElementById("demoCode");
       const lines = [
-        '<span class="c">-- server/main.lua</span>',
-        '<span class="k">RegisterNetEvent</span>(<span class="s">'police_job:server:fine'</span>, <span class="k">function</span>(target, amount)',
-        '    <span class="k">local</span> xPlayer = ESX.GetPlayerFromId(source)',
-        '    <span class="k">if not</span> xPlayer <span class="k">or</span> xPlayer.job.name ~= <span class="s">'police'</span> <span class="k">then return end</span>',
-        '    amount = math.min(tonumber(amount) <span class="k">or</span> 0, Config.MaxFine)',
+        `<span class="c">-- server/main.lua</span>`,
+        `<span class="k">RegisterNetEvent</span>(<span class="s">'police_job:server:fine'</span>, <span class="k">function</span>(target, amount)`,
+        `    <span class="k">local</span> xPlayer = ESX.GetPlayerFromId(source)`,
+        `    <span class="k">if not</span> xPlayer <span class="k">or</span> xPlayer.job.name ~= <span class="s">'police'</span> <span class="k">then return end</span>`,
+        `    amount = math.min(tonumber(amount) <span class="k">or</span> 0, Config.MaxFine)`,
       ];
+      // phase drives the colours (amber while working, green once deployed); --p fills the bar
+      const phase = (name, label, p) => { box.dataset.phase = name; state.textContent = label; box.style.setProperty("--p", p); };
+      const progress = (p) => box.style.setProperty("--p", p);
       const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
       const wait = (ms) => new Promise((r) => setTimeout(r, still ? 0 : ms));
       async function run() {
         files.forEach((f) => (f.className = "c-file")); opts.forEach((o) => o.classList.remove("on")); checks.forEach((c) => c.classList.remove("ok")); code.innerHTML = "";
-        state.textContent = "questions…";
+        phase("ask", "questions…", 0.03);
         for (const i of [0, 1, 2]) { await wait(450); opts[i].classList.add("on"); }
-        state.textContent = "écriture…";
+        phase("write", "écriture…", 0.15);
         for (let i = 0; i < files.length; i++) {
           files[i].className = "c-file writing";
-          if (i === 2) for (const l of lines) { code.innerHTML += l + "
-"; await wait(260); }
+          if (i === 2) for (const l of lines) { code.append(Object.assign(document.createElement("div"), { innerHTML: l })); await wait(260); }
           await wait(360);
           files[i].className = "c-file done";
+          progress(0.15 + ((i + 1) / files.length) * 0.5);
         }
-        state.textContent = "vérification…";
-        for (const c of checks) { await wait(420); c.classList.add("ok"); }
-        state.textContent = "déployé";
+        phase("check", "vérification…", 0.65);
+        for (const [i, c] of checks.entries()) { await wait(420); c.classList.add("ok"); progress(0.65 + ((i + 1) / checks.length) * 0.35); }
+        phase("done", "déployé", 1);
         if (!still) { await wait(4200); run(); }
       }
       run();
@@ -395,7 +408,7 @@
       nav.classList.toggle("scrolled", y > 8);
       bar.style.transform = `scaleX(${max > 0 ? Math.min(1, y / max) : 0})`;
       toTop.classList.toggle("show", y > innerHeight * 1.2);
-      if (preview && !still && y < innerHeight) preview.style.transform = `translateY(${(y * 0.12).toFixed(1)}px)`;
+      if (preview && !still && y < innerHeight) preview.style.transform = `translateY(${Math.min(y * 0.12, 48).toFixed(1)}px)`; // capped: the hero clips what leaves it
       let current = null;
       for (const [a, section] of menu) if (section.getBoundingClientRect().top <= innerHeight * 0.35) current = a;
       if (y + innerHeight >= document.documentElement.scrollHeight - 4) current = menu.at(-1)?.[0] ?? current;
@@ -414,11 +427,12 @@
     document.querySelectorAll("#navLinks a").forEach((a) => a.addEventListener("click", () => nav.classList.remove("open")));
 
     // Fade sections in as they enter the viewport (siblings are staggered).
-    const revealable = document.querySelectorAll(".c-sec h2, .c-pipe > li, .c-feats > div, .c-row, .price, .plan-card, .c-listing, details.qa, footer .foot > *");
+    const revealable = document.querySelectorAll(".c-sec h2, .c-sec .c-sub, .c-pipe > li, .c-listing, .c-feats, .c-rows, .c-table-wrap, .c-prices, .c-plans, .c-faq .faq");
     // (with "reduce motion" set, site.css turns it into a plain fade)
     if ("IntersectionObserver" in window) {
       const io = new IntersectionObserver((entries) => {
-        for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+        // also what is already above the screen (anchor link, restored scroll): it would stay hidden until scrolled back to
+        for (const e of entries) if (e.isIntersecting || e.boundingClientRect.bottom < 0) { e.target.classList.add("in"); io.unobserve(e.target); }
       }, { rootMargin: "0px 0px -8% 0px" });
       for (const el of revealable) {
         el.classList.add("reveal");
