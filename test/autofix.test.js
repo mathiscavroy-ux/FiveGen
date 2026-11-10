@@ -116,3 +116,38 @@ test("an engine failure keeps the current version without rolling back", async (
   assert.equal(kept.version, 1);
   assert.deepEqual(rolledBack, []);
 });
+
+test("a round that does not help is tried again by another model before giving up", async () => {
+  const attempts = [];
+  const rolledBack = [];
+  const results = [version(2, problem(1), problem(2)), version(3)];
+  const kept = await fixRounds({
+    rounds: 2,
+    retries: 1,
+    best: version(1, problem(1)),
+    fixRound: async (round, errors, attempt) => {
+      attempts.push([round, attempt]);
+      return results.shift() ?? null;
+    },
+    rollback: async (target, round, attempt) => rolledBack.push({ version: target.version, round, attempt }),
+  });
+  assert.equal(kept.version, 3);
+  assert.deepEqual(attempts, [[1, 0], [1, 1]]);
+  assert.deepEqual(rolledBack, [{ version: 1, round: 1, attempt: 0 }]);
+});
+
+test("the loop ends once every model failed the same round", async () => {
+  const attempts = [];
+  const kept = await fixRounds({
+    rounds: 3,
+    retries: 1,
+    best: version(1, problem(1)),
+    fixRound: async (round, errors, attempt) => {
+      attempts.push([round, attempt]);
+      return version(10 + attempts.length, problem(1), problem(2));
+    },
+    rollback: async () => {},
+  });
+  assert.equal(kept.version, 1);
+  assert.deepEqual(attempts, [[1, 0], [1, 1]]);
+});

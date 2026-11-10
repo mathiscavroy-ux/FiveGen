@@ -71,7 +71,7 @@ function renderSubscription() {
       me.tier.id !== "free"
         ? "Tous les avantages Pro, sans abonnement."
         : cheapest
-          ? `Passe à ${cheapest.name} (${formatPrice(cheapest.price, packs.currency)} par mois, sans engagement) pour générer avec le moteur Opus 5.5 et profiter de plus d'avantages. Les scripts coûtent toujours des crédits.`
+          ? `Passe à ${cheapest.name} (${formatPrice(cheapest.price, packs.currency)} par mois, sans engagement) pour générer avec le moteur ${me.premiumEngineName} et profiter de plus d'avantages. Les scripts coûtent toujours des crédits.`
           : "Les abonnements ne sont pas encore disponibles.";
     perks(me.tier.id === "free" ? packs?.free?.perks : packs?.plans?.find((p) => p.id === me.tier.id)?.perks);
     if (cheapest && me.tier.id === "free") {

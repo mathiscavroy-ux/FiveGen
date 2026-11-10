@@ -42,7 +42,27 @@ export async function providerUsage({ force = false } = {}) {
   if (!force && usageCache && Date.now() - usageCache.at < USAGE_TTL) return usageCache.value;
   let value;
   try {
-    const u = await getJson("/usage");
+    const u = await getJson("/usage").catch(async (err) => {
+      // OpenRouter has no /usage: its /key reports the credit left and the free requests of the day.
+      const key = await getJson("/key").catch(() => null);
+      if (key?.data) return { openrouter: key.data };
+      throw err;
+    });
+    if (u.openrouter) {
+      const k = u.openrouter;
+      const free = k.free_model_daily_requests;
+      value = {
+        available: true,
+        plan: k.is_free_tier ? "gratuit (aucun crédit acheté)" : "crédits",
+        windows: [],
+        freeRequests: free ? { used: num(free.used), limit: num(free.limit), remaining: num(free.remaining) } : null,
+        wallet: k.limit_remaining == null ? null : { balance: num(k.limit_remaining), held: 0 },
+        spent: num(k.usage),
+        fetchedAt: new Date().toISOString(),
+      };
+      usageCache = { at: Date.now(), value };
+      return value;
+    }
     value = {
       available: true,
       plan: u.plan ?? null,
@@ -71,25 +91,45 @@ export async function modelPricing() {
   if (pricingCache && Date.now() - pricingCache.at < PRICING_TTL) return pricingCache.value;
   const value = new Map();
   if (config.mock) value.set("mock", { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5, name: "Démo" });
-  else if (config.engine.apiKey) {
-    try {
-      const list = await getJson("/models");
-      for (const m of list.data ?? []) {
-        value.set(m.id, {
-          input: num(m.pricing?.input),
-          output: num(m.pricing?.output),
-          cacheRead: num(m.pricing?.cache_read),
-          cacheWrite: num(m.pricing?.cache_write),
-          name: m.display_name ?? m.id,
-          efforts: m.reasoning_efforts?.levels ?? [],
-        });
-      }
-    } catch (err) {
-      console.warn("[fivegen] tarifs du moteur indisponibles :", err.message);
-    }
+  else {
+    // the main provider, then the others of PROVIDERS, whose models are listed as "model@name"
+    const sources = [
+      { baseUrl: config.engine.baseUrl, apiKey: config.engine.apiKey, suffix: "" },
+      ...Object.values(config.providers).map((p) => ({ baseUrl: p.baseUrl, apiKey: p.apiKey, suffix: `@${p.name}` })),
+    ].filter((s) => s.apiKey);
+    await Promise.all(
+      sources.map(async (s) => {
+        try {
+          const res = await fetch(`${s.baseUrl}/models`, { headers: { Authorization: `Bearer ${s.apiKey}` }, signal: AbortSignal.timeout(8000) });
+          if (!res.ok) throw new Error(`/models : HTTP ${res.status}`);
+          for (const m of (await res.json()).data ?? []) readModel(m, s.suffix, value);
+        } catch (err) {
+          console.warn(`[fivegen] tarifs du moteur indisponibles${s.suffix ? ` (${s.suffix.slice(1)})` : ""} :`, err.message);
+        }
+      }),
+    );
   }
   pricingCache = { at: Date.now(), value };
   return value;
+}
+
+function readModel(m, suffix, into) {
+  const p = m.pricing ?? {};
+  // OpenRouter prices per token as strings ("prompt", "completion"), others per million.
+  const perToken = p.prompt !== undefined || p.completion !== undefined;
+  const perMillion = (v) => (num(v) === null ? null : perToken ? num(v) * 1e6 : num(v));
+  // OpenRouter lists "reasoning" for models that take an effort level.
+  const params = m.supported_parameters ?? [];
+  const efforts = m.reasoning_efforts?.levels ?? (params.includes("reasoning") || params.includes("reasoning_effort") ? ["low", "medium", "high"] : []);
+  const id = String(m.id ?? "").replace(/^models\//, "");
+  into.set(`${id}${suffix}`, {
+    input: perMillion(perToken ? p.prompt : p.input),
+    output: perMillion(perToken ? p.completion : p.output),
+    cacheRead: perMillion(perToken ? p.input_cache_read : p.cache_read),
+    cacheWrite: perMillion(perToken ? p.input_cache_write : p.cache_write),
+    name: m.display_name ?? m.name ?? id,
+    efforts,
+  });
 }
 
 /** True when the provider's model list has this model (no list, no match). */

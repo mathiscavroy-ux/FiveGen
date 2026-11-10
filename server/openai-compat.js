@@ -74,6 +74,7 @@ function httpMessage(provider, status, text) {
   // Gemini answers 400 (not 401) to an invalid key.
   const keyIssue = status === 401 || status === 403 || (status === 400 && /api[ _-]?key/i.test(detail));
   if (keyIssue) return `Clé API refusée par ${provider.label}. Vérifie-la dans ⚙ Paramètres. (${detail})`;
+  if (status === 402) return `Plus assez de crédit chez ${provider.label} pour « ${provider.model} » (modèle payant). Recharge le compte ou passe sur un modèle gratuit. (${detail})`;
   if (status === 404) return `Modèle « ${provider.model} » introuvable chez ${provider.label}. Choisis-en un autre dans ⚙ Paramètres. (${detail})`;
   if (status === 413) return `Requête trop grosse pour le quota gratuit de ${provider.label}. Essaie un autre modèle ou fournisseur.`;
   if (status === 429) return `Quota gratuit atteint chez ${provider.label} (limite par minute ou par jour). Attends un peu, ou change de modèle/fournisseur dans ⚙. (${detail})`;

@@ -140,13 +140,13 @@ function renderAccount() {
     if (me.shopUrl) $(id).href = me.shopUrl;
   }
   $("#costHint").textContent = "Analyse gratuite, aucun crédit débité à cette étape";
-  $("#genCostHint").textContent = `Coût : ${plural(me.costs.generate, "crédit")} · moteur ${me.tier.engineName}${me.tier.id === "free" ? " (Opus 5.5 avec Premium)" : ""}`;
+  $("#genCostHint").textContent = `Coût : ${plural(me.costs.generate, "crédit")} · moteur ${me.tier.engineName}${me.tier.id === "free" ? ` (${me.premiumEngineName} avec Premium)` : ""}`;
   // the plan of the account; free accounts see the way to Premium
   const badge = $("#tierBadge");
   badge.classList.remove("hidden", "free", "premium", "pro");
   badge.classList.add(me.tier.id);
   badge.textContent = me.tier.id === "free" ? "Passer Premium" : me.tier.label;
-  badge.title = me.tier.id === "free" ? `Moteur actuel : ${me.tier.engineName}. Premium : Opus 5.5 et plus d'avantages.` : `Moteur ${me.tier.engineName}`;
+  badge.title = me.tier.id === "free" ? `Moteur actuel : ${me.tier.engineName}. Premium : ${me.premiumEngineName} et plus d'avantages.` : `Moteur ${me.tier.engineName}`;
   if (me.tier.id === "free") badge.href = "/app?buy";
   $("#costLine").textContent = plural(me.costs.generate, "crédit");
   $("#freeRefinesLine").textContent = me.freeRefines;

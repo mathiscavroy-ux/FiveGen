@@ -25,7 +25,7 @@ const windowName = (sec) => (sec < 172800 ? `${Math.round(sec / 3600)} heures` :
 const USD_EUR = 0.92; // indicative rate, only for the margin estimate
 const VAT = 0.2; // pack prices include VAT (French rate): the margin is counted without it
 
-const PURPOSES = { generate: "Génération", plan: "Plan", review: "Relecture", autofix: "Correction auto", fix: "Correction", refine: "Modification", rewrite: "Réécriture", brief: "Questions" };
+const PURPOSES = { generate: "Génération", candidate: "Version concurrente", plan: "Plan", review: "Relecture", autofix: "Correction auto", fix: "Correction", refine: "Modification", rewrite: "Réécriture", brief: "Questions" };
 const KINDS = { generate: "Génération", refine: "Modification", fix: "Correction", convert: "Conversion", optimize: "Optimisation" };
 const REPAIRS = { install: "Tables et job installés au démarrage", manifest: "Lignes du fxmanifest", boss: "job.isboss sur ESX", job: "Job du joueur tenu à jour" };
 
@@ -86,6 +86,7 @@ function renderQuota() {
   $("#quotaLive").classList.toggle("off", !ok);
   $("#quotaLive").textContent = ok ? "en direct · toutes les 30 s" : "hors ligne";
   const extra = [];
+  if (ok && p.freeRequests) extra.push(`Requêtes gratuites aujourd'hui : <b>${p.freeRequests.remaining ?? "?"}</b> restantes sur ${p.freeRequests.limit ?? "?"}`);
   if (ok && p.freeTokens) extra.push(`Tokens gratuits aujourd'hui : <b>${tokens(p.freeTokens.remaining)}</b> restants sur ${tokens(p.freeTokens.limit)}`);
   if (ok && p.wallet) extra.push(`Portefeuille : <b>${usd(p.wallet.balance)}</b>${p.wallet.held ? ` (${usd(p.wallet.held)} réservés)` : ""}`);
   if (ok && p.fetchedAt) extra.push(`Relevé à ${new Date(p.fetchedAt).toLocaleTimeString("fr-FR")}`);

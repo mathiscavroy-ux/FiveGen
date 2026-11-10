@@ -33,15 +33,40 @@ const upstream = {
 // reasoning_effort is only understood by the default upstream.
 if (upstream.baseUrl.includes("generativelanguage.googleapis.com")) upstream.id = "gemini";
 
+/**
+ * Where a model of a list runs. "model@name" goes to the provider of that name
+ * (config.providers), anything else to the main one. ref keeps the name as written in
+ * the lists: prices, effort levels and model switches all go by it.
+ */
+export function providerFor(ref) {
+  const at = ref.lastIndexOf("@");
+  const extra = at > 0 ? config.providers[ref.slice(at + 1)] : null;
+  if (!extra) return { ...upstream, model: ref, ref };
+  return {
+    id: extra.baseUrl.includes("generativelanguage.googleapis.com") ? "gemini" : extra.name,
+    label: `FiveGen Engine (${extra.name})`,
+    baseUrl: extra.baseUrl,
+    apiKey: extra.apiKey,
+    model: ref.slice(0, at),
+    ref,
+    maxTokens: extra.maxTokens || upstream.maxTokens,
+    needsKey: true,
+    effort: upstream.effort,
+    stallMs: upstream.stallMs,
+  };
+}
+// The model a call is priced under: a provider of the list answers with its own name for it.
+const pricedAs = (provider, returned) => (provider?.ref?.includes("@") ? provider.ref : returned ?? provider?.ref ?? provider?.model);
+
 // Second provider, used once the main one keeps failing (outage, quota, billing).
 const fb = config.fallbackEngine;
 const fallback = fb.baseUrl && fb.model
-  ? { id: fb.baseUrl.includes("generativelanguage.googleapis.com") ? "gemini" : "fallback", label: "FiveGen Engine (secours)", baseUrl: fb.baseUrl, apiKey: fb.apiKey, model: fb.model, maxTokens: fb.maxTokens, needsKey: true, stallMs: upstream.stallMs }
+  ? { id: fb.baseUrl.includes("generativelanguage.googleapis.com") ? "gemini" : "fallback", label: "FiveGen Engine (secours)", baseUrl: fb.baseUrl, apiKey: fb.apiKey, model: fb.model, ref: fb.model, maxTokens: fb.maxTokens, needsKey: true, stallMs: upstream.stallMs }
   : null;
 const primaryModels = () => [config.engine.model, ...config.engine.fallbackModels.filter((m) => m !== config.engine.model)];
 // The second provider may be a paid model: free accounts never reach it (their run fails
 // and is refunded instead, rather than spending paid quota).
-const backupFor = (profile) => (profile?.id === "free" ? null : fallback);
+const backupFor = (profile) => (profile?.id === "free" || profile?.noBackup ? null : fallback);
 // Content refusals are the same everywhere: switching provider would not help.
 const worthFallback = (err) => fallback && err instanceof ProviderError && !/filtre de contenu/.test(err.message);
 
@@ -74,6 +99,9 @@ function toPublic(err) {
  * Resolves to { files, deletes, notes, stopReason, outputTokens }.
  */
 const isOverload = (err) => err instanceof ProviderError && (err.status === 429 || err.status >= 500);
+// This model is closed to the account (no credit left for a paid model, not allowed, unknown):
+// the next model may well answer, typically a free one after a paid one.
+const modelRefused = (err) => err instanceof ProviderError && [402, 403, 404].includes(err.status);
 const RETRIES_PER_MODEL = Math.max(1, Number(process.env.ENGINE_RETRIES) || 3);
 
 function wait(ms, signal) {
@@ -92,7 +120,7 @@ async function withEffort(provider, purpose, profile) {
   if (provider.id === "gemini") return provider; // keeps its own mapping in openai-compat
   const generate = purpose === "generate";
   const wanted = profile ? (generate ? profile.effort : profile.effortEdits) : generate ? config.engine.effort : config.engine.effortEdits;
-  return { ...provider, effort: await reasoningEffort(provider.model, wanted) };
+  return { ...provider, effort: await reasoningEffort(provider.ref ?? provider.model, wanted) };
 }
 
 // Models tried in order: the profile's (free models for free accounts), else the main ones.
@@ -123,20 +151,21 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
   };
   // Each model gets a few spaced attempts: overload errors from the upstream are usually momentary.
   const retries = (provider) => Array.from({ length: RETRIES_PER_MODEL }, (_, i) => ({ provider, retry: i }));
-  const attempts = mockRun ? [null] : modelsFor(profile, preferred).flatMap((model) => retries({ ...upstream, model }));
+  const attempts = mockRun ? [null] : modelsFor(profile, preferred).flatMap((model) => retries(providerFor(model)));
   if (backupFor(profile) && !mockRun) attempts.push(...retries(fallback));
   let lastError;
   for (let i = 0; i < attempts.length; i++) {
     const attempt = attempts[i];
-    const model = attempt?.provider.model;
+    const model = attempt?.provider.ref;
     if (attempt?.retry) await wait(1500 * attempt.retry, signal);
     const started = Date.now();
     try {
       const r = mockRun
         ? await mockRun({ userContent, onEvent: forward, signal })
         : await runOpenAICompat({ provider: await withEffort(attempt.provider, meta?.purpose, profile), userContent, onEvent: forward, signal, system });
-      await report(meta, { model: r.model ?? model, usage: r.usage, started, ok: true });
+      await report(meta, { model: mockRun ? r.model ?? model : pricedAs(attempt.provider, r.model), usage: r.usage, started, ok: true });
       return {
+        model: model ?? r.model ?? null,
         files: r.files,
         deletes: r.deletes,
         edits: r.edits ?? [],
@@ -151,8 +180,8 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
       if (emitted || signal?.aborted) break;
       if (!isOverload(err)) {
         // This model refused for itself (not allowed for the account, unknown): the next model.
-        if (err instanceof ProviderError && [403, 404].includes(err.status)) {
-          const other = attempts.findIndex((a, j) => j > i && a?.provider !== fallback && a?.provider.model !== model);
+        if (modelRefused(err)) {
+          const other = attempts.findIndex((a, j) => j > i && a?.provider !== fallback && a?.provider.ref !== model);
           if (other > 0) {
             console.warn(`[fivegen] ${model} refusé (${err.status}), modèle suivant`);
             i = other - 1;
@@ -180,7 +209,7 @@ export async function runBrief({ description, server, signal, meta, profile }) {
   }
   const user = buildBriefMessage(description, server);
   // A faster model for the questions, which need no heavy reasoning (BRIEF_MODEL, or the profile's).
-  const providers = [...new Set(modelsFor(profile, profile ? profile.brief || undefined : config.engine.briefModel || undefined))].map((model) => ({ ...upstream, model }));
+  const providers = [...new Set(modelsFor(profile, profile ? profile.brief || undefined : config.engine.briefModel || undefined))].map(providerFor);
   if (backupFor(profile)) providers.push(fallback);
   let lastError;
   const started = Date.now();
@@ -191,7 +220,7 @@ export async function runBrief({ description, server, signal, meta, profile }) {
       try {
         // Gateways cache identical requests: a retry must differ, or it gets the same broken reply.
         const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "brief", profile), system: BRIEF_SYSTEM, user: attempt ? `${user}\n<!-- essai ${attempt + 1} -->` : user, maxTokens: 4000, signal });
-        await report(meta, { model, usage, started: callStarted, ok: true });
+        await report(meta, { model: pricedAs(provider, model), usage, started: callStarted, ok: true });
         const brief = sanitizeBrief(extractJson(text));
         console.log(`[fivegen] questions prêtes en ${((Date.now() - started) / 1000).toFixed(1)} s (${provider.model})`);
         return brief;
@@ -200,7 +229,7 @@ export async function runBrief({ description, server, signal, meta, profile }) {
         if (err instanceof ProviderError) await report(meta, { model: provider.model, usage: null, started: callStarted, ok: false });
         if (signal?.aborted) throw toPublic(err);
         if (err instanceof ProviderError && !isOverload(err)) {
-          if (provider !== fallback && worthFallback(err)) break; // next provider (ends on the fallback)
+          if (provider !== fallback && (modelRefused(err) || worthFallback(err))) break; // next provider (ends on the fallback)
           throw toPublic(err);
         }
         console.warn(`[fivegen] questions : ${provider.model} essai ${attempt + 1} raté (${err.message})`);
@@ -220,14 +249,14 @@ export async function runPlan({ userContent, signal, meta, profile, system = SYS
     });
     return mock.mockPlan(userContent);
   }
-  const providers = modelsFor(profile).map((model) => ({ ...upstream, model }));
+  const providers = modelsFor(profile).map(providerFor);
   if (backupFor(profile)) providers.push(fallback);
   let lastError;
   for (const provider of providers) {
     const started = Date.now();
     try {
       const { text, usage, model } = await completeOpenAICompat({ provider: await withEffort(provider, "generate", profile), system, user: userContent, maxTokens: 16000, timeoutMs: 240000, signal });
-      await report(meta && { ...meta, purpose: "plan" }, { model, usage, started, ok: true });
+      await report(meta && { ...meta, purpose: "plan" }, { model: pricedAs(provider, model), usage, started, ok: true });
       const s = String(text);
       const plan = JSON.parse(s.slice(s.indexOf("{"), s.lastIndexOf("}") + 1));
       if (!Array.isArray(plan.files) || !plan.files.length) throw new Error("plan sans fichiers");
@@ -237,7 +266,7 @@ export async function runPlan({ userContent, signal, meta, profile, system = SYS
       if (signal?.aborted) throw toPublic(err);
       if (err instanceof ProviderError) await report(meta && { ...meta, purpose: "plan" }, { model: provider.model, usage: null, started, ok: false });
       console.warn(`[fivegen] plan : ${provider.model} raté (${err.message})`);
-      if (err instanceof ProviderError && !isOverload(err) && !worthFallback(err)) break;
+      if (err instanceof ProviderError && !isOverload(err) && !modelRefused(err) && !worthFallback(err)) break;
     }
   }
   throw lastError ?? new Error("plan indisponible");

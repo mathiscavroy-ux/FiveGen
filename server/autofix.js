@@ -19,17 +19,25 @@ export function newWarnings(warnings, known) {
   return warnings.filter((w) => !seen.has(warningKey(w)));
 }
 
-// best: { validation, version, notes }. fixRound(round, errors) returns the same shape, or
-// null when the engine failed before changing anything. Returns the version kept.
-export async function fixRounds({ rounds, best, fixRound, rollback }) {
+// best: { validation, version, notes }. fixRound(round, errors, attempt) returns the same
+// shape, or null when the engine failed before changing anything. A round that does not
+// beat the best version is undone, then tried again (attempt 1, 2…) up to `retries` times,
+// typically by another model: a model stuck on an error rarely gets it on a second try,
+// another one often does. Returns the version kept.
+export async function fixRounds({ rounds, best, fixRound, rollback, retries = 0 }) {
   for (let round = 1; round <= rounds && !best.validation.ok; round++) {
-    const next = await fixRound(round, best.validation.errors);
-    if (!next) break;
-    if (!isBetter(next.validation, best.validation)) {
-      await rollback(best, round);
-      break;
+    let improved = false;
+    for (let attempt = 0; attempt <= retries && !improved; attempt++) {
+      const next = await fixRound(round, best.validation.errors, attempt);
+      if (!next) return best;
+      if (isBetter(next.validation, best.validation)) {
+        best = next;
+        improved = true;
+      } else {
+        await rollback(best, round, attempt);
+      }
     }
-    best = next;
+    if (!improved) break;
   }
   return best;
 }
