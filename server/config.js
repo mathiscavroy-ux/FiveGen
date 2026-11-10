@@ -191,7 +191,9 @@ export const modelLabel = (id) =>
     .replace(/:free$/, "")
     .replace(/^claude-/, "")
     .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    // sizes ("550b", "a55b") say nothing to a client
+    .filter((w) => !/^a?\d+(\.\d+)?b$/i.test(w))
+    .map((w) => (/^(glm|gpt|gemma|qwq)$/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
     .join(" ");
 
 // Free accounts: free models at OpenRouter (checked November 2026 on openrouter.ai/api/v1/models),
