@@ -12,6 +12,7 @@ import { inventoryBlock } from "./inventory.js";
 import { spotsBlock } from "./spots.js";
 import { placesBlock } from "./places.js";
 import { errorsBlock } from "./quality.js";
+import { lessonsBlock } from "./lessons.js";
 import { exampleFor } from "./knowledge/examples.js";
 
 export const CATALOG = {
@@ -136,7 +137,7 @@ ${recipe(spec)}
 <demande_du_client>
 ${spec.description}
 </demande_du_client>
-${briefBlock(spec)}${exampleBlock(spec)}${errorsBlock(spec.pastErrors)}
+${briefBlock(spec)}${exampleBlock(spec)}${errorsBlock(spec.pastErrors)}${lessonsBlock(spec.lessons)}
 Écris tous les fichiers nécessaires au format demandé, puis les notes d'installation.`;
 }
 
@@ -202,7 +203,7 @@ ${recipe(spec)}
 <demande_du_client>
 ${spec.description}
 </demande_du_client>
-${briefBlock(spec)}${example ? exampleBlock(spec) : ""}${errorsBlock(spec.pastErrors)}
+${briefBlock(spec)}${example ? exampleBlock(spec) : ""}${errorsBlock(spec.pastErrors)}${lessonsBlock(spec.lessons)}
 <plan_de_la_ressource>
 ${JSON.stringify(plan)}
 </plan_de_la_ressource>
@@ -284,7 +285,7 @@ ${filesBlock(files)}
 <modification_demandee>
 ${instruction}
 </modification_demandee>
-
+${lessonsBlock(spec.lessons)}
 Applique la modification demandée, et seulement elle. Mets à jour fxmanifest.lua et README.md si nécessaire.
 
 ${EDIT_RULES}`;
@@ -360,7 +361,7 @@ ${othersBlock}
 <erreurs_detectees>
 ${list}
 </erreurs_detectees>
-
+${lessonsBlock(spec.lessons)}
 Corrige toutes ces erreurs sans changer le comportement voulu.
 
 ${EDIT_RULES}`;

@@ -5,6 +5,7 @@ import { runOpenAICompat, completeOpenAICompat, testOpenAICompat, ProviderError 
 import { BRIEF_SYSTEM, buildBriefMessage, extractJson, sanitizeBrief } from "./brief.js";
 import { costOf, reasoningEffort } from "./provider.js";
 import { SYSTEM_PROMPT } from "./prompts.js";
+import { coolDown, isCooling } from "./cooldown.js";
 
 // Every engine call is reported here with its tokens and cost (index.js stores it).
 let usageListener = null;
@@ -102,6 +103,12 @@ const isOverload = (err) => err instanceof ProviderError && (err.status === 429 
 // This model is closed to the account (no credit left for a paid model, not allowed, unknown):
 // the next model may well answer, typically a free one after a paid one.
 const modelRefused = (err) => err instanceof ProviderError && [402, 403, 404].includes(err.status);
+const limited = (err) => err instanceof ProviderError && err.status === 429;
+// Models still waiting for their limit to reset go last (all of them if nothing else is left).
+const readyFirst = (list, providerOf = (x) => x) => {
+  const ready = list.filter((x) => !x || !isCooling(providerOf(x)));
+  return ready.length ? ready : list;
+};
 const RETRIES_PER_MODEL = Math.max(1, Number(process.env.ENGINE_RETRIES) || 3);
 
 function wait(ms, signal) {
@@ -151,8 +158,9 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
   };
   // Each model gets a few spaced attempts: overload errors from the upstream are usually momentary.
   const retries = (provider) => Array.from({ length: RETRIES_PER_MODEL }, (_, i) => ({ provider, retry: i }));
-  const attempts = mockRun ? [null] : modelsFor(profile, preferred).flatMap((model) => retries(providerFor(model)));
-  if (backupFor(profile) && !mockRun) attempts.push(...retries(fallback));
+  const all = mockRun ? [null] : modelsFor(profile, preferred).flatMap((model) => retries(providerFor(model)));
+  if (backupFor(profile) && !mockRun) all.push(...retries(fallback));
+  const attempts = readyFirst(all, (a) => a.provider);
   let lastError;
   for (let i = 0; i < attempts.length; i++) {
     const attempt = attempts[i];
@@ -178,6 +186,16 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
       await report(meta, { model, usage: null, started, ok: false });
       // Only switch model while nothing reached the client, otherwise the stream would repeat itself.
       if (emitted || signal?.aborted) break;
+      // A model at its limit is set aside until it resets and the next one is asked at once.
+      if (limited(err) && attempt) {
+        coolDown(attempt.provider, err);
+        const other = attempts.findIndex((a, j) => j > i && a && !isCooling(a.provider));
+        if (other > 0) {
+          console.warn(`[fivegen] ${model} à sa limite, modèle suivant sans attendre`);
+          i = other - 1;
+          continue;
+        }
+      }
       if (!isOverload(err)) {
         // This model refused for itself (not allowed for the account, unknown): the next model.
         if (modelRefused(err)) {
@@ -209,8 +227,9 @@ export async function runBrief({ description, server, signal, meta, profile }) {
   }
   const user = buildBriefMessage(description, server);
   // A faster model for the questions, which need no heavy reasoning (BRIEF_MODEL, or the profile's).
-  const providers = [...new Set(modelsFor(profile, profile ? profile.brief || undefined : config.engine.briefModel || undefined))].map(providerFor);
-  if (backupFor(profile)) providers.push(fallback);
+  const listed = [...new Set(modelsFor(profile, profile ? profile.brief || undefined : config.engine.briefModel || undefined))].map(providerFor);
+  if (backupFor(profile)) listed.push(fallback);
+  const providers = readyFirst(listed);
   let lastError;
   const started = Date.now();
   for (const provider of providers) {
@@ -228,6 +247,10 @@ export async function runBrief({ description, server, signal, meta, profile }) {
         lastError = err;
         if (err instanceof ProviderError) await report(meta, { model: provider.model, usage: null, started: callStarted, ok: false });
         if (signal?.aborted) throw toPublic(err);
+        if (limited(err)) {
+          coolDown(provider, err);
+          if (providers.some((p) => p !== provider && !isCooling(p))) break; // next model at once
+        }
         if (err instanceof ProviderError && !isOverload(err)) {
           if (provider !== fallback && (modelRefused(err) || worthFallback(err))) break; // next provider (ends on the fallback)
           throw toPublic(err);
@@ -249,8 +272,9 @@ export async function runPlan({ userContent, signal, meta, profile, system = SYS
     });
     return mock.mockPlan(userContent);
   }
-  const providers = modelsFor(profile).map(providerFor);
-  if (backupFor(profile)) providers.push(fallback);
+  const listed = modelsFor(profile).map(providerFor);
+  if (backupFor(profile)) listed.push(fallback);
+  const providers = readyFirst(listed);
   let lastError;
   for (const provider of providers) {
     const started = Date.now();
@@ -265,11 +289,36 @@ export async function runPlan({ userContent, signal, meta, profile, system = SYS
       lastError = err;
       if (signal?.aborted) throw toPublic(err);
       if (err instanceof ProviderError) await report(meta && { ...meta, purpose: "plan" }, { model: provider.model, usage: null, started, ok: false });
+      if (limited(err)) coolDown(provider, err);
       console.warn(`[fivegen] plan : ${provider.model} raté (${err.message})`);
       if (err instanceof ProviderError && !isOverload(err) && !modelRefused(err) && !worthFallback(err)) break;
     }
   }
   throw lastError ?? new Error("plan indisponible");
+}
+
+/**
+ * One short answer (a lesson, a summary): each model of the profile is asked once, those at
+ * their limit last. Resolves to the text, throws when no model answered.
+ */
+export async function completeText({ system, user, profile, models, meta, maxTokens = 800, signal }) {
+  if (mockRun) return "";
+  const providers = readyFirst((models?.length ? models : modelsFor(profile)).map(providerFor));
+  let lastError;
+  for (const provider of providers) {
+    const started = Date.now();
+    try {
+      const { text, usage, model } = await completeOpenAICompat({ provider, system, user, maxTokens, timeoutMs: 90000, signal });
+      await report(meta, { model: pricedAs(provider, model), usage, started, ok: true });
+      if (String(text).trim()) return String(text);
+    } catch (err) {
+      lastError = err;
+      if (signal?.aborted) throw err;
+      if (err instanceof ProviderError) await report(meta, { model: provider.ref, usage: null, started, ok: false });
+      if (limited(err)) coolDown(provider, err);
+    }
+  }
+  throw lastError ?? new Error("aucune réponse");
 }
 
 export async function engineStatus() {

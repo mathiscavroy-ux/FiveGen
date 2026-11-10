@@ -5,7 +5,8 @@
 // the config and the server, then the rest, which reads that real code instead of
 // guessing it from the plan.
 import { buildPlanMessage, buildPartMessage } from "./prompts.js";
-import { runEngine, runPlan } from "./engine.js";
+import { runEngine, runPlan, providerFor } from "./engine.js";
+import { isCooling } from "./cooldown.js";
 import { modelAvailable } from "./provider.js";
 import { config, modelLabel } from "./config.js";
 import { validateProject } from "./validator.js";
@@ -147,7 +148,9 @@ export async function generateParallel({ spec, send, signal, meta, profile, syst
   const pool = [...new Set(profile ? profile.models : [config.engine.model, ...config.engine.fallbackModels])];
   const rivals = config.mock ? [] : pool.slice(1, profile?.candidates ?? 1);
   const runGroup = async (files, i, notes, written, opts = {}) => {
-    if (!rivals.length || files.every(isLightFile)) return runVersion(files, i, notes, written, opts);
+    // a rival at its limit would only answer 429: it sits this group out
+    const ready = rivals.filter((r) => !isCooling(providerFor(r)));
+    if (!ready.length || files.every(isLightFile)) return runVersion(files, i, notes, written, opts);
     // A slow rival never holds the group for long: once the first version is in, the others
     // get half its time again (RIVAL_GRACE_MS at least) and are dropped after that.
     const stop = new AbortController();
@@ -157,7 +160,7 @@ export async function generateParallel({ spec, send, signal, meta, profile, syst
       timer = setTimeout(() => stop.abort(), Math.max(RIVAL_GRACE_MS, (Date.now() - started) / 2));
       return v;
     });
-    const versions = await Promise.all([first, ...rivals.map((rival) => settle(runVersion(files, i, notes, written, { rival, stop: stop.signal })))]);
+    const versions = await Promise.all([first, ...ready.map((rival) => settle(runVersion(files, i, notes, written, { rival, stop: stop.signal })))]);
     clearTimeout(timer);
     if (signal?.aborted) throw versions[0].reason ?? new Error("aborted");
     const done = versions.flatMap((v) => (v.status === "fulfilled" && v.value.files.length ? [v.value] : []));

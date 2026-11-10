@@ -419,11 +419,11 @@ export function usageSummary() {
 export function qualityRuns(days = 30) {
   return db
     .prepare(
-      `SELECT g.kind, g.quality, CASE WHEN g.kind = 'generate' THEN ${SCRIPT_COST} END AS cost
+      `SELECT g.kind, g.quality, g.created_at, CASE WHEN g.kind = 'generate' THEN ${SCRIPT_COST} END AS cost
        FROM generations g WHERE g.status = 'ok' AND g.quality IS NOT NULL AND g.created_at > ? ORDER BY g.id DESC`,
     )
     .all(new Date(Date.now() - days * 86400000).toISOString())
-    .map((r) => ({ kind: r.kind, cost: r.cost, quality: JSON.parse(r.quality) }));
+    .map((r) => ({ kind: r.kind, cost: r.cost, at: r.created_at, quality: JSON.parse(r.quality) }));
 }
 
 export function listGenerations({ status, limit = 100 } = {}) {
@@ -456,3 +456,54 @@ export function stats() {
       .all(),
   };
 }
+
+
+// ---------- lessons learned from the fixes (see lessons.js) ----------
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS lessons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    family TEXT NOT NULL,
+    framework TEXT NOT NULL DEFAULT '',
+    rule TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    learned INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    approved_at TEXT,
+    UNIQUE (family, framework)
+  );
+`);
+
+export const findLesson = (family, framework) => db.prepare("SELECT * FROM lessons WHERE family = ? AND framework = ?").get(family, framework ?? "");
+
+export function addLesson({ family, framework, rule }) {
+  db.prepare("INSERT OR IGNORE INTO lessons (family, framework, rule, created_at) VALUES (?, ?, ?, ?)").run(family, framework ?? "", rule, now());
+  return findLesson(family, framework);
+}
+
+// One more script where a fix made this error go away. At autoApprove confirmations
+// (0: never) a pending lesson is switched on by itself.
+export function confirmLesson(id, autoApprove) {
+  db.prepare("UPDATE lessons SET learned = learned + 1 WHERE id = ?").run(id);
+  if (autoApprove > 0) {
+    db.prepare("UPDATE lessons SET status = 'approved', approved_at = ? WHERE id = ? AND status = 'pending' AND learned >= ?").run(now(), id, autoApprove);
+  }
+  return db.prepare("SELECT * FROM lessons WHERE id = ?").get(id);
+}
+
+export function setLesson(id, { status, rule }) {
+  const lesson = db.prepare("SELECT * FROM lessons WHERE id = ?").get(id);
+  if (!lesson) return null;
+  const nextStatus = ["pending", "approved", "rejected"].includes(status) ? status : lesson.status;
+  const approvedAt = nextStatus === "approved" ? lesson.approved_at ?? now() : null;
+  db.prepare("UPDATE lessons SET status = ?, rule = ?, approved_at = ? WHERE id = ?").run(nextStatus, rule?.trim() || lesson.rule, approvedAt, id);
+  return db.prepare("SELECT * FROM lessons WHERE id = ?").get(id);
+}
+
+export const listLessons = () => db.prepare("SELECT * FROM lessons ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, learned DESC, id DESC").all();
+
+// The lessons given to a script of this framework: its own and those for every framework.
+export const activeLessons = (framework, limit) =>
+  db.prepare("SELECT * FROM lessons WHERE status = 'approved' AND (framework = ? OR framework = '') ORDER BY learned DESC, id LIMIT ?").all(framework ?? "", limit);
+
+export const lessonsSince = (iso) => db.prepare("SELECT COUNT(*) AS n FROM lessons WHERE created_at > ?").get(iso).n;
