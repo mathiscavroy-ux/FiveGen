@@ -346,7 +346,7 @@
   .c-hero h1 { font-size: clamp(42px, 4.6vw, 58px); }
 }
 @media (max-width: 1060px) {
-  .c-hero-grid { gap: 48px; }
+  .c-hero-grid { grid-template-columns: minmax(0, 1fr); gap: 48px; }
   .c-hero-copy { max-width: 700px; }
   .c-hero h1 { font-size: clamp(48px, 7.5vw, 72px); }
   .c-hero-copy::after { display: none; }
