@@ -147,7 +147,15 @@ function renderAccount() {
   badge.classList.add(me.tier.id);
   badge.textContent = me.tier.id === "free" ? "Passer Premium" : me.tier.label;
   badge.title = me.tier.id === "free" ? `Moteur actuel : ${me.tier.engineName}. Premium : ${me.premiumEngineName} et plus d'avantages.` : `Moteur ${me.tier.engineName}`;
-  if (me.tier.id === "free") badge.href = "/app?buy";
+  // also in the account menu: the badge is hidden on phones
+  $("#menuPlans").classList.toggle("hidden", me.tier.id !== "free");
+  if (me.tier.id === "free") {
+    badge.href = "/app?buy=premium";
+    badge.onclick = (e) => {
+      e.preventDefault();
+      openRedeem("premium", "plans");
+    };
+  } else badge.onclick = null;
   $("#costLine").textContent = plural(me.costs.generate, "crédit");
   $("#freeRefinesLine").textContent = me.freeRefines;
   $("#demoBanner").classList.toggle("hidden", !state.options?.demo);
@@ -222,18 +230,25 @@ document.addEventListener(
 );
 
 
-function openRedeem(highlightPack) {
+// The shop: "plans" (Passer Premium, a padlock) shows the subscriptions only; "credits" the packs and codes.
+function openRedeem(highlightPack, mode) {
   $("#accountMenu").classList.add("hidden");
   $("#redeemCode").value = "";
-  $("#redeemDialog").showModal();
+  const plans = mode === "plans" || (mode !== "credits" && (highlightPack === "premium" || highlightPack === "pro"));
+  const dialog = $("#redeemDialog");
+  dialog.dataset.mode = plans ? "plans" : "credits";
+  if (!dialog.open) dialog.showModal();
+  dialog.querySelector("form").scrollTop = 0;
   const card = typeof highlightPack === "string" && $(`.pack[data-pack="${highlightPack}"]`);
   if (card) card.classList.add("highlight");
-  else if (!state.packs?.enabled) $("#redeemCode").focus();
+  else if (!plans && !state.packs?.enabled) $("#redeemCode").focus();
 }
 
 function renderPacks() {
   const info = state.packs;
   $("#buySection").classList.toggle("hidden", !info?.enabled);
+  // the plans are shown even before card payment is set up, so their perks stay visible
+  renderPlans();
   if (!info?.enabled) return;
   $("#packGrid").innerHTML = "";
   for (const p of info.packs) {
@@ -252,7 +267,6 @@ function renderPacks() {
     card.append(btn);
     $("#packGrid").append(card);
   }
-  renderPlans();
 }
 
 const ACTIVE_SUB = new Set(["active", "trialing", "past_due", "incomplete"]);
@@ -260,7 +274,7 @@ const ACTIVE_SUB = new Set(["active", "trialing", "past_due", "incomplete"]);
 // Monthly plans above the packs. An account already subscribed manages it from the settings.
 function renderPlans() {
   const info = state.packs;
-  const plans = info?.enabled ? (info.plans ?? []) : [];
+  const plans = info?.plans ?? [];
   $("#planSection").classList.toggle("hidden", !plans.length);
   $("#planGrid").innerHTML = "";
   const current = state.me.subscription;
@@ -284,9 +298,14 @@ function renderPlans() {
     } else if (subscribed) {
       btn.href = "/parametres#abonnement";
       btn.textContent = current.plan?.id === p.id ? "Ton abonnement actuel" : "Gérer mon abonnement";
+    } else if (!info.enabled) {
+      // card payment not set up yet on this site
+      btn.type = "button";
+      btn.disabled = true;
+      btn.textContent = "Bientôt disponible";
     } else {
       btn.type = "button";
-      btn.textContent = "S'abonner";
+      btn.textContent = `Passer ${p.name}`;
       btn.onclick = () => startCheckout("/api/subscribe", { planId: p.id }, btn);
     }
     card.append(btn);
@@ -2613,6 +2632,8 @@ function bind() {
   $$("[data-open-redeem]").forEach((b) => (b.onclick = openRedeem));
   $("#redeemForm").addEventListener("submit", onRedeem);
   $("#btnCloseRedeem").onclick = () => $("#redeemDialog").close();
+  $("#btnShowCredits").onclick = () => openRedeem(null, "credits");
+  $("#menuPlans").onclick = () => openRedeem("premium", "plans");
   $("#btnAccount").onclick = (e) => {
     e.stopPropagation();
     $("#accountMenu").classList.toggle("hidden");

@@ -1446,3 +1446,11 @@ label.auto-deploy.plan-locked { cursor: pointer; }
 label.auto-deploy.plan-locked input, label.auto-deploy.plan-locked select { pointer-events: none; opacity: 0.55; }
 .toast.upsell { align-items: center; pointer-events: auto; border-left-color: var(--accent, #c6f432); }
 .toast.upsell .btn { flex: none; }
+
+/* shop dialog: "plans" (Passer Premium) vs "credits" (Recharger mes crédits) */
+#redeemDialog[data-mode="plans"] .credits-only { display: none; }
+#redeemDialog:not([data-mode="plans"]) .plans-only { display: none; }
+#redeemDialog[data-mode="plans"] #planGrid { margin-top: 14px; }
+
+/* "Passer Premium" in the account menu (the header badge is hidden on phones) */
+.menu .menu-plans { color: var(--accent-text); font-weight: 600; }

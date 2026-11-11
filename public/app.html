@@ -31,6 +31,7 @@
         <button id="btnAccount" class="btn ghost icon" title="Mon compte"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></button>
         <div id="accountMenu" class="menu hidden">
           <div id="accountEmail" class="menu-head"></div>
+          <button id="menuPlans" class="menu-plans hidden">Passer Premium</button>
           <a href="/parametres">Paramètres du compte</a>
           <button data-open-redeem>Utiliser un code</button>
           <button id="btnServers">Mes serveurs FiveM</button>
@@ -274,24 +275,26 @@
   <!-- Redeem -->
   <dialog id="redeemDialog" class="dialog">
     <form id="redeemForm" method="dialog">
-      <h2>Recharger mes crédits</h2>
-      <p class="muted">Un script coûte <b id="costLine">1 crédit</b> et inclut <b id="freeRefinesLine">3</b> modifications offertes ; les corrections sont gratuites. Les crédits n'expirent pas.</p>
+      <h2 class="credits-only">Recharger mes crédits</h2>
+      <h2 class="plans-only">Passe à Premium ou Pro</h2>
+      <p class="muted plans-only">Chaque mois : des crédits offerts, un moteur plus puissant et tous les outils du studio. Sans engagement, résiliable à tout moment.</p>
+      <p class="muted credits-only">Un script coûte <b id="costLine">1 crédit</b> et inclut <b id="freeRefinesLine">3</b> modifications offertes ; les corrections sont gratuites. Les crédits n'expirent pas.</p>
+      <div id="planSection" class="hidden">
+        <h3 class="buy-title credits-only">Abonnements <span class="muted">· des crédits chaque mois, un moteur plus puissant et tous les outils, sans engagement</span></h3>
+        <div id="planGrid" class="pack-grid"></div>
+        <p class="plan-note">Les crédits de l'abonnement s'ajoutent à ton solde à chaque mois payé. Besoin de plus ? Les packs de crédits restent valables.</p>
+      </div>
       <div id="buySection" class="hidden">
-        <div id="planSection" class="hidden">
-          <h3 class="buy-title">Abonnements <span class="muted">· des crédits chaque mois, un moteur plus puissant et tous les outils, sans engagement</span></h3>
-          <div id="planGrid" class="pack-grid"></div>
-          <p class="plan-note">Les crédits de l'abonnement s'ajoutent à ton solde à chaque mois payé. Besoin de plus ? Les packs ci-dessous restent valables.</p>
-          <h3 class="buy-title">Packs de crédits</h3>
-        </div>
-        <div id="packGrid" class="pack-grid"></div>
+        <h3 class="buy-title credits-only">Packs de crédits</h3>
+        <div id="packGrid" class="pack-grid credits-only"></div>
         <label class="consent">
           <input id="buyConsent" type="checkbox" />
           <span>Je demande l'utilisation immédiate des crédits et je renonce à mon droit de rétractation pour la part utilisée (art. L221-28 du Code de la consommation). <a href="/cgv" target="_blank">CGV</a></span>
         </label>
         <p class="pay-note">Prix TTC. Paiement sécurisé par carte via Stripe. Les crédits sont ajoutés automatiquement après le paiement.</p>
-        <div class="divider"><span>ou</span></div>
+        <div class="divider credits-only"><span>ou</span></div>
       </div>
-      <label class="field">
+      <label class="field credits-only">
         <span>Code d'activation</span>
         <input id="redeemCode" class="input mono" placeholder="FG-XXXX-XXXX-XXXX" autocomplete="off" />
       </label>
@@ -299,7 +302,8 @@
         <a id="redeemShop" class="btn ghost hidden" href="#" target="_blank" rel="noopener">Acheter des crédits ↗</a>
         <span class="spacer"></span>
         <button type="button" id="btnCloseRedeem" class="btn ghost">Fermer</button>
-        <button type="submit" class="btn primary">Valider le code</button>
+        <button type="button" id="btnShowCredits" class="btn ghost plans-only">Acheter des crédits à l'unité</button>
+        <button type="submit" class="btn primary credits-only">Valider le code</button>
       </div>
     </form>
   </dialog>
