@@ -116,17 +116,29 @@ const invoice = (over = {}) => ({
   ...over,
 });
 
-test("each paid subscription invoice is recorded once, without credits, and keeps the plan active", () => {
+test("each paid subscription invoice is recorded once with the plan's monthly credits, and keeps the plan active", async () => {
+  const { config } = await import("../server/config.js");
+  const monthly = config.plans.find((p) => p.id === "premium").credits;
+  assert.ok(monthly > 0);
   const id = db.getUserByEmail("sub@test.local").id;
   const start = db.getUser(id).credits;
   assert.match(payments.handleWebhook(...signed("invoice.paid", invoice())), /abonnement Premium payé/);
   assert.equal(payments.handleWebhook(...signed("invoice.paid", invoice())), "déjà traité");
   assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_2", billing_reason: "subscription_cycle" }))), /abonnement Premium payé/);
   assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_3", billing_reason: "subscription_update", amount_paid: 0 }))), /ignorée/);
-  assert.equal(db.getUser(id).credits, start);
+  // two periods paid (start + renewal), the replayed webhook and the upgrade add nothing
+  assert.equal(db.getUser(id).credits, start + 2 * monthly);
   assert.equal(db.getUser(id).sub_plan, "premium");
   assert.equal(db.listPayments().filter((p) => p.pack_id === "abonnement:premium").length, 2);
   assert.equal(db.getUser(id).sub_period_end, new Date(1800000000 * 1000).toISOString());
+});
+
+test("a period paid 0 (100% coupon, trial) keeps the plan active but gives no credits", () => {
+  const id = db.getUserByEmail("sub@test.local").id;
+  const start = db.getUser(id).credits;
+  assert.match(payments.handleWebhook(...signed("invoice.paid", invoice({ id: "in_free", billing_reason: "subscription_cycle", amount_paid: 0 }))), /abonnement Premium payé/);
+  assert.equal(db.getUser(id).credits, start);
+  assert.equal(db.getUser(id).sub_status, "active");
 });
 
 test("the engine profile follows the subscription: free models without, Opus with", async () => {

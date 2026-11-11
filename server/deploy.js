@@ -11,7 +11,7 @@ import { db } from "./db.js";
 import { config, ROOT } from "./config.js";
 import { requireUser, rateLimit } from "./auth.js";
 import { getProject, getFiles } from "./projects.js";
-import { tierOf } from "./tiers.js";
+import { tierOf, requireFeature } from "./tiers.js";
 import { sanitizeInventory, inventoryCounts } from "./inventory.js";
 
 db.exec(`
@@ -256,7 +256,7 @@ export function mountDeploy(app) {
     }
   });
 
-  router.get("/projects/:id/runtime-errors", requireUser, (req, res) => {
+  router.get("/projects/:id/runtime-errors", requireUser, requireFeature("runtimeErrors", "Erreurs du serveur remontées dans le studio"), (req, res) => {
     const project = getProject(req.user.id, req.params.id);
     res.json(listRuntimeErrors(req.user.id, project.id));
   });

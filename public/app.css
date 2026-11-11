@@ -1433,3 +1433,16 @@ dialog::backdrop { background: rgb(0 0 0 / .55); backdrop-filter: blur(4px); }
 @media (prefers-reduced-motion: reduce) {
   .composer-steps li:hover { transform: none; }
 }
+
+/* features of the paid plans: padlock badge and upgrade toast */
+.plan-locked { position: relative; }
+.plan-locked::after {
+  content: attr(data-plan-label); margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+  font: 600 10.5px/1.6 var(--mono, monospace); letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--accent-soft, rgb(198 244 50 / 0.12)); color: var(--accent-text, #c6f432); border: 1px solid rgb(198 244 50 / 0.3);
+}
+.btn.plan-locked { opacity: 0.85; }
+label.auto-deploy.plan-locked { cursor: pointer; }
+label.auto-deploy.plan-locked input, label.auto-deploy.plan-locked select { pointer-events: none; opacity: 0.55; }
+.toast.upsell { align-items: center; pointer-events: auto; border-left-color: var(--accent, #c6f432); }
+.toast.upsell .btn { flex: none; }

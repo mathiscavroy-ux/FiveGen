@@ -152,7 +152,75 @@ function renderAccount() {
   $("#freeRefinesLine").textContent = me.freeRefines;
   $("#demoBanner").classList.toggle("hidden", !state.options?.demo);
   $("#verifyBanner").classList.toggle("hidden", me.emailVerified);
+  applyPlanLocks();
 }
+
+// ---------- features of the paid plans: padlock on what the plan does not include ----------
+const LOCK_LABELS = {
+  import: "Importer un script existant",
+  convert: "Convertir vers un autre framework",
+  optimize: "Optimiser un script",
+  editor: "Modifier le code dans l'éditeur",
+  restore: "Ouvrir et restaurer toutes les versions",
+  autoDeploy: "Le déploiement automatique",
+  runtimeErrors: "Les erreurs remontées par ton serveur",
+};
+const PLAN_NAMES = { premium: "Premium", pro: "Pro" };
+const locked = (feature) => Boolean(state.me?.tier?.lockedBy?.[feature]);
+
+function setLock(el, feature) {
+  if (!el) return;
+  const plan = state.me?.tier?.lockedBy?.[feature];
+  el.classList.toggle("plan-locked", Boolean(plan));
+  if (plan) {
+    el.dataset.lock = feature;
+    el.dataset.planLabel = PLAN_NAMES[plan] ?? plan;
+  } else {
+    delete el.dataset.lock;
+    delete el.dataset.planLabel;
+  }
+}
+
+function applyPlanLocks() {
+  for (const [sel, feature] of [["#btnImport", "import"], ["#btnConvert", "convert"], ["#btnOptimize", "optimize"], ["#btnSave", "editor"]]) setLock($(sel), feature);
+  for (const box of $$(".auto-deploy")) setLock(box, "autoDeploy");
+  for (const btn of $$("[data-restore]")) setLock(btn, "restore");
+  // free plan: the code can be read, not edited
+  state.editor?.setOption?.("readOnly", locked("editor"));
+}
+
+// A toast that names the plan and opens its card in the shop.
+function upsell(feature, message) {
+  const plan = state.me?.tier?.lockedBy?.[feature] ?? "premium";
+  const el = document.createElement("div");
+  el.className = "toast upsell";
+  const text = document.createElement("span");
+  text.textContent = message ?? `${LOCK_LABELS[feature] ?? "Cette fonctionnalité"} : inclus dans l'offre ${PLAN_NAMES[plan] ?? plan}.`;
+  const btn = document.createElement("button");
+  btn.className = "btn small primary";
+  btn.textContent = `Voir ${PLAN_NAMES[plan] ?? "les offres"}`;
+  btn.onclick = () => {
+    el.remove();
+    openRedeem(plan);
+  };
+  el.append(text, btn);
+  $("#toasts").append(el);
+  setTimeout(() => el.remove(), 9000);
+}
+
+// Clicks on a locked control open the offer instead of running the action (capture: before its own handler).
+document.addEventListener(
+  "click",
+  (e) => {
+    const el = e.target.closest("[data-lock]");
+    if (!el) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    upsell(el.dataset.lock);
+  },
+  true,
+);
+
 
 function openRedeem(highlightPack) {
   $("#accountMenu").classList.add("hidden");
@@ -281,13 +349,21 @@ async function handlePaymentReturn() {
     for (let i = 0; i < 10; i++) {
       const me = await api("/api/me").catch(() => null);
       if (me && me.credits > before) {
-        setCredits(me.credits);
+        state.me = me;
+        renderAccount();
+        renderPlans();
         toast(`Merci ! +${plural(me.credits - before, "crédit")} sur ton compte.`, "ok");
         return;
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
     // The webhook may already have run before this page loaded.
+    const me = await api("/api/me").catch(() => null);
+    if (me) {
+      state.me = me;
+      renderAccount();
+      renderPlans();
+    }
     toast(`Paiement validé ✓ Solde actuel : ${plural(state.me.credits, "crédit")}. S'il manque des crédits, recharge la page dans une minute.`, "ok");
   } else if (params.has("buy")) {
     clean();
@@ -820,6 +896,7 @@ function initEditor() {
     state.editor.on("change", (_cm, change) => {
       if (change.origin !== "setValue") setDirty(true);
     });
+    applyPlanLocks();
     return;
   }
   // CDN unreachable: a plain textarea keeps the studio usable.
@@ -837,12 +914,15 @@ function initEditor() {
   state.editor = {
     setValue: (v) => (ta.value = v),
     getValue: () => ta.value,
-    setOption: () => {},
+    setOption: (key, value) => {
+      if (key === "readOnly") ta.readOnly = Boolean(value);
+    },
     refresh: () => {},
     setCursor: () => {},
     scrollIntoView: () => {},
     focus: () => ta.focus(),
   };
+  applyPlanLocks();
 }
 
 function setDirty(d) {
@@ -871,6 +951,7 @@ function openFile(path, line) {
 
 async function saveFile() {
   if (!state.current || !state.activePath || !state.dirty) return;
+  if (locked("editor")) return upsell("editor");
   try {
     state.current = await api(`/api/projects/${state.current.id}/files`, {
       method: "PUT",
@@ -1432,7 +1513,7 @@ async function renderVersionDetail() {
       <div><h3>v${v.n} · ${VERSION_LABELS[v.type] ?? v.type}</h3>
       <p>${v.label ? `${escapeHtml(v.label)} · ` : ""}${new Date(v.at).toLocaleString("fr-FR")}${prev ? ` · comparée à v${prev.n}` : " · première version"}</p></div>
       <div class="vd-stats"><span class="plus">+${fmtNum(added)}</span><span class="minus">−${fmtNum(removed)}</span><span>${changes.length} fichier(s)</span>
-      ${idx > 0 ? `<button class="btn small" data-restore="${v.n}">Restaurer cette version</button>` : ""}</div>
+      ${idx > 0 ? `<button class="btn small" data-restore="${v.n}"${locked("restore") ? ` data-lock="restore" data-plan-label="${PLAN_NAMES[state.me.tier.lockedBy.restore] ?? "Premium"}"` : ""}>Restaurer cette version</button>` : ""}</div>
     </header>
     <div class="vd-body">
       <ul class="vd-files">${changes
@@ -2164,6 +2245,7 @@ async function onTransform(action) {
 
 async function importZip(file) {
   if (!file) return;
+  if (locked("import")) return upsell("import");
   if (state.busy) return toast("Une génération est en cours.", "err");
   if (!/\.zip$/i.test(file.name)) return toast("Choisis le fichier .zip de ta ressource.", "err");
   if (file.size > 10 * 1024 * 1024) return toast("Archive trop lourde (10 Mo maximum).", "err");
@@ -2178,7 +2260,10 @@ async function importZip(file) {
       return;
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    if (!res.ok) {
+      if (data.upgrade) return upsell(data.feature ?? "import", data.error);
+      throw new Error(data.error || `Erreur ${res.status}`);
+    }
     await refreshProjects();
     await openProject(data.project.id);
     const n = data.skipped.length;
@@ -2382,6 +2467,7 @@ function renderAutoDeploy() {
     if (chosen) select.value = String(chosen.id);
     box.querySelector("input").checked = Boolean(chosen);
   }
+  applyPlanLocks();
 }
 
 async function saveAutoDeploy(box) {

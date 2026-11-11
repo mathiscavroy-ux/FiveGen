@@ -41,7 +41,7 @@ before(async () => {
   base = `http://127.0.0.1:${port}`;
   proc = spawn(process.execPath, ["server/index.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", FORGE_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-auto-")), FORGE_MOCK: "1" },
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", FORGE_DATA_DIR: (dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-auto-"))), FORGE_MOCK: "1" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.on("data", (d) => (logs += d));
@@ -49,7 +49,14 @@ before(async () => {
   for (let i = 0; i < 100 && !logs.includes("FiveGen en ligne"); i++) await new Promise((r) => setTimeout(r, 100));
   assert.ok(logs.includes("FiveGen en ligne"), logs);
   assert.equal((await call("POST", "/api/auth/register", { email: "auto@test.fr", password: "password1", acceptTerms: true })).status, 200);
+  // automatic deployment is a Premium feature
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(path.join(dataDir, "fivegen.db"));
+  db.prepare("UPDATE users SET sub_status = 'active', sub_plan = 'premium' WHERE email = ?").run("auto@test.fr");
+  db.close();
 });
+
+let dataDir;
 
 after(() => proc?.kill());
 

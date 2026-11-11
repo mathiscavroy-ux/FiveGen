@@ -15,7 +15,7 @@ export function publicPacks() {
     enabled: paymentsEnabled(),
     currency: config.stripe.currency,
     packs: config.packs.map(({ id, name, credits, price, featured }) => ({ id, name, credits, price, featured: Boolean(featured) })),
-    plans: config.plans.map(({ id, name, price, featured }) => ({ id, name, price, featured: Boolean(featured), perks: planPerks(id) })),
+    plans: config.plans.map(({ id, name, price, credits, featured }) => ({ id, name, price, credits: credits ?? 0, featured: Boolean(featured), perks: planPerks(id) })),
     free: { engineName: config.tiers.free.engineName, perks: planPerks("free") },
   };
 }
@@ -23,16 +23,25 @@ export function publicPacks() {
 // What a plan brings, shown on the plan cards, from its engine profile (config.tiers).
 export function planPerks(id) {
   const t = config.tiers[id] ?? config.tiers.free;
+  const f = t.features ?? {};
+  const plan = config.plans.find((p) => p.id === id);
+  const s = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
   const engine = { free: `Moteur ${t.engineName}`, premium: `Moteur ${t.engineName}, plus puissant`, pro: `Moteur ${t.engineName}, le plus puissant` }[id] ?? `Moteur ${t.engineName}`;
   return [
+    // monthly credits first: the most concrete reason to subscribe
+    plan?.credits ? `${plan.credits} crédits offerts chaque mois (${s(Math.floor(plan.credits / config.cost.generate), "script")})` : null,
     engine,
     // free accounts have no separate review pass: say so rather than promise one
-    t.reviewPass === false ? "Vérification et corrections automatiques" : `Relecture complète par ${modelLabel(t.review) || t.engineName}${id === "pro" && /medium|high/.test(t.effortEdits) ? " et réflexion poussée sur les modifications" : ""}`,
+    t.reviewPass === false ? "Vérification et corrections automatiques" : `Relecture complète par ${modelLabel(t.review) || t.engineName}`,
     `${t.autoFixRounds} tours de correction automatique`,
-    `${t.freeRefines} modifications offertes par script`,
-    `Conversion ${t.cost.convert} crédit${t.cost.convert > 1 ? "s" : ""} · optimisation ${t.cost.optimize} crédit${t.cost.optimize > 1 ? "s" : ""}`,
-    `${t.maxServers} serveur${t.maxServers > 1 ? "s" : ""} FiveM connecté${t.maxServers > 1 ? "s" : ""}`,
-  ];
+    `${s(t.freeRefines, "modification")} offerte${t.freeRefines > 1 ? "s" : ""} par script`,
+    f.editor ? "Éditeur de code et historique complet des versions" : `Code en lecture seule, ${f.versions > 1 ? `${f.versions} dernières versions` : "dernière version seulement"}`,
+    f.import ? "Import de tes scripts existants" : null,
+    f.convert ? `Conversion ${s(t.cost.convert, "crédit")} · optimisation ${s(t.cost.optimize, "crédit")}` : null,
+    `${s(t.maxServers, "serveur")} FiveM connecté${t.maxServers > 1 ? "s" : ""}${f.autoDeploy ? ", déploiement automatique" : ""}`,
+    f.inventory ? "Scripts adaptés aux jobs et items de ton serveur" : null,
+    f.runtimeErrors ? "Erreurs du serveur remontées et corrigées dans le studio" : null,
+  ].filter(Boolean);
 }
 
 // A subscription that still bills or gives credits: a second one is refused.
@@ -129,7 +138,7 @@ function syncSubscription(sub) {
 }
 
 // A paid subscription invoice (start and each monthly renewal): recorded once for the
-// accounting, and the plan stays active until the end of the new period. No credits.
+// accounting with the plan's monthly credits, and the plan stays active until the end of the new period.
 function recordInvoice(invoice) {
   // subscription_update: the prorated difference of an upgrade (a downgrade bills nothing)
   const update = invoice.billing_reason === "subscription_update";
@@ -142,7 +151,9 @@ function recordInvoice(invoice) {
     sessionId: invoice.id,
     userId,
     packId: update ? "abonnement:changement" : `abonnement:${plan.id}`,
-    credits: 0,
+    // the plan's monthly credits come with each paid period (once per invoice: the id is unique)
+    // only a period really paid: a 100% coupon, a trial or a zero balance gives no credits
+    credits: !update && invoice.amount_paid > 0 ? plan.credits ?? 0 : 0,
     amount: invoice.amount_paid ?? plan.price,
     currency: invoice.currency ?? config.stripe.currency,
   });

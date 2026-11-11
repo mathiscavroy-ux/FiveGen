@@ -15,7 +15,7 @@ import { sanitizeAnswers } from "./brief.js";
 import { paymentsEnabled, publicPacks, createCheckout, handleWebhook, createSubscriptionCheckout, setCancelAtPeriodEnd, cancelNow, changePlan } from "./payments.js";
 import { importResource } from "./importer.js";
 import { mountDiscord, discordEnabled } from "./discord.js";
-import { tierOf } from "./tiers.js";
+import { tierOf, hasFeature, featureLocked, requireFeature } from "./tiers.js";
 import { validateProjectFull } from "./validator.js";
 import { fixBatch, fixRounds, isBetter, newWarnings } from "./autofix.js";
 import { repairResource } from "./repair.js";
@@ -209,7 +209,7 @@ async function saveResult({ userId, projectId, result, spec, send, signal, state
 // Static checks plus the dry run of the resource in a fake FiveM.
 function checkProject(userId, projectId) {
   const project = getProject(userId, projectId);
-  return validateProjectFull(getFiles(userId, projectId), { ...project.spec, inventory: serverInventory(userId, projectId), usedSpots: usedSpots(userId, projectId) }, { resource: project.name });
+  return validateProjectFull(getFiles(userId, projectId), { ...project.spec, inventory: inventoryFor(userId, projectId), usedSpots: usedSpots(userId, projectId) }, { resource: project.name });
 }
 
 // FiveGen's FiveM memory: an error of the checks that a fix made disappear becomes a general
@@ -262,7 +262,7 @@ function learnFrom({ userId, projectId, spec, resource, errors, validation, befo
 // one review of the clean resource. Broken code never gets a slow review pass first.
 async function runPipeline({ userId, projectId, userContent, kind, instruction, send, signal, state }) {
   const project = getProject(userId, projectId);
-  const inventory = serverInventory(userId, projectId);
+  const inventory = inventoryFor(userId, projectId);
   const spots = usedSpots(userId, projectId);
   const pastErrors = frequentErrors(db.qualityRuns());
   // the rules FiveGen learned from earlier fixes, for this framework
@@ -418,9 +418,16 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
 }
 
 // The server chosen in the studio gets the script as soon as it is ready, even with the page closed.
+// The jobs and items read from the account's server, on plans that include it.
+function inventoryFor(userId, projectId) {
+  return hasFeature(db.getUser(userId), "inventory") ? serverInventory(userId, projectId) : null;
+}
+
 function autoDeploy(userId, projectId, send) {
-  const serverId = userPrefs(db.getUser(userId)).autoDeployServer;
+  const user = db.getUser(userId);
+  const serverId = userPrefs(user).autoDeployServer;
   if (!serverId) return;
+  if (!hasFeature(user, "autoDeploy")) return send("status", featureLocked("autoDeploy", "Déploiement automatique").error);
   try {
     send("deployment", autoDeployment(userId, serverId, getProject(userId, projectId)));
   } catch (err) {
@@ -818,7 +825,7 @@ app.post("/api/brief", requireUser, briefLimiter, async (req, res) => {
       server: {
         framework: CATALOG.frameworks.some((x) => x.id === server.framework) ? server.framework : null,
         dependencies: (Array.isArray(server.dependencies) ? server.dependencies : []).filter((d) => CATALOG.dependencies.some((x) => x.id === d)),
-        inventory: serverInventory(req.user.id),
+        inventory: hasFeature(req.user, "inventory") ? serverInventory(req.user.id) : null,
       },
       meta: { userId: req.user.id, purpose: "brief" },
       profile: tierOf(req.user),
@@ -884,7 +891,7 @@ app.post("/api/projects/:id/refine", requireUser, async (req, res) => {
 const importLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 10, key: (req) => `i${req.user?.id ?? req.ip}`, message: "Trop d'imports. Réessaie dans quelques minutes." });
 
 // Free: the ZIP of an existing resource becomes a project (checked like a generated one).
-app.post("/api/import", requireUser, importLimiter, express.raw({ type: () => true, limit: "10mb" }), async (req, res) => {
+app.post("/api/import", requireUser, requireFeature("import", "Import d'un script existant"), importLimiter, express.raw({ type: () => true, limit: "10mb" }), async (req, res) => {
   if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: "Envoie le fichier .zip de ta ressource." });
   let found;
   try {
@@ -933,6 +940,7 @@ app.post("/api/projects/:id/transform", requireUser, async (req, res) => {
   const project = getProject(req.user.id, req.params.id);
   const kind = req.body?.action;
   if (!TRANSFORMS[kind]) return res.status(400).json({ error: "Action inconnue." });
+  if (!hasFeature(req.user, kind)) return res.status(403).json(featureLocked(kind, kind === "convert" ? "Conversion vers un autre framework" : "Optimisation"));
   const from = project.spec.framework;
   const to = req.body?.framework;
   if (kind === "convert") {
@@ -960,7 +968,7 @@ app.post("/api/projects/:id/fix", requireUser, async (req, res) => {
   const validation = await checkProject(req.user.id, project.id);
   const problems = [...validation.errors, ...(req.body?.includeWarnings ? validation.warnings : [])];
   // Errors printed by the resource in the FiveM server console (reported by the bridge).
-  const runtime = req.body?.runtime ? listRuntimeErrors(req.user.id, project.id) : [];
+  const runtime = req.body?.runtime && hasFeature(req.user, "runtimeErrors") ? listRuntimeErrors(req.user.id, project.id) : [];
   for (const e of runtime) {
     problems.push({ ...locateRuntimeError(e.message, project.name), message: `Erreur en jeu (console du serveur, ${e.count}×) : ${e.message}`, level: "error" });
   }
@@ -979,7 +987,7 @@ app.post("/api/projects/:id/fix", requireUser, async (req, res) => {
   });
 });
 
-app.put("/api/projects/:id/files", requireUser, async (req, res) => {
+app.put("/api/projects/:id/files", requireUser, requireFeature("editor", "Modification du code dans l'éditeur"), async (req, res) => {
   const { path: filePath, content } = req.body ?? {};
   if (typeof filePath !== "string" || typeof content !== "string") return res.status(400).json({ error: "path et content requis" });
   if (Buffer.byteLength(content) > LIMITS.fileBytes) return res.status(400).json({ error: "Fichier trop volumineux." });
@@ -993,14 +1001,18 @@ app.put("/api/projects/:id/files", requireUser, async (req, res) => {
 
 app.get("/api/projects/:id/versions", requireUser, (req, res) => {
   getProject(req.user.id, req.params.id); // 404 for someone else's project
-  res.json(listVersions(req.user.id, req.params.id));
+  // the plan sets how many past versions can be opened (newest first)
+  res.json(listVersions(req.user.id, req.params.id).slice(0, tierOf(req.user).features.versions));
 });
 
 app.get("/api/projects/:id/versions/:n", requireUser, (req, res) => {
+  getProject(req.user.id, req.params.id); // 404 for someone else's project
+  const shown = listVersions(req.user.id, req.params.id).slice(0, tierOf(req.user).features.versions);
+  if (!shown.some((v) => String(v.n) === String(req.params.n))) return res.status(403).json(featureLocked("restore", "Historique complet des versions"));
   res.json(getVersionFiles(req.user.id, req.params.id, req.params.n));
 });
 
-app.post("/api/projects/:id/versions/:n/restore", requireUser, async (req, res) => {
+app.post("/api/projects/:id/versions/:n/restore", requireUser, requireFeature("restore", "Restauration d'une version"), async (req, res) => {
   if (running.has(req.user.id)) return res.status(409).json({ error: "Une génération est en cours sur ton compte." });
   getProject(req.user.id, req.params.id);
   restoreVersion(req.user.id, req.params.id, req.params.n);

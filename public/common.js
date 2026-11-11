@@ -16,7 +16,7 @@ export async function api(url, opts = {}) {
     throw new Error("Session expirée");
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || `Erreur ${res.status}`), { code: data.code });
+  if (!res.ok) throw Object.assign(new Error(data.error || `Erreur ${res.status}`), { code: data.code, upgrade: data.upgrade, feature: data.feature });
   return data;
 }
 

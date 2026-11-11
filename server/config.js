@@ -92,11 +92,11 @@ export const config = {
     { id: "pro", name: "Créateur", credits: 45, price: 2399, featured: true },
     { id: "studio", name: "Studio", credits: 150, price: 7199 },
   ]),
-  // Monthly subscriptions: the best engine and perks (config.tiers below), no credits;
-  // generations still cost credits. Prices in cents, VAT included.
+  // Monthly subscriptions: a stronger engine, perks (config.tiers below) and credits paid
+  // with every monthly invoice (they add up, packs stay valid). Prices in cents, VAT included.
   plans: [
-    { id: "premium", name: "Premium", price: int(env.PREMIUM_PRICE, 999) },
-    { id: "pro", name: "Pro", price: int(env.PRO_PRICE, 1999), featured: true },
+    { id: "premium", name: "Premium", price: int(env.PREMIUM_PRICE, 999), credits: int(env.PREMIUM_CREDITS, 15) },
+    { id: "pro", name: "Pro", price: int(env.PRO_PRICE, 1999), credits: int(env.PRO_CREDITS, 30), featured: true },
   ],
 
   // "Continuer avec Discord" (OAuth2 app from discord.com/developers). Hidden until both are set.
@@ -210,6 +210,13 @@ const freeModels = models(env.FREE_MODELS, FREE_MODELS);
 config.freeFallbackModels = models(env.FREE_FALLBACK_MODELS, "mistralai/devstral-medium,mistralai/codestral-2508,mistralai/mistral-medium-3.5");
 
 const proModel = (env.PRO_MODEL || config.engine.model).trim();
+
+// What each plan unlocks besides the engine. Checked by the server (requireFeature), shown
+// locked in the studio and listed on the plan cards. versions: how many past versions can be
+// opened (Infinity: all), restore: going back to one.
+const FEATURES_FREE = { import: false, convert: false, optimize: false, editor: false, versions: 3, restore: false, autoDeploy: false, inventory: false, runtimeErrors: false };
+const FEATURES_PREMIUM = { import: true, convert: true, optimize: true, editor: true, versions: Infinity, restore: true, autoDeploy: true, inventory: true, runtimeErrors: false };
+const FEATURES_PRO = { ...FEATURES_PREMIUM, runtimeErrors: true };
 const premium = {
   id: "premium",
   label: "Premium",
@@ -227,7 +234,8 @@ const premium = {
   candidates: Math.max(1, int(env.ENGINE_CANDIDATES, 2)),
   freeRefines: int(env.PREMIUM_FREE_REFINES, 5),
   cost: { convert: config.cost.convert, optimize: config.cost.optimize },
-  maxServers: int(env.PREMIUM_MAX_SERVERS, 5),
+  maxServers: int(env.PREMIUM_MAX_SERVERS, 3),
+  features: { ...FEATURES_PREMIUM },
 };
 config.tiers = {
   free: {
@@ -252,9 +260,10 @@ config.tiers = {
     reviewPass: env.FREE_REVIEW === "1",
     // a fix that made things worse is retried once by the next model of the list
     fixEscalation: Math.max(0, int(env.FREE_FIX_ESCALATION, 1)),
-    freeRefines: config.freeRefines,
+    freeRefines: int(env.FREE_PLAN_REFINES, 2),
     cost: { convert: config.cost.convert, optimize: config.cost.optimize },
-    maxServers: int(env.FREE_MAX_SERVERS, 2),
+    maxServers: int(env.FREE_MAX_SERVERS, 1),
+    features: { ...FEATURES_FREE },
   },
   premium,
   pro: {
@@ -273,8 +282,14 @@ config.tiers = {
     freeRefines: int(env.PRO_FREE_REFINES, 10),
     cost: { convert: Math.max(0, config.cost.convert - 1), optimize: Math.max(0, config.cost.optimize - 1) },
     maxServers: int(env.PRO_MAX_SERVERS, 10),
+    features: { ...FEATURES_PRO },
   },
 };
+
+/** The lowest plan that unlocks a feature ("premium" or "pro"), for the upgrade message. */
+export function planFor(feature) {
+  return ["free", "premium", "pro"].find((id) => config.tiers[id].features[feature]) ?? "pro";
+}
 
 // Browsers drop Secure cookies on plain http, so only require them once the site is served over https.
 config.secureCookies = config.publicUrl.startsWith("https://");

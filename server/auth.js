@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { promisify } from "node:util";
-import { config } from "./config.js";
+import { config, planFor } from "./config.js";
 import { createSession, userFromSession, deleteSession, deleteOtherSessions, countOtherSessions, setAdmin } from "./db.js";
 import { tierOf } from "./tiers.js";
 
@@ -136,7 +136,16 @@ export function publicUser(user) {
     isAdmin: Boolean(user.is_admin),
     emailVerified: Boolean(user.email_verified),
     // the plan the account runs on, and what it changes
-    tier: { id: tier.id, label: tier.label, engineName: tier.engineName, maxServers: tier.maxServers },
+    // features: what the plan unlocks (versions: null means every version), the studio locks the rest
+    tier: {
+      id: tier.id,
+      label: tier.label,
+      engineName: tier.engineName,
+      maxServers: tier.maxServers,
+      features: { ...tier.features, versions: Number.isFinite(tier.features.versions) ? tier.features.versions : null },
+      // locked feature -> the cheapest plan that has it, for the padlock and the upgrade link
+      lockedBy: Object.fromEntries(Object.entries(tier.features).filter(([, on]) => on === false).map(([k]) => [k, planFor(k)])),
+    },
     // what a subscription would run on, shown to free accounts
     premiumEngineName: config.tiers.premium.engineName,
     costs: { ...config.cost, ...tier.cost },

@@ -73,7 +73,7 @@ before(async () => {
   base = `http://127.0.0.1:${port}`;
   proc = spawn(process.execPath, ["server/index.js"], {
     cwd: path.resolve(import.meta.dirname, ".."),
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", FORGE_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-imp-")), FORGE_MOCK: "1", SMTP_HOST: "", FREE_CREDITS: "10", PUBLIC_URL: "" },
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", FORGE_DATA_DIR: (dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fivegen-imp-"))), FORGE_MOCK: "1", SMTP_HOST: "", FREE_CREDITS: "10", PUBLIC_URL: "" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.on("data", (d) => (logs += d));
@@ -83,6 +83,15 @@ before(async () => {
 });
 
 after(() => proc?.kill());
+
+let dataDir;
+// Puts an account on a paid plan, as the Stripe webhook would.
+async function subscribe(email, plan) {
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(path.join(dataDir, "fivegen.db"));
+  db.prepare("UPDATE users SET sub_status = 'active', sub_plan = ? WHERE email = ?").run(plan, email);
+  db.close();
+}
 
 test("an imported script can be converted to another framework", async () => {
   let cookie = "";
@@ -104,6 +113,11 @@ test("an imported script can be converted to another framework", async () => {
     return { status: res.status, json, text };
   };
   await call("POST", "/api/auth/register", { email: "importer@test.fr", password: "password1", acceptTerms: true });
+  // importing and converting are Premium features: a free account is offered the upgrade
+  const locked = await call("POST", "/api/import", await zip(ESX_RESOURCE), { "X-File-Name": "tow.zip" });
+  assert.equal(locked.status, 403);
+  assert.equal(locked.json.upgrade, "premium");
+  await subscribe("importer@test.fr", "premium");
 
   const imported = await call("POST", "/api/import", await zip(ESX_RESOURCE), { "X-File-Name": "tow.zip" });
   assert.equal(imported.status, 200, imported.text);
