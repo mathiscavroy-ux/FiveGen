@@ -209,6 +209,7 @@ const freeModels = models(env.FREE_MODELS, FREE_MODELS);
 // Mistral Medium 3.5 72 s / 8, Mistral Large 84 s / 9 (syntax), North Mini Code 171 s / 13.
 config.freeFallbackModels = models(env.FREE_FALLBACK_MODELS, "mistralai/devstral-medium,mistralai/codestral-2508,mistralai/mistral-medium-3.5");
 
+const proModel = (env.PRO_MODEL || config.engine.model).trim();
 const premium = {
   id: "premium",
   label: "Premium",
@@ -219,8 +220,8 @@ const premium = {
   brief: config.engine.briefModel,
   effort: config.engine.effort,
   effortEdits: config.engine.effortEdits,
-  // up to 4 targeted fixes: each costs a fraction of a cent once the instructions are cached
-  autoFixRounds: Math.max(config.autoFixRounds, int(env.PREMIUM_AUTO_FIX_ROUNDS, 4)),
+  // up to 5 targeted fixes: each costs a few cents at most once the instructions are cached
+  autoFixRounds: Math.max(config.autoFixRounds, int(env.PREMIUM_AUTO_FIX_ROUNDS, 5)),
   // Versions of each client/server group written by different models at the same time;
   // the checks keep the best one. 1: a single version.
   candidates: Math.max(1, int(env.ENGINE_CANDIDATES, 2)),
@@ -243,8 +244,9 @@ config.tiers = {
     // Free models share a small daily token quota at the provider (500k at xkiro), and every
     // call carries the ~31k-token FiveM instructions. A plan + parallel groups x 2 versions +
     // review + 8 fix rounds burnt the whole day on ONE script, then everything answered 429.
-    // Free runs: a single generation call, no separate review, 5 targeted fixes at most.
-    autoFixRounds: Math.max(1, int(env.FREE_AUTO_FIX_ROUNDS, 5)),
+    // Free runs: a single generation call, no separate review, 4 targeted fixes at most
+    // (one fewer than Premium, which has one fewer than Pro).
+    autoFixRounds: Math.max(1, int(env.FREE_AUTO_FIX_ROUNDS, 4)),
     candidates: Math.max(1, int(env.FREE_CANDIDATES, 1)),
     parallel: env.FREE_PARALLEL === "1",
     reviewPass: env.FREE_REVIEW === "1",
@@ -259,10 +261,15 @@ config.tiers = {
     ...premium,
     id: "pro",
     label: "Pro",
-    // the main model rereads the resource, edits reason longer, one more fix round
-    review: config.engine.model,
-    effortEdits: env.PRO_EFFORT_EDITS || "medium",
-    autoFixRounds: Math.max(config.autoFixRounds + 1, int(env.PRO_AUTO_FIX_ROUNDS, 5)),
+    // PRO_MODEL: a stronger model than Premium's (measured on a full ESX police job:
+    // GPT-6.1 Sol 1 error before fixes and the most complete resource, vs 5 for GPT-6 Luna),
+    // Premium's models behind it as fallback. Without it Pro runs Premium's model.
+    engineName: env.PRO_ENGINE_NAME || modelLabel(proModel),
+    models: [...new Set([proModel, ...premium.models])],
+    review: (env.PRO_REVIEW_MODEL ?? proModel).trim(),
+    // "low" keeps the cached instructions: another level is cached apart and pays them again
+    effortEdits: env.PRO_EFFORT_EDITS || "low",
+    autoFixRounds: Math.max(config.autoFixRounds + 1, int(env.PRO_AUTO_FIX_ROUNDS, 6)),
     freeRefines: int(env.PRO_FREE_REFINES, 10),
     cost: { convert: Math.max(0, config.cost.convert - 1), optimize: Math.max(0, config.cost.optimize - 1) },
     maxServers: int(env.PRO_MAX_SERVERS, 10),

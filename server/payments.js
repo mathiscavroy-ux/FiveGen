@@ -23,9 +23,11 @@ export function publicPacks() {
 // What a plan brings, shown on the plan cards, from its engine profile (config.tiers).
 export function planPerks(id) {
   const t = config.tiers[id] ?? config.tiers.free;
+  const engine = { free: `Moteur ${t.engineName}`, premium: `Moteur ${t.engineName}, plus puissant`, pro: `Moteur ${t.engineName}, le plus puissant` }[id] ?? `Moteur ${t.engineName}`;
   return [
-    id === "free" ? `Moteur ${t.engineName} (gratuit)` : `Moteur ${t.engineName}, le plus puissant`,
-    `Relecture par ${modelLabel(t.review) || t.engineName}${id === "pro" ? " et réflexion poussée sur les modifications" : ""}`,
+    engine,
+    // free accounts have no separate review pass: say so rather than promise one
+    t.reviewPass === false ? "Vérification et corrections automatiques" : `Relecture complète par ${modelLabel(t.review) || t.engineName}${id === "pro" && /medium|high/.test(t.effortEdits) ? " et réflexion poussée sur les modifications" : ""}`,
     `${t.autoFixRounds} tours de correction automatique`,
     `${t.freeRefines} modifications offertes par script`,
     `Conversion ${t.cost.convert} crédit${t.cost.convert > 1 ? "s" : ""} · optimisation ${t.cost.optimize} crédit${t.cost.optimize > 1 ? "s" : ""}`,

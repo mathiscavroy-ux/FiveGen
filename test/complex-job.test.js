@@ -18,7 +18,10 @@ test("free generations stay within the shared free quota by default", async () =
   const { config } = await import("../server/config.js");
   const free = config.tiers.free;
   assert.equal(free.candidates, 1);
-  assert.equal(free.autoFixRounds, 5);
+  assert.equal(free.autoFixRounds, 4);
+  // each paid plan gets at least as many fixes as the one below it
+  assert.ok(config.tiers.premium.autoFixRounds > free.autoFixRounds);
+  assert.ok(config.tiers.pro.autoFixRounds > config.tiers.premium.autoFixRounds);
   assert.equal(free.parallel, false);
   assert.equal(free.reviewPass, false);
   assert.equal(free.fixEscalation, 1);
