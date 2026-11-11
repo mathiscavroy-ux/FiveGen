@@ -59,6 +59,12 @@ function headersFor(provider) {
   return headers;
 }
 
+// OpenRouter serves one model through several hosts of very different speed (the same
+// GPT-6 Luna script took 73 s on one, 206 s on another): ask for the fastest host first.
+function routeFastest(provider, body) {
+  if (/openrouter\.ai/.test(provider.baseUrl ?? "")) body.provider = { sort: "throughput" };
+}
+
 function extractError(text) {
   try {
     const json = JSON.parse(text);
@@ -140,6 +146,7 @@ export async function runOpenAICompat({ provider, userContent, onEvent, signal, 
   } else if (provider.effort) {
     body.reasoning_effort = provider.effort; // only set when the model lists this level
   }
+  routeFastest(provider, body);
 
   // A stream that stays silent too long is abandoned (504, retryable), otherwise
   // a stuck upstream keeps the client spinning forever.
@@ -259,6 +266,7 @@ export async function completeOpenAICompat({ provider, system, user, maxTokens =
   };
   if (provider.id === "gemini") body.reasoning_effort = "low";
   else if (provider.effort) body.reasoning_effort = provider.effort;
+  routeFastest(provider, body);
   const ctrl = new AbortController();
   const forwardAbort = () => ctrl.abort();
   signal?.addEventListener("abort", forwardAbort, { once: true });

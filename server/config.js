@@ -236,8 +236,9 @@ config.tiers = {
     light: (env.FREE_LIGHT_MODEL ?? FREE_FAST_MODEL).trim(),
     review: (env.FREE_REVIEW_MODEL ?? freeModels[0] ?? "").trim(),
     brief: (env.FREE_BRIEF_MODEL ?? FREE_FAST_MODEL).trim(),
-    effort: "",
-    effortEdits: "",
+    // sent only to models that list these levels (free models usually do not)
+    effort: env.FREE_EFFORT ?? "low",
+    effortEdits: env.FREE_EFFORT_EDITS ?? "low",
     // Free models share a small daily token quota at the provider (500k at xkiro), and every
     // call carries the ~31k-token FiveM instructions. A plan + parallel groups x 2 versions +
     // review + 8 fix rounds burnt the whole day on ONE script, then everything answered 429.
@@ -246,7 +247,8 @@ config.tiers = {
     candidates: Math.max(1, int(env.FREE_CANDIDATES, 1)),
     parallel: env.FREE_PARALLEL === "1",
     reviewPass: env.FREE_REVIEW === "1",
-    fixEscalation: Math.max(0, int(env.FREE_FIX_ESCALATION, 0)),
+    // a fix that made things worse is retried once by the next model of the list
+    fixEscalation: Math.max(0, int(env.FREE_FIX_ESCALATION, 1)),
     freeRefines: config.freeRefines,
     cost: { convert: config.cost.convert, optimize: config.cost.optimize },
     maxServers: int(env.FREE_MAX_SERVERS, 2),

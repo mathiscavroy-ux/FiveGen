@@ -21,7 +21,7 @@ test("free generations stay within the shared free quota by default", async () =
   assert.equal(free.autoFixRounds, 3);
   assert.equal(free.parallel, false);
   assert.equal(free.reviewPass, false);
-  assert.equal(free.fixEscalation, 0);
+  assert.equal(free.fixEscalation, 1);
   // subscribers keep the full pipeline
   assert.notEqual(config.tiers.premium.parallel, false);
   assert.notEqual(config.tiers.pro.reviewPass, false);
