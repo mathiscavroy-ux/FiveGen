@@ -59,10 +59,17 @@ function headersFor(provider) {
   return headers;
 }
 
-// OpenRouter serves one model through several hosts of very different speed (the same
-// GPT-6 Luna script took 73 s on one, 206 s on another): ask for the fastest host first.
+// OpenRouter serves one model through several hosts, each with its own prompt cache. Every
+// call starts with the same ~31k tokens of FiveM instructions, billed a tenth once cached.
+// Measured November 2026 with GPT-6 Luna and a different request each time: OpenAI direct
+// cached the 30.6k-token instructions from the 2nd call on; Amazon Bedrock never did, and
+// letting OpenRouter pick the fastest host left a whole Pro run with 0 cached tokens.
+// So calls go to OpenAI first, with OpenRouter's usual fallback when it is down or does not
+// serve the model. ENGINE_PROVIDER_ORDER="" leaves the routing to OpenRouter (fastest host).
+const PROVIDER_ORDER = (process.env.ENGINE_PROVIDER_ORDER ?? "openai").split(",").map((p) => p.trim()).filter(Boolean);
 function routeFastest(provider, body) {
-  if (/openrouter\.ai/.test(provider.baseUrl ?? "")) body.provider = { sort: "throughput" };
+  if (!/openrouter\.ai/.test(provider.baseUrl ?? "")) return;
+  body.provider = PROVIDER_ORDER.length ? { order: PROVIDER_ORDER, allow_fallbacks: true } : { sort: "throughput" };
 }
 
 function extractError(text) {
