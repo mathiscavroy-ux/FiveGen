@@ -380,3 +380,27 @@
 @media (prefers-reduced-motion: reduce) {
   .c-row:hover::after { translate: none; }
 }
+
+/* ---------- polish: section kickers, feature icons, hovers ---------- */
+.c-kicker {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 18px;
+  color: var(--muted); font: 500 11px/1.2 var(--mono); letter-spacing: 0.12em; text-transform: uppercase;
+}
+.c-kicker b { color: var(--accent-text); font-weight: 500; }
+.c-kicker::after { content: ""; width: 32px; height: 1px; background: var(--line-strong); }
+
+.c-ico {
+  box-sizing: content-box; padding: 8px; border-radius: 10px;
+  background: var(--accent-soft); border: 1px solid rgb(var(--accent-rgb) / 0.22);
+  transition: background 0.25s, color 0.25s, transform 0.25s var(--ease);
+}
+.c-feats > div:hover .c-ico { background: var(--accent); color: var(--on-accent); transform: translateY(-2px); }
+[data-theme="light"] .c-feats > div:hover .c-ico { background: var(--accent-2); }
+.c-feats h3 { transition: color 0.2s; }
+.c-feats > div:hover h3 { color: var(--accent-text); }
+
+.c-pipe > li { transition: background 0.25s; }
+.c-pipe > li:hover { background: linear-gradient(180deg, var(--accent-soft), transparent 75%); }
+
+.c-faq .faq { transition: border-color 0.2s, background 0.2s; }
+.c-faq .faq:hover { border-color: var(--line-strong); }

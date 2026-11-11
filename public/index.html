@@ -117,6 +117,7 @@
 
   <section class="c-sec" id="how">
     <div class="wrap">
+      <p class="c-kicker"><b>01</b>Fonctionnement</p>
       <h2>De l'idée au serveur, sans rien installer.</h2>
       <p class="c-sub">Chaque étape se voit dans le studio. Tu peux arrêter, modifier ou reprendre à tout moment.</p>
       <ol class="c-pipe">
@@ -132,6 +133,7 @@
   <section class="c-sec c-alt" id="features">
     <div class="wrap c-proof">
       <div>
+        <p class="c-kicker"><b>02</b>Sécurité</p>
         <h2>Sécurisé côté serveur, par défaut.</h2>
         <p class="c-sub">Argent, items et récompenses sont validés sur le serveur : distances, jobs, cooldowns, états de mission. Aucun événement exploitable par un tricheur.</p>
         <div class="c-points">
@@ -157,6 +159,7 @@
 
   <section class="c-sec">
     <div class="wrap">
+      <p class="c-kicker"><b>03</b>Fonctionnalités</p>
       <h2>Tout ce qu'un développeur FiveM expérimenté livrerait.</h2>
       <div class="c-feats">
         <div><svg class="c-ico" aria-hidden="true"><use href="#i-layers" /></svg><h3>Tous les frameworks</h3><p>QBCore, Qbox, ESX Legacy, standalone, ou un bridge multi-framework détecté au démarrage.</p></div>
@@ -171,6 +174,7 @@
 
   <section class="c-sec c-alt" id="showcase">
     <div class="wrap">
+      <p class="c-kicker"><b>04</b>Exemple</p>
       <h2>Une phrase suffit.</h2>
       <p class="c-sub">Jobs, interfaces, systèmes complets : tout ce dont un serveur RP a besoin.</p>
       <div class="c-rows">
@@ -189,6 +193,7 @@
 
   <section class="c-sec">
     <div class="wrap">
+      <p class="c-kicker"><b>05</b>Comparatif</p>
       <h2>Pensé uniquement pour FiveM.</h2>
       <p class="c-sub">Un assistant généraliste donne des morceaux de code à assembler. FiveGen livre une ressource qui démarre.</p>
       <div class="c-table-wrap">
@@ -209,6 +214,7 @@
 
   <section class="c-sec c-alt" id="pricing">
     <div class="wrap">
+      <p class="c-kicker"><b>06</b>Tarifs</p>
       <h2>Paie seulement ce que tu génères.</h2>
       <p class="c-sub">1 script = <span class="cost-generate">3</span> crédits, avec <span class="free-refines">3</span> modifications offertes sur chaque script. Corrections gratuites, crédits sans expiration. Prix TTC.</p>
       <div class="c-prices">
@@ -283,6 +289,7 @@
   <section class="c-sec" id="faq">
     <div class="wrap c-faq">
       <div class="c-faq-head">
+        <p class="c-kicker"><b>07</b>FAQ</p>
         <h2>Questions fréquentes</h2>
         <p class="c-sub">Une autre question ? <a id="faqSupport" href="/a-propos">Contacte-nous</a>.</p>
       </div>
@@ -427,16 +434,16 @@
     document.querySelectorAll("#navLinks a").forEach((a) => a.addEventListener("click", () => nav.classList.remove("open")));
 
     // Fade sections in as they enter the viewport (siblings are staggered).
-    const revealable = document.querySelectorAll(".c-sec h2, .c-sec .c-sub, .c-pipe > li, .c-listing, .c-feats, .c-rows, .c-table-wrap, .c-prices, .c-plans, .c-faq .faq");
+    const revealable = document.querySelectorAll(".c-sec .c-kicker, .c-sec h2, .c-sec .c-sub, .c-pipe > li, .c-listing, .c-feats, .c-rows, .c-table-wrap, .c-prices, .c-plans, .c-faq .faq");
     // (with "reduce motion" set, site.css turns it into a plain fade)
     if ("IntersectionObserver" in window) {
       const io = new IntersectionObserver((entries) => {
         // also what is already above the screen (anchor link, restored scroll): it would stay hidden until scrolled back to
         for (const e of entries) if (e.isIntersecting || e.boundingClientRect.bottom < 0) { e.target.classList.add("in"); io.unobserve(e.target); }
-      }, { rootMargin: "0px 0px -8% 0px" });
+      }, { rootMargin: "0px 0px 12% 0px" });
       for (const el of revealable) {
         el.classList.add("reveal");
-        el.style.setProperty("--d", `${[...el.parentElement.children].indexOf(el) % 4 * 70}ms`);
+        el.style.setProperty("--d", `${[...el.parentElement.children].indexOf(el) % 4 * 50}ms`);
         io.observe(el);
       }
     }
