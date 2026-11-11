@@ -35,8 +35,11 @@ export function parseHunks(lines) {
   let cur = null;
   for (const line of lines) {
     const t = line.trim();
-    if (HUNK_SEARCH.test(t)) cur = { search: [], replace: [], side: "search" };
-    else if (cur && cur.side === "search" && HUNK_SPLIT.test(t)) cur.side = "replace";
+    if (HUNK_SEARCH.test(t)) {
+      // a new hunk while the previous one waits for its REPLACE line: the model forgot it
+      if (cur?.side === "replace") hunks.push({ search: cur.search.join("\n"), replace: cur.replace.join("\n") });
+      cur = { search: [], replace: [], side: "search" };
+    } else if (cur && cur.side === "search" && HUNK_SPLIT.test(t)) cur.side = "replace";
     else if (cur && cur.side === "replace" && HUNK_REPLACE.test(t)) {
       hunks.push({ search: cur.search.join("\n"), replace: cur.replace.join("\n") });
       cur = null;

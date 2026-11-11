@@ -365,6 +365,8 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     rounds,
     best,
     retries: state.profile.fixEscalation ?? config.fixEscalation,
+    // a fix costs a fraction of a cent: one failed round no longer ends the corrections
+    patience: state.profile.fixPatience ?? 1,
     fixRound: async (round, errors, attempt = 0) => {
       const model = fixModel(round, attempt);
       const batch = fixBatch(errors);

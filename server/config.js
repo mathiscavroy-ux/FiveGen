@@ -219,7 +219,8 @@ const premium = {
   brief: config.engine.briefModel,
   effort: config.engine.effort,
   effortEdits: config.engine.effortEdits,
-  autoFixRounds: config.autoFixRounds,
+  // up to 4 targeted fixes: each costs a fraction of a cent once the instructions are cached
+  autoFixRounds: Math.max(config.autoFixRounds, int(env.PREMIUM_AUTO_FIX_ROUNDS, 4)),
   // Versions of each client/server group written by different models at the same time;
   // the checks keep the best one. 1: a single version.
   candidates: Math.max(1, int(env.ENGINE_CANDIDATES, 2)),
@@ -242,8 +243,8 @@ config.tiers = {
     // Free models share a small daily token quota at the provider (500k at xkiro), and every
     // call carries the ~31k-token FiveM instructions. A plan + parallel groups x 2 versions +
     // review + 8 fix rounds burnt the whole day on ONE script, then everything answered 429.
-    // Free runs: a single generation call, no separate review, 3 targeted fixes at most.
-    autoFixRounds: Math.max(1, int(env.FREE_AUTO_FIX_ROUNDS, 3)),
+    // Free runs: a single generation call, no separate review, 5 targeted fixes at most.
+    autoFixRounds: Math.max(1, int(env.FREE_AUTO_FIX_ROUNDS, 5)),
     candidates: Math.max(1, int(env.FREE_CANDIDATES, 1)),
     parallel: env.FREE_PARALLEL === "1",
     reviewPass: env.FREE_REVIEW === "1",
@@ -261,7 +262,7 @@ config.tiers = {
     // the main model rereads the resource, edits reason longer, one more fix round
     review: config.engine.model,
     effortEdits: env.PRO_EFFORT_EDITS || "medium",
-    autoFixRounds: config.autoFixRounds + 1,
+    autoFixRounds: Math.max(config.autoFixRounds + 1, int(env.PRO_AUTO_FIX_ROUNDS, 5)),
     freeRefines: int(env.PRO_FREE_REFINES, 10),
     cost: { convert: Math.max(0, config.cost.convert - 1), optimize: Math.max(0, config.cost.optimize - 1) },
     maxServers: int(env.PRO_MAX_SERVERS, 10),

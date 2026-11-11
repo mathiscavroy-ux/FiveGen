@@ -151,3 +151,36 @@ test("the loop ends once every model failed the same round", async () => {
   assert.equal(kept.version, 1);
   assert.deepEqual(attempts, [[1, 0], [1, 1]]);
 });
+
+test("with patience, one failed round does not end the corrections", async () => {
+  const attempts = [];
+  const results = [version(2, problem(1), problem(2)), version(3)];
+  const kept = await fixRounds({
+    rounds: 3,
+    patience: 1,
+    best: version(1, problem(1)),
+    fixRound: async (round) => {
+      attempts.push(round);
+      return results.shift() ?? null;
+    },
+    rollback: async () => {},
+  });
+  assert.equal(kept.version, 3);
+  assert.deepEqual(attempts, [1, 2]);
+});
+
+test("patience runs out after that many failed rounds in a row", async () => {
+  const attempts = [];
+  const kept = await fixRounds({
+    rounds: 5,
+    patience: 1,
+    best: version(1, problem(1)),
+    fixRound: async (round) => {
+      attempts.push(round);
+      return version(10 + round, problem(1), problem(2));
+    },
+    rollback: async () => {},
+  });
+  assert.equal(kept.version, 1);
+  assert.deepEqual(attempts, [1, 2]);
+});

@@ -32,8 +32,11 @@ export function newWarnings(warnings, known) {
 // shape, or null when the engine failed before changing anything. A round that does not
 // beat the best version is undone, then tried again (attempt 1, 2…) up to `retries` times,
 // typically by another model: a model stuck on an error rarely gets it on a second try,
-// another one often does. Returns the version kept.
-export async function fixRounds({ rounds, best, fixRound, rollback, retries = 0 }) {
+// another one often does. patience: rounds that may fail in a row before giving up (an
+// answer is not deterministic: the same errors are often fixed on the next try). Returns
+// the version kept.
+export async function fixRounds({ rounds, best, fixRound, rollback, retries = 0, patience = 0 }) {
+  let failed = 0;
   for (let round = 1; round <= rounds && !best.validation.ok; round++) {
     let improved = false;
     for (let attempt = 0; attempt <= retries && !improved; attempt++) {
@@ -46,7 +49,8 @@ export async function fixRounds({ rounds, best, fixRound, rollback, retries = 0 
         await rollback(best, round, attempt);
       }
     }
-    if (!improved) break;
+    if (improved) failed = 0;
+    else if (++failed > patience) break;
   }
   return best;
 }

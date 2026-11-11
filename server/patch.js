@@ -22,9 +22,14 @@ function findLoose(lines, searchLines) {
   return null;
 }
 
+// A marker line left in the replacement means the model broke the edit format (a missing
+// REPLACE line, a doubled =======): applying it would write "=======" into the code.
+const MARKER = /^\s*(<{5,}\s*SEARCH|={5,}|>{5,}\s*REPLACE)\s*$/m;
+
 function applyHunk(content, { search, replace }) {
   const s = norm(search);
   const r = norm(replace);
+  if (MARKER.test(r) || MARKER.test(s)) return null;
   if (!s.trim()) return content + (content.endsWith("\n") || !content ? "" : "\n") + r + "\n";
   const at = content.indexOf(s);
   if (at >= 0) return content.slice(0, at) + r + content.slice(at + s.length);
