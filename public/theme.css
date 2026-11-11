@@ -9,20 +9,20 @@
 [data-theme="light"] .term {
   color-scheme: dark;
   /* Console: graphite, one signal green that means "checked", amber while working */
-  --bg: #0c0e11;
-  --bg-2: #0f1215;
-  --bg-rgb: 12 14 17;
-  --surface: #13161b;
-  --surface-2: #181c22;
-  --surface-3: #1f242c;
-  --field: #0f1216;
-  --fg: 236 238 241;
-  --line: rgb(236 238 241 / 0.075);
-  --line-strong: rgb(236 238 241 / 0.14);
-  --text: #eceef1;
-  --text-2: #a3abb7;
-  --muted: #7d8592;
-  --faint: #3a414c;
+  --bg: #10110f;
+  --bg-2: #141613;
+  --bg-rgb: 16 17 15;
+  --surface: #191b18;
+  --surface-2: #1e211d;
+  --surface-3: #272b25;
+  --field: #121410;
+  --fg: 240 240 234;
+  --line: rgb(240 240 234 / 0.08);
+  --line-strong: rgb(240 240 234 / 0.15);
+  --text: #f0f0ea;
+  --text-2: #a9ada4;
+  --muted: #82887d;
+  --faint: #454b40;
   --accent: #c6f432;
   --accent-2: #d7fa63;
   --accent-3: #8fe36b;

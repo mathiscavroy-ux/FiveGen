@@ -1335,3 +1335,98 @@ dialog::backdrop { background: rgb(0 0 0 / .55); backdrop-filter: blur(4px); }
 .pack .tagline { background: var(--accent); border-radius: 4px; font-family: var(--mono); font-weight: 500; }
 .pill.tier.premium, .pill.tier.pro { background: var(--accent); }
 .activity.thinking .act-orb::after, .activity.review .act-orb::after { box-shadow: none; }
+
+/* ---------- studio finish: one calm surface system, focus on the work ---------- */
+.topbar { height: 64px; padding-inline: 20px; background: rgb(var(--bg-rgb) / 0.86); }
+.topbar .brand { gap: 10px; }
+.topbar .brand strong { letter-spacing: -0.035em; }
+.topbar .logo { width: 24px; height: 24px; border-radius: 6px; }
+.btn { border-radius: 9px; box-shadow: none; }
+.btn.primary { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22); }
+.btn.primary:hover:not(:disabled) { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), 0 10px 26px -18px rgb(var(--accent-rgb) / 0.85); }
+.theme-toggle { border-radius: 9px; }
+.sidebar { padding: 20px 14px; gap: 14px; }
+.sidebar-head { font-size: 12px; }
+.project-list { gap: 4px; }
+.project-list li { padding: 11px 12px; }
+.project-list li.active { box-shadow: inset 2px 0 0 var(--accent); }
+
+#viewNew { padding: 64px 32px 56px; background: radial-gradient(900px 380px at 50% -12%, rgb(var(--accent-rgb) / 0.1), transparent 72%); }
+.composer-wrap { max-width: 800px; }
+.composer-head { margin-bottom: 30px; }
+.composer-head .wz-kicker { display: inline-flex; align-items: center; gap: 9px; margin-bottom: 14px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.composer-head .wz-kicker::before { content: ""; width: 18px; height: 1px; background: var(--accent); }
+.composer-head h1 { font-size: clamp(34px, 4vw, 46px); letter-spacing: -0.052em; line-height: 1.04; }
+.composer-head p { max-width: 590px; font-size: 15px; line-height: 1.65; }
+.composer { border-radius: 18px; box-shadow: 0 20px 60px -38px rgb(0 0 0 / calc(0.9 * var(--shade-k))); }
+.composer textarea { min-height: 168px; padding: 22px 22px 8px; font-size: 16px; }
+.composer-bar { padding: 12px 14px 14px 22px; }
+.composer-bar .btn { height: 42px; padding-inline: 18px; }
+.composer-steps { margin-top: 28px; gap: 20px; }
+.composer-steps li { position: relative; border: 0; border-top: 1px solid var(--border-strong); border-radius: 0; padding: 18px 0 0; background: none; box-shadow: none; }
+.composer-steps li:hover { transform: none; border-color: rgb(var(--accent-rgb) / 0.55); }
+.composer-steps span { width: 26px; height: 26px; border-radius: 7px; }
+.composer-steps b { font-size: 14px; }
+.import-box { margin-top: 32px; background: transparent; box-shadow: none; }
+
+.studio-head { padding: 12px 18px; background: var(--panel); box-shadow: none; }
+.sh-title h2 { font-size: 16px; }
+.studio-head .viewswitch { border-radius: 10px; }
+.studio-head .vs.active { box-shadow: inset 0 1px 0 rgb(var(--fg) / 0.06); }
+.files { background: var(--bg-2); }
+.panel-head { min-height: 40px; }
+.editor-head { background: var(--bg-2); }
+.editor-host .CodeMirror { font-size: 13.5px; line-height: 1.65; }
+.inspector { background: var(--bg-2); }
+.inspector .tabs { min-height: 45px; }
+.inspector .pipe-metrics { padding-block: 12px; }
+.activity { border-radius: 10px; box-shadow: none; }
+.raw, .install-check { border-radius: 10px; }
+.refine { background: var(--panel); }
+.refine textarea { min-height: 88px; }
+
+.pane-analysis { padding: 24px; }
+.an-hero, .an-card { border-radius: 12px; box-shadow: none; }
+.an-hero { padding: 22px; }
+.an-kpis b { font-size: 28px; font-weight: 600; letter-spacing: -0.045em; }
+.wizard { border-radius: 18px; box-shadow: 0 20px 60px -40px rgb(0 0 0 / calc(0.8 * var(--shade-k))); }
+.wz-stage { padding: 40px 44px 24px; }
+.wz-title { font-size: 28px; letter-spacing: -0.04em; }
+.wz-opt-body { border-radius: 12px; }
+
+.st-shell { grid-template-columns: 220px minmax(0, 840px); gap: 56px; padding-top: 48px; }
+.st-main { gap: 56px; }
+.st-title { font-size: 24px; letter-spacing: -0.04em; }
+.st-hero { padding: 28px; border-radius: 16px; background: radial-gradient(600px 220px at 0% 0%, var(--accent-soft), transparent 72%), var(--panel); }
+.st-avatar { border-radius: 16px; background: var(--accent); box-shadow: none; }
+.st-hero-text h1 { font-size: 22px; letter-spacing: -0.035em; }
+.st-card { border-radius: 14px; box-shadow: none; }
+.st-theme { border-radius: 12px; }
+.st-theme.active { box-shadow: 0 0 0 3px var(--accent-soft); }
+
+@media (max-width: 980px) {
+  .topbar { height: 58px; }
+  #viewNew { padding: 40px 20px 48px; }
+  .composer-head h1 { font-size: clamp(30px, 6vw, 40px); }
+  .composer-steps { gap: 16px; }
+  .wz-stage { padding: 28px 24px 18px; }
+  .st-shell { gap: 24px; padding-top: 24px; }
+}
+@media (max-width: 640px) {
+  #viewNew { padding: 32px 16px 44px; }
+  .composer-head { margin-bottom: 24px; }
+  .composer-head h1 { font-size: 32px; }
+  .composer textarea { min-height: 150px; padding: 18px 16px 8px; }
+  .composer-bar { padding: 12px; }
+  .composer-steps { grid-template-columns: 1fr; gap: 14px; margin-top: 28px; }
+  .composer-steps li { padding-top: 14px; }
+  .import-box { margin-top: 28px; padding: 16px; }
+  .pane-analysis { padding: 16px; }
+  .wz-stage { padding: 24px 18px 14px; }
+  .wz-title { font-size: 23px; }
+  .st-main { gap: 44px; }
+  .st-hero { padding: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-steps li:hover { transform: none; }
+}

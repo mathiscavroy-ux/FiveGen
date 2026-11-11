@@ -501,3 +501,47 @@ table.data .input { height: 34px; }
   footer { padding: 48px 0 calc(84px + env(safe-area-inset-bottom)); }
   .foot-bottom { flex-direction: column; gap: 6px; }
 }
+
+/* ---------- editorial finish: confident type, quiet chrome, useful motion ---------- */
+.wrap { width: min(1240px, calc(100% - 64px)); }
+.nav .wrap { height: 72px; }
+.nav.scrolled, .nav:not(.l-nav) { background: rgb(var(--bg-rgb) / 0.82); }
+.brand { letter-spacing: -0.035em; }
+.btn { border-radius: 10px; }
+.btn.big { height: 50px; padding-inline: 24px; border-radius: 12px; }
+.btn.primary { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.24); }
+.btn.primary:hover { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.24), 0 10px 30px -18px rgb(var(--accent-rgb) / 0.9); }
+.theme-toggle, .l-burger { border-radius: 10px; }
+
+section.block { padding-block: 144px; }
+section.block h2 { letter-spacing: -0.05em; }
+.tile, .item, .price, .plan-card, .stat, .compare-wrap, details.qa { box-shadow: none; }
+.tile, .price, .item { border-radius: 16px; }
+.tile:hover, .price:hover, .item:hover { box-shadow: 0 22px 50px -34px rgb(0 0 0 / calc(0.9 * var(--shade-k))); }
+
+.auth-page { grid-template-columns: minmax(420px, 0.9fr) minmax(0, 1.1fr); }
+.auth-aside { padding: 56px clamp(40px, 5vw, 80px); background: var(--bg); }
+.auth-aside h2 { font-size: clamp(38px, 3.8vw, 58px); line-height: 1; letter-spacing: -0.055em; max-width: 560px; }
+.auth-aside li { line-height: 1.5; }
+.auth-main { background: var(--bg-2); }
+.auth-card { width: min(420px, 100%); }
+.auth-card h1 { font-size: 34px; letter-spacing: -0.045em; }
+.auth-card .tabs { border-radius: 12px; }
+.auth-card #submit { margin-top: 2px; }
+
+@media (max-width: 900px) {
+  .wrap { width: calc(100% - 40px); }
+  .auth-page { grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.15fr); }
+  .auth-aside { padding: 40px 32px; }
+}
+@media (max-width: 760px) {
+  .wrap { width: calc(100% - 32px); }
+  .nav .wrap { height: 64px; }
+  section.block { padding-block: 88px; }
+  .auth-page { grid-template-columns: 1fr; }
+  .auth-main { min-height: 100svh; padding: 72px 20px 40px; background: var(--bg); }
+  .auth-card h1 { font-size: 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn.primary:hover { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.24); }
+}
