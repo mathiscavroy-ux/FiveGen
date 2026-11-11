@@ -104,3 +104,26 @@ test("the engine name shown to clients follows the model in use", async () => {
   assert.equal(modelLabel("nvidia/nemotron-3-ultra-550b-a55b:free"), "Nemotron 3 Ultra");
   assert.equal(modelLabel("deepseek-ai/deepseek-v4.1-flash@nim"), "Deepseek V4.1 Flash");
 });
+
+test("free models missing at the provider are replaced by free models it serves", async () => {
+  const { resolveFreeTier } = await import("../server/provider.js");
+  const logs = [];
+  // ids written for another provider: none is listed here
+  const tier = { models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "cohere/north-mini-code:free"], light: "nvidia/nemotron-3.5-lightning:free", review: "x", brief: "y" };
+  await resolveFreeTier(tier, ["z-ai/glm-5.3", "vendor/free-model:free"], (m) => logs.push(m));
+  // the paid model of the fallback list is never given to free accounts
+  assert.deepEqual(tier.models, ["vendor/free-model:free"]);
+  assert.equal(tier.light, "vendor/free-model:free");
+  assert.equal(tier.review, "vendor/free-model:free");
+  assert.equal(tier.brief, "vendor/free-model:free");
+  assert.equal(logs.length, 1);
+});
+
+test("a free model listed without its ':free' suffix is kept, served ones stay untouched", async () => {
+  const { resolveFreeTier } = await import("../server/provider.js");
+  const tier = { models: ["vendor/free-model:free"], light: "vendor/free-model:free", review: "vendor/free-model:free", brief: "" };
+  const logs = [];
+  await resolveFreeTier(tier, [], (m) => logs.push(m));
+  assert.deepEqual(tier.models, ["vendor/free-model:free"]);
+  assert.equal(logs.length, 0);
+});

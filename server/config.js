@@ -202,6 +202,12 @@ export const modelLabel = (id) =>
 const FREE_MODELS = "nvidia/nemotron-3-ultra-550b-a55b:free,cohere/north-mini-code:free,recursive/flint-v1.0:free";
 const FREE_FAST_MODEL = "nvidia/nemotron-3.5-lightning:free";
 const freeModels = models(env.FREE_MODELS, FREE_MODELS);
+// Free coding models of other providers, best first: used when none of FREE_MODELS is served
+// by the configured provider (a gateway that lists them under other ids, at price 0).
+// Only the ones listed at no cost are ever taken (see resolveFreeTier). Measured November 2026
+// on the same ESX job (one pass, before fixes): Devstral 32 s / 4 errors, Codestral 22 s / 3,
+// Mistral Medium 3.5 72 s / 8, Mistral Large 84 s / 9 (syntax), North Mini Code 171 s / 13.
+config.freeFallbackModels = models(env.FREE_FALLBACK_MODELS, "mistralai/devstral-medium,mistralai/codestral-2508,mistralai/mistral-medium-3.5");
 
 const premium = {
   id: "premium",
@@ -232,9 +238,15 @@ config.tiers = {
     brief: (env.FREE_BRIEF_MODEL ?? FREE_FAST_MODEL).trim(),
     effort: "",
     effortEdits: "",
-    autoFixRounds: Math.max(config.autoFixRounds, int(env.FREE_AUTO_FIX_ROUNDS, 8)),
-    // Two free candidates catch each other's mistakes; the validator keeps the better one.
-    candidates: Math.max(1, int(env.FREE_CANDIDATES, 2)),
+    // Free models share a small daily token quota at the provider (500k at xkiro), and every
+    // call carries the ~31k-token FiveM instructions. A plan + parallel groups x 2 versions +
+    // review + 8 fix rounds burnt the whole day on ONE script, then everything answered 429.
+    // Free runs: a single generation call, no separate review, 3 targeted fixes at most.
+    autoFixRounds: Math.max(1, int(env.FREE_AUTO_FIX_ROUNDS, 3)),
+    candidates: Math.max(1, int(env.FREE_CANDIDATES, 1)),
+    parallel: env.FREE_PARALLEL === "1",
+    reviewPass: env.FREE_REVIEW === "1",
+    fixEscalation: Math.max(0, int(env.FREE_FIX_ESCALATION, 0)),
     freeRefines: config.freeRefines,
     cost: { convert: config.cost.convert, optimize: config.cost.optimize },
     maxServers: int(env.FREE_MAX_SERVERS, 2),

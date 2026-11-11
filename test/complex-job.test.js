@@ -12,13 +12,19 @@ const police = {
   answers: [],
 };
 
-test("free generations compare two candidates and get eight targeted fix rounds by default", async () => {
-  process.env.FREE_CANDIDATES = "";
-  process.env.FREE_AUTO_FIX_ROUNDS = "";
-  process.env.AUTO_FIX_ROUNDS = "";
+// Free models share a small daily token quota: one script must not spend it all.
+test("free generations stay within the shared free quota by default", async () => {
+  for (const k of ["FREE_CANDIDATES", "FREE_AUTO_FIX_ROUNDS", "AUTO_FIX_ROUNDS", "FREE_PARALLEL", "FREE_REVIEW", "FREE_FIX_ESCALATION"]) process.env[k] = "";
   const { config } = await import("../server/config.js");
-  assert.equal(config.tiers.free.candidates, 2);
-  assert.equal(config.tiers.free.autoFixRounds, 8);
+  const free = config.tiers.free;
+  assert.equal(free.candidates, 1);
+  assert.equal(free.autoFixRounds, 3);
+  assert.equal(free.parallel, false);
+  assert.equal(free.reviewPass, false);
+  assert.equal(free.fixEscalation, 0);
+  // subscribers keep the full pipeline
+  assert.notEqual(config.tiers.premium.parallel, false);
+  assert.notEqual(config.tiers.pro.reviewPass, false);
 });
 
 test("police jobs get a self-contained architecture and an explicit server-authority contract", () => {

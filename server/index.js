@@ -7,7 +7,7 @@ import { CATALOG, systemFor, buildGenerateMessage, buildRefineMessage, buildFixM
 import { applyEdits } from "./patch.js";
 import { runEngine, runBrief, engineStatus, EngineError, onEngineUsage, completeText } from "./engine.js";
 import { LESSON_SYSTEM, buildLessonMessage, cleanRule, fixedFamilies, lessonEffect, namesIn, snippetAround } from "./lessons.js";
-import { providerUsage, modelPricing, modelAvailable } from "./provider.js";
+import { providerUsage, modelPricing, modelAvailable, resolveFreeTier } from "./provider.js";
 import { generateParallel } from "./parallel.js";
 import { coolingList } from "./cooldown.js";
 import { errorsBlock, frequentErrors } from "./quality.js";
@@ -279,7 +279,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
     send("status", `Serveur « ${inventory.server} » lu : ${count(n.resources, "ressource")}, ${count(n.jobs, "job")}, ${count(n.items, "item")}.`);
   }
   // a new resource: plan, then groups of files written at the same time (null: single call)
-  const parallel = kind === "generate" && config.parallelGeneration ? await generateParallel({ spec, send, signal, meta: { userId, projectId }, profile: state.profile, system: state.system }) : null;
+  const parallel = kind === "generate" && config.parallelGeneration && state.profile.parallel !== false ? await generateParallel({ spec, send, signal, meta: { userId, projectId }, profile: state.profile, system: state.system }) : null;
   const result = parallel ?? (await runEngine({ userContent: userContent + inventoryBlock(inventory, `${project.spec.description ?? ""} ${instruction ?? ""}`) + spotsBlock(spots) + placesBlock({ name: project.name, type: project.spec.type, text: `${project.spec.description ?? ""} ${instruction ?? ""}`, spots }) + errorsBlock(pastErrors), onEvent: send, signal, meta: { userId, projectId, purpose: kind }, profile: state.profile, system: state.system }));
   if (!result.files.length && !result.deletes.length && !result.edits.length) {
     throw new EngineError("Aucun fichier n'a été produit. Précise ta demande et réessaie, tes crédits ont été rendus.", "empty output");
@@ -351,7 +351,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   // for something else. With no new warning there is nothing to review: that call is saved.
   const known = kind === "generate" ? [] : (project.validation?.warnings ?? []);
   const warnings = newWarnings(best.validation.warnings, known);
-  const reviewed = config.reviewPass && (kind === "generate" || (kind !== "fix" && config.reviewChanges && warnings.length > 0));
+  const reviewed = config.reviewPass && state.profile.reviewPass !== false && (kind === "generate" || (kind !== "fix" && config.reviewChanges && warnings.length > 0));
 
   const rounds = state.profile.autoFixRounds;
   const reviewModel = (await modelAvailable(state.profile.review)) ? state.profile.review : null;
@@ -364,7 +364,7 @@ async function runPipeline({ userId, projectId, userContent, kind, instruction, 
   best = await fixRounds({
     rounds,
     best,
-    retries: config.fixEscalation,
+    retries: state.profile.fixEscalation ?? config.fixEscalation,
     fixRound: async (round, errors, attempt = 0) => {
       const model = fixModel(round, attempt);
       const batch = fixBatch(errors);
@@ -1235,4 +1235,11 @@ app.listen(config.port, config.host, async () => {
   if (!config.adminEmails.length) console.log("  ⚠ ADMIN_EMAIL non défini : aucun compte administrateur.");
   const status = await engineStatus();
   console.log(status.ok ? `  Moteur : OK (${status.mode})\n` : `  ⚠ Moteur : ${status.error}\n`);
+  if (!config.mock) {
+    // free models written for another provider would all answer 404: keep the ones really served
+    const free = config.tiers.free;
+    await resolveFreeTier(free, config.freeFallbackModels, console.warn, { explicit: Boolean(process.env.FREE_MODELS) }).catch((err) => console.warn("[fivegen] modèles gratuits non vérifiés :", err.message));
+    if (!process.env.FREE_ENGINE_NAME) free.engineName = modelLabel(free.models[0]);
+    console.log(`  Comptes gratuits : ${free.models.join(", ")}\n`);
+  }
 });

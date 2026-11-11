@@ -127,6 +127,7 @@ function readModel(m, suffix, into) {
     output: perMillion(perToken ? p.completion : p.output),
     cacheRead: perMillion(perToken ? p.input_cache_read : p.cache_read),
     cacheWrite: perMillion(perToken ? p.input_cache_write : p.cache_write),
+    context: num(m.context_length),
     name: m.display_name ?? m.name ?? id,
     efforts,
   });
@@ -135,6 +136,44 @@ function readModel(m, suffix, into) {
 /** True when the provider's model list has this model (no list, no match). */
 export async function modelAvailable(model) {
   return Boolean(model) && (await modelPricing()).has(model);
+}
+
+const isFreePrice = (p) => Boolean(p) && p.input === 0 && p.output === 0;
+
+/**
+ * Keeps the free tier on models the provider really serves at no cost. A list written for
+ * one provider (OpenRouter's ":free" ids) sent to another answers 404 on every model: free
+ * accounts then get nothing, or a slow chain of refusals. Models missing from the provider's
+ * list are dropped ("x:free" falls back to "x" when that one is free), and when none is left
+ * the free models of `preferred` that the provider lists take over.
+ * Mutates and returns the tier; a provider without a model list leaves it untouched.
+ */
+export async function resolveFreeTier(tier, preferred = [], log = console.warn, { explicit = false } = {}) {
+  const pricing = await modelPricing();
+  if (!pricing.size || !tier) return tier;
+  const served = (m) => {
+    if (!m) return null;
+    if (pricing.has(m)) return m;
+    const bare = m.replace(/:free$/, "");
+    return bare !== m && isFreePrice(pricing.get(bare)) ? bare : null;
+  };
+  const before = [...tier.models];
+  const kept = tier.models.map(served).filter(Boolean);
+  const fallbacks = preferred.filter((m) => isFreePrice(pricing.get(m)));
+  // A list the owner wrote (FREE_MODELS) keeps its order, the measured models only back it up.
+  // The built-in list targets OpenRouter: elsewhere the measured models go first, since a
+  // model of that list served by another gateway may be a weak one (North Mini Code).
+  let models = [...new Set(explicit || kept.length === tier.models.length ? [...kept, ...fallbacks] : [...fallbacks, ...kept])];
+  if (!models.length) {
+    log("[fivegen] ⚠ aucun modèle gratuit disponible chez le fournisseur : les comptes gratuits ne pourront pas générer (règle FREE_MODELS).");
+    return tier;
+  }
+  tier.models = models;
+  tier.light = served(tier.light) ?? models[models.length > 1 ? 1 : 0];
+  tier.review = served(tier.review) ?? models[0];
+  tier.brief = served(tier.brief) ?? tier.light;
+  if (before.join(",") !== models.join(",")) log(`[fivegen] modèles gratuits ajustés au fournisseur : ${before.join(", ")} -> ${models.join(", ")}`);
+  return tier;
 }
 
 /**

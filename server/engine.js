@@ -195,6 +195,9 @@ export async function runEngine({ userContent, onEvent, signal, meta, model: pre
           i = other - 1;
           continue;
         }
+        // every model left is at its limit (a daily quota shared by all free models):
+        // retrying them only makes the client wait before the same refusal
+        if (!attempts.some((a, j) => j > i && a?.provider === fallback)) break;
       }
       if (!isOverload(err)) {
         // This model refused for itself (not allowed for the account, unknown): the next model.
