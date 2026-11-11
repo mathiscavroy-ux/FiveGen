@@ -1125,6 +1125,26 @@ app.get("/api/admin/usage", requireUser, requireAdmin, async (req, res) => {
       smokeTest: process.env.SMOKE_TEST !== "0",
       maxTokens: config.engine.maxTokens,
     },
+    // what each plan runs on, and how many accounts pay for it
+    plans: ["free", "premium", "pro"].map((id) => {
+      const t = config.tiers[id];
+      const plan = config.plans.find((p) => p.id === id);
+      return {
+        id,
+        label: t.label,
+        engineName: t.engineName,
+        models: t.models,
+        review: t.reviewPass === false ? null : t.review,
+        parallel: t.parallel !== false && config.parallelGeneration,
+        autoFixRounds: t.autoFixRounds,
+        freeRefines: t.freeRefines,
+        maxServers: t.maxServers,
+        price: plan?.price ?? 0,
+        monthlyCredits: plan?.credits ?? 0,
+        features: Object.entries(t.features ?? {}).filter(([, on]) => on === true).map(([k]) => k),
+      };
+    }),
+    subscribers: db.stats().subscribers,
     // models set aside until their limit resets (free quotas of the day, per-minute limits)
     cooling: coolingList(),
     revenue30d: db.stats().revenue30d,

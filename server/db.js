@@ -194,7 +194,8 @@ export function addCredits(userId, amount) {
 export function listUsers() {
   return db
     .prepare(
-      `SELECT u.id, u.email, u.credits, u.is_admin, u.created_at, u.email_verified, u.blocked, u.signup_ip,
+      `SELECT u.id, u.email, u.credits, u.is_admin, u.created_at, u.email_verified, u.blocked, u.signup_ip, u.sub_plan, u.sub_status,
+              CASE WHEN u.is_admin = 1 THEN 'admin' WHEN u.sub_status IN ('active', 'trialing', 'past_due') THEN COALESCE(u.sub_plan, 'premium') ELSE 'free' END AS plan,
               (SELECT COUNT(*) FROM generations g WHERE g.user_id = u.id AND g.status = 'ok') AS generations
        FROM users u ORDER BY u.created_at DESC`,
     )
@@ -400,6 +401,13 @@ export function usageSummary() {
          FROM engine_calls WHERE created_at > ? GROUP BY day ORDER BY day`,
       )
       .all(since(14)),
+    // engine spend per plan the accounts are on today (admin: the owner's own tests)
+    byPlan: db
+      .prepare(
+        `SELECT CASE WHEN u.is_admin = 1 THEN 'admin' WHEN u.sub_status IN ('active', 'trialing', 'past_due') THEN COALESCE(u.sub_plan, 'premium') ELSE 'free' END AS plan, COUNT(*) AS calls, SUM(c.cost_usd) AS cost, COUNT(DISTINCT c.project_id) AS projects
+         FROM engine_calls c JOIN users u ON u.id = c.user_id WHERE c.created_at > ? GROUP BY plan`,
+      )
+      .all(month),
     topUsers: db
       .prepare(
         `SELECT u.id, u.email, COUNT(*) AS calls, SUM(c.cost_usd) AS cost
@@ -451,6 +459,10 @@ export function stats() {
     paymentsCount: one("SELECT COUNT(*) FROM payments"),
     revenueTotal: one("SELECT COALESCE(SUM(amount), 0) FROM payments"),
     revenue30d: one("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE created_at > ?", new Date(Date.now() - 30 * 86400000).toISOString()),
+    // paying subscribers per plan (past_due: Stripe still retrying, the plan is kept)
+    subscribers: Object.fromEntries(
+      db.prepare("SELECT COALESCE(sub_plan, 'premium') AS plan, COUNT(*) AS n FROM users WHERE sub_status IN ('active', 'trialing', 'past_due') GROUP BY plan").all().map((r) => [r.plan, r.n]),
+    ),
     recentErrors: db
       .prepare("SELECT g.created_at, u.email, g.kind, g.error FROM generations g JOIN users u ON u.id = g.user_id WHERE g.status = 'error' ORDER BY g.id DESC LIMIT 10")
       .all(),

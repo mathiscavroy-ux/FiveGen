@@ -64,13 +64,17 @@
         <div id="quotaExtra" class="quota-extra"></div>
       </div>
       <div id="usageKpis" class="kpis"></div>
+      <div class="card">
+        <div class="card-head"><h2>Offres · moteur et coût sur 30 jours</h2><span class="muted">coût selon l'offre actuelle de chaque compte</span></div>
+        <div class="table-wrap"><table class="data"><thead><tr><th>Offre</th><th>Modèles</th><th>Relecture</th><th>Corrections</th><th>Crédits / mois</th><th>Abonnés</th><th>Coût moteur</th><th>Débloque</th></tr></thead><tbody id="planRows"></tbody></table></div>
+      </div>
       <div class="grid-2">
         <div class="card">
           <div class="card-head"><h2>Coût par étape · 30 jours</h2></div>
           <div id="byPurpose" class="bars"></div>
         </div>
         <div class="card">
-          <div class="card-head"><h2>Réglages du moteur</h2></div>
+          <div class="card-head"><h2>Réglages généraux</h2></div>
           <dl id="engineSettings" class="settings"></dl>
         </div>
       </div>
@@ -116,7 +120,7 @@
     <!-- users -->
     <section class="page hidden" data-page="users">
       <div class="toolbar"><input id="userSearch" class="input" placeholder="Rechercher un e-mail ou une adresse IP…" /><span id="userCount" class="muted"></span></div>
-      <div class="table-wrap"><table class="data"><thead><tr><th>E-mail</th><th>Statut</th><th>Crédits</th><th>Scripts</th><th>Inscrit</th><th>Ajuster</th><th></th></tr></thead><tbody id="users"></tbody></table></div>
+      <div class="table-wrap"><table class="data"><thead><tr><th>E-mail</th><th>Offre</th><th>Statut</th><th>Crédits</th><th>Scripts</th><th>Inscrit</th><th>Ajuster</th><th></th></tr></thead><tbody id="users"></tbody></table></div>
     </section>
 
     <!-- generations -->

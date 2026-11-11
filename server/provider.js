@@ -57,6 +57,8 @@ export async function providerUsage({ force = false } = {}) {
         windows: [],
         freeRequests: free ? { used: num(free.used), limit: num(free.limit), remaining: num(free.remaining) } : null,
         wallet: k.limit_remaining == null ? null : { balance: num(k.limit_remaining), held: 0 },
+        // the key's spending cap (set on openrouter.ai), shown as a meter
+        keyLimit: num(k.limit),
         spent: num(k.usage),
         fetchedAt: new Date().toISOString(),
       };

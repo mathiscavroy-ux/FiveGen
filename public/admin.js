@@ -68,16 +68,19 @@ function meter(w, big) {
   const [cls, label] = quotaState(w);
   const reset = Math.max(0, (w.resetsInSec ?? 0) - (Date.now() - usageAt) / 1000);
   return `<div class="meter-block">
-    <div class="meter-head"><b>Fenêtre ${esc(windowName(w.windowSec))}</b><span class="state ${cls}">${label}</span></div>
+    <div class="meter-head"><b>${w.kind === "credit" ? "Crédit de la clé" : `Fenêtre ${esc(windowName(w.windowSec))}`}</b><span class="state ${cls}">${label}</span></div>
     ${big ? `<div class="meter-value">${usd(w.remaining)} <small>restants sur ${usd(w.cap)}</small></div>` : ""}
     <div class="meter ${cls === "good" ? "" : cls}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${used.toFixed(0)}" aria-label="Quota utilisé"><i style="width:${used.toFixed(1)}%"></i></div>
-    <div class="meter-foot"><span><strong>${used.toFixed(1)} %</strong> utilisé · ${usd(w.spent)}</span><span data-reset="${w.resetsInSec ?? 0}">remise à zéro dans ${span(reset)}</span></div>
+    <div class="meter-foot"><span><strong>${used.toFixed(1)} %</strong> utilisé · ${usd(w.spent)}</span>${w.resetsInSec == null ? "<span>recharge sur openrouter.ai</span>" : `<span data-reset="${w.resetsInSec}">remise à zéro dans ${span(reset)}</span>`}</div>
   </div>`;
 }
 
 function renderQuota() {
   const p = usage?.provider;
   const ok = p?.available;
+  if (ok && !p.windows.length && p.wallet && p.keyLimit) {
+    p.windows = [{ kind: "credit", label: "Crédit", windowSec: 0, cap: p.keyLimit, remaining: p.wallet.balance, spent: Math.max(0, p.keyLimit - p.wallet.balance), resetsInSec: null }];
+  }
   const unavailable = `<p class="empty">${esc(p?.error ?? "Quota indisponible.")}</p>`;
   $("#quotaMini").innerHTML = ok ? p.windows.map((w) => meter(w, false)).join("") : unavailable;
   $("#quotaFull").innerHTML = ok ? p.windows.map((w) => meter(w, true)).join("") : unavailable;
@@ -99,7 +102,7 @@ function renderQuota() {
   $("#sideQuota").classList.toggle("hidden", !tight);
   if (tight) {
     const [cls] = quotaState(tight);
-    $("#sideQuota").innerHTML = `<b>Quota moteur · ${esc(windowName(tight.windowSec))}</b><div class="meter ${cls === "good" ? "" : cls}"><i style="width:${Math.min(100, (tight.spent / tight.cap) * 100).toFixed(1)}%"></i></div><span>${usd(tight.remaining)} restants</span>`;
+    $("#sideQuota").innerHTML = `<b>${tight.kind === "credit" ? "Crédit moteur" : `Quota moteur · ${esc(windowName(tight.windowSec))}`}</b><div class="meter ${cls === "good" ? "" : cls}"><i style="width:${Math.min(100, (tight.spent / tight.cap) * 100).toFixed(1)}%"></i></div><span>${usd(tight.remaining)} restants</span>`;
   }
 }
 
@@ -183,6 +186,8 @@ async function loadOverview() {
     kpi("Scripts livrés · 24 h", int(s.generationsToday), `${int(s.generationsTotal)} au total`),
     kpi("Échecs · 24 h", int(s.failuresToday)),
     kpi("Chiffre d'affaires · 30 j", money(s.revenue30d), `${money(s.revenueTotal)} au total`),
+    kpi("Abonnés", int((s.subscribers?.premium ?? 0) + (s.subscribers?.pro ?? 0)), `${int(s.subscribers?.premium ?? 0)} Premium · ${int(s.subscribers?.pro ?? 0)} Pro`),
+    kpi("Revenu mensuel récurrent", money((usage.plans ?? []).reduce((n, p) => n + (s.subscribers?.[p.id] ?? 0) * p.price, 0)), "abonnements actifs, TTC"),
     kpi("Coût du moteur · 30 j", usd(u.month.cost), `${int(u.month.calls)} appels`, true),
     kpi("Coût moyen d'un script", u.scriptCost === null ? "—" : usd(u.scriptCost), "génération + relecture + corrections"),
     kpi("Marge brute · 30 j", money(s.revenue30d / (1 + VAT) - costEurCents), "estimation hors TVA 20 %, 1 $ ≈ 0,92 €"),
@@ -216,15 +221,16 @@ async function loadEngine() {
         .join("")
     : `<p class="empty">Aucun appel sur 30 jours.</p>`;
 
+  renderPlanRows(u);
   const price = e.price ? `${usd(e.price.input)} / ${usd(e.price.output)}` : "inconnu";
   $("#engineSettings").innerHTML = [
-    ["Modèle principal", `<code>${esc(e.model)}</code>`],
+    ["Modèle Premium (ENGINE_MODEL)", `<code>${esc(e.model)}</code>`],
     ["Prix par million de tokens (entrée / sortie)", price],
     ["Prix du cache (lecture)", e.price?.cacheRead != null ? usd(e.price.cacheRead) : "—"],
     ["Modèles de repli", e.fallbackModels.length ? e.fallbackModels.map((m) => `<code>${esc(m)}</code>`).join(" ") : "aucun"],
     ["Relecture après génération", e.reviewPass ? "activée" : "désactivée (REVIEW_PASS=0)"],
     ["Relecture après modification", e.reviewPass && e.reviewChanges ? "activée" : "désactivée (REVIEW_CHANGES=0)"],
-    ["Tours de correction automatique", int(e.autoFixRounds)],
+    ["Tours de correction minimum (AUTO_FIX_ROUNDS)", int(e.autoFixRounds)],
     ["Test d'exécution FiveM simulé", e.smokeTest ? "activé" : "désactivé (SMOKE_TEST=0)"],
     ["Tokens max par réponse", int(e.maxTokens)],
   ]
@@ -293,6 +299,28 @@ async function loadLessons() {
 }
 
 let users = [];
+const PLAN_TAGS = { free: '<span class="tag">Gratuit</span>', premium: '<span class="tag ok">Premium</span>', pro: '<span class="tag ok">Pro</span>', admin: '<span class="tag">admin · Pro</span>' };
+const FEATURE_NAMES = { import: "import", convert: "conversion", optimize: "optimisation", editor: "éditeur", restore: "historique complet", autoDeploy: "déploiement auto", inventory: "inventaire du serveur", runtimeErrors: "erreurs du serveur" };
+
+function renderPlanRows(u) {
+  const spend = Object.fromEntries((u.byPlan ?? []).map((p) => [p.plan, p]));
+  const subs = usage.subscribers ?? {};
+  $("#planRows").innerHTML = (usage.plans ?? [])
+    .map((p) => {
+      const cost = spend[p.id];
+      const admin = p.id === "pro" && spend.admin ? `<div class="muted">+ ${usd(spend.admin.cost)} (tes tests admin)</div>` : "";
+      return `<tr><td><b>${esc(p.label)}</b>${p.price ? `<div class="muted">${money(p.price)} / mois</div>` : ""}</td>
+        <td class="mono">${p.models.map(esc).join("<br>")}</td>
+        <td>${p.review ? `<code>${esc(p.review)}</code>` : "non"}${p.parallel ? "" : '<div class="muted">écriture en une passe</div>'}</td>
+        <td>${int(p.autoFixRounds)} tours</td>
+        <td>${p.monthlyCredits ? int(p.monthlyCredits) : "—"}</td>
+        <td>${p.id === "free" ? "—" : int(subs[p.id] ?? 0)}</td>
+        <td>${cost ? `${usd(cost.cost)}<div class="muted">${int(cost.projects)} script(s) · ${int(cost.calls)} appels</div>` : "—"}${admin}</td>
+        <td class="muted">${p.features.map((f) => FEATURE_NAMES[f] ?? f).join(", ") || "génération, aperçu, ZIP"}</td></tr>`;
+    })
+    .join("");
+}
+
 const userStatus = (u) => (u.blocked ? '<span class="tag err">suspendu</span>' : u.email_verified ? '<span class="tag ok">vérifié</span>' : '<span class="tag">non vérifié</span>');
 
 function renderUsers() {
@@ -302,12 +330,12 @@ function renderUsers() {
   $("#users").innerHTML = list.length
     ? list
         .map(
-          (u) => `<tr><td>${esc(u.email)}${u.is_admin ? ' <span class="muted">(admin)</span>' : ""}</td><td>${userStatus(u)}</td><td><b id="cr${u.id}">${u.credits}</b></td><td>${u.generations}</td><td>${date(u.created_at)}</td>
+          (u) => `<tr><td>${esc(u.email)}${u.is_admin ? ' <span class="muted">(admin)</span>' : ""}</td><td>${PLAN_TAGS[u.plan] ?? esc(u.plan ?? "")}</td><td>${userStatus(u)}</td><td><b id="cr${u.id}">${u.credits}</b></td><td>${u.generations}</td><td>${date(u.created_at)}</td>
           <td><div class="row"><input class="input" type="number" value="10" style="width:90px" id="d${u.id}" /><button class="btn small" data-add="${u.id}">Appliquer</button></div></td>
           <td><button class="btn small" data-user="${u.id}">Détail</button></td></tr>`,
         )
         .join("")
-    : emptyRow(7, "Aucun client.");
+    : emptyRow(8, "Aucun client.");
 }
 
 async function loadUsers() {
