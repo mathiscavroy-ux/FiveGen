@@ -19,14 +19,16 @@ for (const [family, files] of Object.entries(EXAMPLES)) {
   });
 
   test(`the ${family} example stays short and has no marker of the file format inside`, () => {
-    assert.ok(files.reduce((n, f) => n + f.content.length, 0) < 10000);
+    assert.ok(files.reduce((n, f) => n + f.content.length, 0) < 12000);
     assert.ok(files.every((f) => !/^===/m.test(f.content)));
   });
 }
 
 test("each family of scripts gets its example, the others none", () => {
   assert.equal(exampleFor("illegal"), EXAMPLES.job);
-  assert.equal(exampleFor("garage"), EXAMPLES.shop);
+  assert.equal(exampleFor("garage"), EXAMPLES.garage);
+  assert.equal(exampleFor("job", "un job police LSPD"), EXAMPLES.police);
+  assert.equal(exampleFor("job", "un job de livreur"), EXAMPLES.job);
   assert.equal(exampleFor("hud"), EXAMPLES.nui);
   assert.equal(exampleFor("other"), null);
   assert.equal(exampleFor("utility"), null);

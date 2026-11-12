@@ -149,6 +149,8 @@ Restaurer : arrête le site, remplace `data/fivegen.db` et `data/users/` par le 
 
 Le moteur la reçoit dans ses instructions. Le vérificateur refuse tout appel absent du catalogue, ou utilisé du mauvais côté (client ou serveur), avec une suggestion (« Voulais-tu dire GetPlayerFromId ? »). La correction automatique remplace alors l'appel.
 
+Fiches ciblées (`server/knowledge/topics.json`) : ox_lib, ox_inventory, ox_target, ESX, sociétés ESX, oxmysql, NUI, entités, véhicules, sécurité et systèmes RP, condensées depuis les références de fivem-skills (MIT, `server/knowledge/topics.LICENSE`). Une demande en reçoit 5 au plus (3 sur son sujet, 2 sur les bibliothèques qu'elle utilise), choisies selon son type, son framework, ses dépendances et ses mots (`topicsFor`). `test/topics.test.js` vérifie que chaque fonction citée existe dans le catalogue d'API.
+
 Les lieux proposés au moteur (`server/knowledge/places.json`) se régénèrent avec `npm run places -- --resources <server/resources>`. Ils viennent de `esx_jobs`, `esx_property` et des configs publiques `qb-*`. Le moteur reçoit ceux qui collent à la demande, sans les emplacements déjà pris par les autres scripts du client, et la vérification signale une coordonnée loin de tout lieu connu.
 
 Les signatures des natives courantes (`server/knowledge/api/signatures.json`) se régénèrent à part : `npm run api-signatures -- --natives <dossier>`, avec les deux mêmes fichiers `natives.json` et `natives_cfx.json`.

@@ -13,6 +13,7 @@ import { spotsBlock } from "./spots.js";
 import { placesBlock } from "./places.js";
 import { errorsBlock } from "./quality.js";
 import { lessonsBlock } from "./lessons.js";
+import { topicsBlock } from "./knowledge/topics.js";
 import { exampleFor } from "./knowledge/examples.js";
 
 export const CATALOG = {
@@ -116,15 +117,17 @@ const POLICE_JOB = `Job police / LSPD / BCSO :
 - Garage : modèle, grade et spawn dans Config ; plaque unique, clés et carburant par les ressources configurées seulement ; restitution et nettoyage sans duplication.
 - Le contrat du plan doit énumérer chaque événement/callback partagé, ses arguments dans l'ordre et ses retours. Les fonctions locales ne sont jamais appelées depuis un autre fichier.`;
 
+const requestText = (spec) => [spec.name, spec.description, spec.understood, ...(spec.answers ?? []).map((a) => `${a.question} ${a.answer}`)].filter(Boolean).join(" ");
+
 function recipe(spec) {
   const base = RECIPES[spec.type] ?? RECIPES.other;
-  const context = [spec.name, spec.description, spec.understood, ...(spec.answers ?? []).map((a) => `${a.question} ${a.answer}`)].filter(Boolean).join(" ");
+  const context = requestText(spec);
   return spec.type === "job" && /police|lspd|bcso|gendarmerie|sheriff/i.test(context) ? `${base}\n\n${POLICE_JOB}` : base;
 }
 
 // A short resource that passes every check, for the family of the request.
 function exampleBlock(spec) {
-  const files = exampleFor(spec.type);
+  const files = exampleFor(spec.type, requestText(spec));
   if (!files) return "";
   return `
 <exemple_valide>
@@ -149,7 +152,7 @@ ${recipe(spec)}
 <demande_du_client>
 ${spec.description}
 </demande_du_client>
-${briefBlock(spec)}${exampleBlock(spec)}${errorsBlock(spec.pastErrors)}${lessonsBlock(spec.lessons)}
+${briefBlock(spec)}${exampleBlock(spec)}${topicsBlock(spec)}${errorsBlock(spec.pastErrors)}${lessonsBlock(spec.lessons)}
 Écris tous les fichiers nécessaires au format demandé, puis les notes d'installation.`;
 }
 
@@ -215,7 +218,7 @@ ${recipe(spec)}
 <demande_du_client>
 ${spec.description}
 </demande_du_client>
-${briefBlock(spec)}${example ? exampleBlock(spec) : ""}${errorsBlock(spec.pastErrors)}${lessonsBlock(spec.lessons)}
+${briefBlock(spec)}${example ? exampleBlock(spec) + topicsBlock(spec) : ""}${errorsBlock(spec.pastErrors)}${lessonsBlock(spec.lessons)}
 <plan_de_la_ressource>
 ${JSON.stringify(plan)}
 </plan_de_la_ressource>
@@ -297,7 +300,7 @@ ${filesBlock(files)}
 <modification_demandee>
 ${instruction}
 </modification_demandee>
-${lessonsBlock(spec.lessons)}
+${topicsBlock(spec, instruction)}${lessonsBlock(spec.lessons)}
 Applique la modification demandée, et seulement elle. Mets à jour fxmanifest.lua et README.md si nécessaire.
 
 ${EDIT_RULES}`;
